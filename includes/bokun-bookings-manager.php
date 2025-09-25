@@ -48,16 +48,8 @@ function bokun_fetch_bookings($upgrade = '') {
     $yesterday = (clone $today)->modify('-1 day');
     $oneMonthLater = (clone $today)->modify('+1 month');
 
-    $payload = json_encode([
-        'page' => 1,
-        'itemsPerPage' => 100, // Adjust as needed
-        'startDateRange' => [
-            'from' => $today->format('Y-m-d\T00:00:00\Z'),
-            'includeLower' => true,
-            'includeUpper' => true,
-            'to' => $oneMonthLater->format('Y-m-d\TH:i:s\Z')
-        ]
-    ]);
+    $all_bookings = [];
+    $page = 1;
 
     // Generate the signature
     $signature = bokun_generate_signature($date, $api_key, $method, $endpoint, $secret_key);
@@ -71,46 +63,73 @@ function bokun_fetch_bookings($upgrade = '') {
         'Accept' => 'application/json',
     ];
 
-    // Request options
-    $args = [
-        'method' => 'POST',
-        'headers' => $headers,
-        'body' => $payload,
-        'timeout' => 20,
-    ];
+    do {
+        $payload_data = [
+            'page' => $page,
+            'startDateRange' => [
+                'from' => $today->format('Y-m-d\T00:00:00\Z'),
+                'includeLower' => true,
+                'includeUpper' => true,
+                'to' => $oneMonthLater->format('Y-m-d\TH:i:s\Z')
+            ]
+        ];
 
-    // Send the request
-    $response = wp_remote_post($url, $args);
-    
-    if (is_wp_error($response)) {
-        error_log('Error fetching bookings: ' . $response->get_error_message());
-        return 'Error: ' . $response->get_error_message();
-    }
-    
-    $response_code = wp_remote_retrieve_response_code($response);
-    $body = wp_remote_retrieve_body($response);
-    
-    if ($response_code === 200) {
-        $data = json_decode($body, true);
-        // if ($upgrade=='') {        
-        //     echo $api_key = get_option('bokun_api_key_upgrade', '');
-        //     echo '<br/>';
-        //     echo $secret_key = get_option('bokun_secret_key_upgrade', '');
-        //     echo '<br/>';
-        //     echo '<pre>';
-        //     print_r($body);
-        //     echo '</pre>';
-        //     die;
-        // }
-        if (isset($data['items']) && !empty($data['items'])) {
-            return $data['items'];
-        } else {
-            return 'No bookings available to process.';
+        $items_per_page = apply_filters('bokun_booking_items_per_page', null);
+
+        if (!is_null($items_per_page)) {
+            $payload_data['itemsPerPage'] = $items_per_page;
         }
-    } else {
-        error_log('Unexpected response code: ' . $response_code . ' with body: ' . $body);
-        return 'Error: Received unexpected response code ' . $response_code . '. Response: ' . $body;
+
+        $payload = wp_json_encode($payload_data);
+
+        // Request options
+        $args = [
+            'method' => 'POST',
+            'headers' => $headers,
+            'body' => $payload,
+            'timeout' => 0,
+        ];
+
+        // Send the request
+        $response = wp_remote_post($url, $args);
+
+        if (is_wp_error($response)) {
+            error_log('Error fetching bookings on page ' . $page . ': ' . $response->get_error_message());
+            return $page === 1 ? 'Error: ' . $response->get_error_message() : $all_bookings;
+        }
+
+        $response_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+
+        if ($response_code !== 200) {
+            error_log('Unexpected response code on page ' . $page . ': ' . $response_code . ' with body: ' . $body);
+            return $page === 1 ? 'Error: Received unexpected response code ' . $response_code . '. Response: ' . $body : $all_bookings;
+        }
+
+        $data = json_decode($body, true);
+
+        if (isset($data['items']) && is_array($data['items'])) {
+            $all_bookings = array_merge($all_bookings, $data['items']);
+        }
+
+        $total_pages = isset($data['totalPages']) ? (int) $data['totalPages'] : null;
+
+        if ($total_pages !== null && $page >= $total_pages) {
+            break;
+        }
+
+        if (empty($data['items'])) {
+            break;
+        }
+
+        $page++;
+    } while (true);
+
+    if (!empty($all_bookings)) {
+        return $all_bookings;
     }
+
+    return 'No bookings available to process.';
 }
 
 // Save Bokun bookings as WordPress posts
