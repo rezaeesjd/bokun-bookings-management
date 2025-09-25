@@ -51,6 +51,20 @@ function bokun_fetch_bookings($upgrade = '') {
     $all_bookings = [];
     $page = 1;
 
+    $items_per_page = apply_filters('bokun_booking_items_per_page', 50);
+    if (!is_numeric($items_per_page) || (int)$items_per_page <= 0) {
+        $items_per_page = 50;
+    } else {
+        $items_per_page = (int)$items_per_page;
+    }
+
+    $request_timeout = apply_filters('bokun_booking_request_timeout', 300);
+    if (!is_numeric($request_timeout) || (float)$request_timeout < 0) {
+        $request_timeout = 300;
+    } else {
+        $request_timeout = (float)$request_timeout;
+    }
+
     // Generate the signature
     $signature = bokun_generate_signature($date, $api_key, $method, $endpoint, $secret_key);
 
@@ -66,6 +80,7 @@ function bokun_fetch_bookings($upgrade = '') {
     do {
         $payload_data = [
             'page' => $page,
+            'itemsPerPage' => $items_per_page,
             'startDateRange' => [
                 'from' => $today->format('Y-m-d\T00:00:00\Z'),
                 'includeLower' => true,
@@ -74,12 +89,6 @@ function bokun_fetch_bookings($upgrade = '') {
             ]
         ];
 
-        $items_per_page = apply_filters('bokun_booking_items_per_page', null);
-
-        if (!is_null($items_per_page)) {
-            $payload_data['itemsPerPage'] = $items_per_page;
-        }
-
         $payload = wp_json_encode($payload_data);
 
         // Request options
@@ -87,7 +96,7 @@ function bokun_fetch_bookings($upgrade = '') {
             'method' => 'POST',
             'headers' => $headers,
             'body' => $payload,
-            'timeout' => 0,
+            'timeout' => $request_timeout,
         ];
 
         // Send the request
@@ -112,17 +121,53 @@ function bokun_fetch_bookings($upgrade = '') {
             $all_bookings = array_merge($all_bookings, $data['items']);
         }
 
-        $total_pages = isset($data['totalPages']) ? (int) $data['totalPages'] : null;
+        $total_pages = null;
+        if (isset($data['totalPages'])) {
+            $total_pages = (int) $data['totalPages'];
+        } elseif (isset($data['paging']['totalPages'])) {
+            $total_pages = (int) $data['paging']['totalPages'];
+        } elseif (isset($data['paging']['totalPageCount'])) {
+            $total_pages = (int) $data['paging']['totalPageCount'];
+        }
 
-        if ($total_pages !== null && $page >= $total_pages) {
+        $next_page = null;
+        if (isset($data['nextPage'])) {
+            $next_page = (int) $data['nextPage'];
+        } elseif (isset($data['paging']['nextPage'])) {
+            $next_page = (int) $data['paging']['nextPage'];
+        }
+
+        if (!is_null($next_page) && $next_page <= $page) {
+            $next_page = null;
+        }
+
+        $has_more = false;
+        if (!is_null($total_pages) && $page < $total_pages) {
+            $has_more = true;
+        }
+
+        if (isset($data['hasMore']) && $data['hasMore']) {
+            $has_more = true;
+        }
+
+        if (isset($data['paging']['hasMore']) && $data['paging']['hasMore']) {
+            $has_more = true;
+        }
+
+        if (!empty($next_page)) {
+            $has_more = true;
+        }
+
+        if (!$has_more && isset($data['items']) && is_array($data['items']) && count($data['items']) === $items_per_page) {
+            $has_more = true;
+            $next_page = $page + 1;
+        }
+
+        if (!$has_more || empty($data['items'])) {
             break;
         }
 
-        if (empty($data['items'])) {
-            break;
-        }
-
-        $page++;
+        $page = !empty($next_page) ? $next_page : $page + 1;
     } while (true);
 
     if (!empty($all_bookings)) {
