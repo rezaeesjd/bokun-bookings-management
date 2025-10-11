@@ -293,14 +293,14 @@ class BokunBookingManagement {
         // need to check here if its front section than enqueue script
         /*********** register and enqueue styles ***************/
 
-            wp_register_style( 
-                'bokun_front_css',  
-                BOKUN_CSS_URL.'bokun_front.css?rand='.rand(1,999), 
-                false, 
-                $bokun_version 
+            wp_register_style(
+                'bokun_front_css',
+                BOKUN_CSS_URL.'bokun_front.css?rand='.rand(1,999),
+                false,
+                $bokun_version
             );
 
-            // wp_enqueue_style( 'bokun_front_css' );
+            wp_enqueue_style( 'bokun_front_css' );
 
 
             /*********** register and enqueue scripts ***************/
