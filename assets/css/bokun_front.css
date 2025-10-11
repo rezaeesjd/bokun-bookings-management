@@ -1,0 +1,28 @@
+.bokun-fetch-wrapper {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.bokun-progress {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0073aa;
+  display: none;
+}
+
+.bokun-progress__value {
+  margin-left: 6px;
+}
+
+.bokun-progress.is-error {
+  color: #d63638;
+}
+
+.bokun_loader {
+  font-size: 14px;
+  color: #0073aa;
+  font-weight: 600;
+  display: none;
+}
