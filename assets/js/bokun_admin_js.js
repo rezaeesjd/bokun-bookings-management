@@ -1,6 +1,8 @@
 jQuery(document).ready(function ($) {
-	
-	jQuery(document).on('click', '.bokun_api_auth_save', function () {
+
+        setImportProgress('reset');
+
+        jQuery(document).on('click', '.bokun_api_auth_save', function () {
 		var form = jQuery('#bokun_api_auth_form')[0];
 		var formData = new FormData(form);
 		formData.append('action', 'bokun_save_api_auth');
@@ -66,38 +68,42 @@ jQuery(document).ready(function ($) {
 		});
 	});
 
-	jQuery(document).on('click', '.bokun_fetch_booking_data', function (e) {
-		e.preventDefault();
-		jQuery('.msg_sec').hide();
-		jQuery('#bokun_loader').show();
-		jQuery.ajax({
-			type: 'POST',
-			url: ajaxurl,
+        jQuery(document).on('click', '.bokun_fetch_booking_data', function (e) {
+                e.preventDefault();
+                jQuery('.msg_sec').hide();
+                jQuery('#bokun_loader').show();
+                setImportProgress('startApi1');
+                jQuery.ajax({
+                        type: 'POST',
+                        url: ajaxurl,
 			data: {
 				action: 'bokun_bookings_manager_page',
 				security: bokun_api_auth_vars.nonce,
 				mode: 'fetch'
 			},
 			dataType: 'json',
-			success: function (res) {
-				
-				jQuery('#bokun_loader').hide();
-				jQuery('.msg_success, .msg_error').hide();
-				call_from_secound_api();
-				if (res.success) {
-					var msg_all = decodeHTMLEntities(res.data.msg);
-					jQuery('.msg_success p').html(`<strong>Success:</strong> ${msg_all}`);
-					jQuery('.msg_success').show();
-				} else {
-					jQuery('.msg_error p').html(`<strong>Error:</strong> ${res.data.msg}`);
-					jQuery('.msg_error').show();
-				}
-			},
-			error: function (xhr, status, error) {
-				jQuery('#bokun_loader').hide();
-            
-				var responseText = xhr.responseText;
-				try {
+                        success: function (res) {
+
+                                jQuery('#bokun_loader').hide();
+                                jQuery('.msg_success, .msg_error').hide();
+                                if (res.success) {
+                                        setImportProgress('api1Complete');
+                                        call_from_secound_api();
+                                        var msg_all = decodeHTMLEntities(res.data.msg);
+                                        jQuery('.msg_success p').html(`<strong>Success:</strong> ${msg_all}`);
+                                        jQuery('.msg_success').show();
+                                } else {
+                                        setImportProgress('error');
+                                        jQuery('.msg_error p').html(`<strong>Error:</strong> ${res.data.msg}`);
+                                        jQuery('.msg_error').show();
+                                }
+                        },
+                        error: function (xhr, status, error) {
+                                jQuery('#bokun_loader').hide();
+                                setImportProgress('error');
+
+                                var responseText = xhr.responseText;
+                                try {
 					var parsedResponse = JSON.parse(responseText);
 					var formattedMessage = `Error: ${parsedResponse.message}`;
 				} catch (e) {
@@ -111,12 +117,13 @@ jQuery(document).ready(function ($) {
 		});
 	});
 
-	function call_from_secound_api() {
+        function call_from_secound_api() {
 
-		jQuery('#bokun_loader').hide();
-		jQuery('#bokun_loader_upgrade').show();
-		jQuery.ajax({
-			type: 'POST',
+                jQuery('#bokun_loader').hide();
+                jQuery('#bokun_loader_upgrade').show();
+                setImportProgress('startApi2');
+                jQuery.ajax({
+                        type: 'POST',
 			url: ajaxurl,
 			data: {
 				action: 'bokun_bookings_manager_page',
@@ -124,24 +131,27 @@ jQuery(document).ready(function ($) {
 				mode: 'upgrade'
 			},
 			dataType: 'json',
-			success: function (res) {
-				
-				jQuery('#bokun_loader_upgrade').hide();
-				jQuery('.msg_success_upgrade, .msg_error_upgrade').hide();
-				
-				if (res.success) {
-					var msg_all = decodeHTMLEntities(res.data.msg);
-					jQuery('.msg_success_upgrade p').html(`<strong>Success:</strong> ${msg_all}`);
-					jQuery('.msg_success_upgrade').show();
-				} else {
-					jQuery('.msg_error_upgrade p').html(`<strong>Error:</strong> ${res.data.msg}`);
-					jQuery('.msg_error_upgrade').show();
-				}
-			},
-			error: function (xhr, status, error) {
-				jQuery('#bokun_loader_upgrade').hide();
-				var responseText = xhr.responseText;
-				try {
+                        success: function (res) {
+
+                                jQuery('#bokun_loader_upgrade').hide();
+                                jQuery('.msg_success_upgrade, .msg_error_upgrade').hide();
+
+                                if (res.success) {
+                                        setImportProgress('api2Complete');
+                                        var msg_all = decodeHTMLEntities(res.data.msg);
+                                        jQuery('.msg_success_upgrade p').html(`<strong>Success:</strong> ${msg_all}`);
+                                        jQuery('.msg_success_upgrade').show();
+                                } else {
+                                        setImportProgress('error');
+                                        jQuery('.msg_error_upgrade p').html(`<strong>Error:</strong> ${res.data.msg}`);
+                                        jQuery('.msg_error_upgrade').show();
+                                }
+                        },
+                        error: function (xhr, status, error) {
+                                jQuery('#bokun_loader_upgrade').hide();
+                                setImportProgress('error');
+                                var responseText = xhr.responseText;
+                                try {
 					var parsedResponse = JSON.parse(responseText);
 					var formattedMessage = `Error: ${parsedResponse.message}`;
 				} catch (e) {
@@ -155,11 +165,57 @@ jQuery(document).ready(function ($) {
 		});
 	}
 
-	
-	function decodeHTMLEntities(text) {
-		var tempElement = document.createElement('textarea');
-		tempElement.innerHTML = text;
-		return tempElement.value;
-	}
-	
+
+        function decodeHTMLEntities(text) {
+                var tempElement = document.createElement('textarea');
+                tempElement.innerHTML = text;
+                return tempElement.value;
+        }
+
+        function setImportProgress(step) {
+                var $progress = jQuery('#bokun_progress');
+                var $message = jQuery('#bokun_progress_message');
+                var $value = jQuery('#bokun_progress_value');
+
+                if (!$progress.length) {
+                        return;
+                }
+
+                $progress.stop(true, true);
+
+                var stepMap = {
+                        startApi1: { message: 'Import progress', value: 25 },
+                        api1Complete: { message: 'Import progress', value: 50 },
+                        startApi2: { message: 'Import progress', value: 75 },
+                        api2Complete: { message: 'Import complete', value: 100 }
+                };
+
+                if (step === 'reset') {
+                        $progress.removeClass('is-error').hide();
+                        $message.text('Import progress');
+                        $value.text('0%');
+                        return;
+                }
+
+                if (step === 'error') {
+                        $progress.addClass('is-error').show();
+                        $message.text('Import interrupted');
+                        $value.text('Check the error message for details.');
+                        return;
+                }
+
+                if (stepMap[step]) {
+                        var state = stepMap[step];
+                        $progress.removeClass('is-error').show();
+                        $message.text(state.message);
+                        $value.text(state.value + '%');
+
+                        if (step === 'api2Complete') {
+                                setTimeout(function () {
+                                        $progress.fadeOut(300);
+                                }, 2000);
+                        }
+                }
+        }
+
 });
