@@ -4,22 +4,6 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-if (!function_exists('bbm_get_team_member_storage_key')) {
-    /**
-     * Retrieve the persistent storage key used to remember the authorised team member.
-     */
-    function bbm_get_team_member_storage_key() {
-        /**
-         * Filter the storage key that is used to persist the authorised team member across visits.
-         *
-         * @since 1.0.0
-         *
-         * @param string $storage_key The storage key.
-         */
-        return apply_filters('bbm_team_member_storage_key', 'bbm_team_member_authorized');
-    }
-}
-
 // Force publish future-dated 'bokun_booking' posts
 function bokun_force_publish_future_posts($data, $postarr) {
     if ($data['post_type'] == 'bokun_booking') {
@@ -712,7 +696,6 @@ function bokun_handle_add_team_member() {
         wp_send_json_success([
             'message' => __('This team member already exists.', 'bokun-bookings-manager'),
             'created' => false,
-            'team_member_name' => $team_member_name,
         ]);
     }
 
@@ -727,7 +710,6 @@ function bokun_handle_add_team_member() {
     wp_send_json_success([
         'message' => __('Team member added successfully.', 'bokun-bookings-manager'),
         'created' => true,
-        'team_member_name' => $team_member_name,
     ]);
 }
 
@@ -870,69 +852,16 @@ add_shortcode('booking_checkbox', 'booking_checkbox_shortcode');
 
 // Display a form to add Team Member taxonomy terms from the front-end
 function bokun_team_member_submission_shortcode() {
-    $input_id  = 'bokun-team-member-' . wp_rand(1000, 9999);
-    $lock_id   = 'bbm-team-member-lock-' . wp_rand(1000, 9999);
-    $storage_key = bbm_get_team_member_storage_key();
+    $input_id = 'bokun-team-member-' . wp_rand(1000, 9999);
 
     ob_start();
     ?>
-    <div class="bbm-team-member-lock is-lock-active" id="<?php echo esc_attr($lock_id); ?>" data-storage-key="<?php echo esc_attr($storage_key); ?>">
-        <div class="bbm-team-member-lock__status" role="status" aria-live="polite"></div>
-        <div class="bbm-team-member-lock__overlay" role="dialog" aria-modal="true" aria-labelledby="<?php echo esc_attr($lock_id); ?>-title" aria-describedby="<?php echo esc_attr($lock_id); ?>-description">
-            <div class="bbm-team-member-lock__panel">
-                <h2 class="bbm-team-member-lock__title" id="<?php echo esc_attr($lock_id); ?>-title"><?php esc_html_e('Team member access required', 'bokun-bookings-manager'); ?></h2>
-                <p class="bbm-team-member-lock__description" id="<?php echo esc_attr($lock_id); ?>-description"><?php esc_html_e('Enter your team member name to continue.', 'bokun-bookings-manager'); ?></p>
-                <form class="bokun-team-member-form" novalidate>
-                    <label for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Team Member Name', 'bokun-bookings-manager'); ?></label>
-                    <input type="text" id="<?php echo esc_attr($input_id); ?>" name="team_member_name" required autocomplete="off">
-                    <button type="submit"><?php esc_html_e('Continue', 'bokun-bookings-manager'); ?></button>
-                    <span class="bokun-team-member-message" role="status" aria-live="polite"></span>
-                </form>
-            </div>
-        </div>
-    </div>
-    <script>
-        (function() {
-            var gate = document.getElementById('<?php echo esc_js($lock_id); ?>');
-            if (!gate) {
-                return;
-            }
-
-            var storageKey = '<?php echo esc_js($storage_key); ?>';
-            var authorisedName = '';
-            var authorised = false;
-
-            try {
-                authorisedName = window.localStorage.getItem(storageKey) || '';
-                authorised = authorisedName.length > 0;
-            } catch (err) {
-                authorised = false;
-            }
-
-            if (!authorised) {
-                try {
-                    var pattern = new RegExp('(?:^|; )' + storageKey.replace(/([.$?*|{}()\[\]\\/+^])/g, '\\$1') + '=([^;]*)');
-                    var match = document.cookie.match(pattern);
-                    if (match && match[1]) {
-                        authorisedName = decodeURIComponent(match[1]);
-                        authorised = authorisedName.length > 0;
-                    }
-                } catch (cookieError) {
-                    authorised = false;
-                }
-            }
-
-            if (authorised) {
-                gate.classList.add('is-authorized');
-                gate.classList.remove('is-lock-active');
-                if (authorisedName) {
-                    gate.setAttribute('data-authorized-name', authorisedName);
-                }
-            } else {
-                document.body.classList.add('bbm-team-member-locked');
-            }
-        })();
-    </script>
+    <form class="bokun-team-member-form" novalidate>
+        <label for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Team Member Name', 'bokun-bookings-manager'); ?></label>
+        <input type="text" id="<?php echo esc_attr($input_id); ?>" name="team_member_name" required>
+        <button type="submit"><?php esc_html_e('Add Team Member', 'bokun-bookings-manager'); ?></button>
+        <span class="bokun-team-member-message" role="status" aria-live="polite"></span>
+    </form>
     <?php
 
     return ob_get_clean();
