@@ -677,6 +677,45 @@ function update_booking_status() {
 add_action('wp_ajax_update_booking_status', 'update_booking_status');
 add_action('wp_ajax_nopriv_update_booking_status', 'update_booking_status');
 
+// Handle AJAX request to create Team Member taxonomy terms
+function bokun_handle_add_team_member() {
+    check_ajax_referer('add_team_member_nonce', 'security');
+
+    $team_member_name = isset($_POST['team_member_name']) ? sanitize_text_field(wp_unslash($_POST['team_member_name'])) : '';
+    $team_member_name = trim($team_member_name);
+
+    if ('' === $team_member_name) {
+        wp_send_json_error([
+            'message' => __('Please provide a team member name.', 'bokun-bookings-manager'),
+        ]);
+    }
+
+    $existing_term = term_exists($team_member_name, 'team_member');
+
+    if ($existing_term) {
+        wp_send_json_success([
+            'message' => __('This team member already exists.', 'bokun-bookings-manager'),
+            'created' => false,
+        ]);
+    }
+
+    $result = wp_insert_term($team_member_name, 'team_member');
+
+    if (is_wp_error($result)) {
+        wp_send_json_error([
+            'message' => $result->get_error_message(),
+        ]);
+    }
+
+    wp_send_json_success([
+        'message' => __('Team member added successfully.', 'bokun-bookings-manager'),
+        'created' => true,
+    ]);
+}
+
+add_action('wp_ajax_add_team_member', 'bokun_handle_add_team_member');
+add_action('wp_ajax_nopriv_add_team_member', 'bokun_handle_add_team_member');
+
 // Function to process price categories and save to fixed fields
 function process_price_categories_and_save($post_id, $booking_data) {
     $category_counts = [];
@@ -810,6 +849,24 @@ function booking_checkbox_shortcode($atts) {
     return ob_get_clean();
 }
 add_shortcode('booking_checkbox', 'booking_checkbox_shortcode');
+
+// Display a form to add Team Member taxonomy terms from the front-end
+function bokun_team_member_submission_shortcode() {
+    $input_id = 'bokun-team-member-' . wp_rand(1000, 9999);
+
+    ob_start();
+    ?>
+    <form class="bokun-team-member-form" novalidate>
+        <label for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Team Member Name', 'bokun-bookings-manager'); ?></label>
+        <input type="text" id="<?php echo esc_attr($input_id); ?>" name="team_member_name" required>
+        <button type="submit"><?php esc_html_e('Add Team Member', 'bokun-bookings-manager'); ?></button>
+        <span class="bokun-team-member-message" role="status" aria-live="polite"></span>
+    </form>
+    <?php
+
+    return ob_get_clean();
+}
+add_shortcode('team_member_field', 'bokun_team_member_submission_shortcode');
 
 // Force publish future-dated 'bokun_booking' posts after they're saved
 function bokun_force_publish_after_save($post_id, $post, $update) {
