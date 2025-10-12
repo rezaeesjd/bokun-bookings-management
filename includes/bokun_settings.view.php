@@ -90,14 +90,23 @@ $secret_key_upgrade = get_option('bokun_secret_key_upgrade', '');
                     </div>
                     <form method="post" action="javascript:;" id="bokun_fetch_booking_data" name="bokun_fetch_booking_data" enctype='multipart/form-data'>
                         <div class="bokun_cmrc-table">
-                            <div class="bokun_settings-fb-config">                                
+                            <div class="bokun_settings-fb-config">
                                 <input type="submit" name="submit" class="button button-primary bokun_fetch_booking_data" value="Fetch Now">
                             </div>
                         </div>
                     </form>
+                    <div id="bokun_progress" class="bokun-progress" style="display: none;" role="status" aria-live="polite">
+                        <div class="bokun-progress__header">
+                            <span id="bokun_progress_message" class="bokun-progress__message">Import progress</span>
+                            <span id="bokun_progress_value" class="bokun-progress__value">0%</span>
+                        </div>
+                        <div class="bokun-progress__track" aria-hidden="true">
+                            <div id="bokun_progress_bar" class="bokun-progress__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+                        </div>
+                    </div>
                     <div id="bokun_loader" class="bokun_loader" style="display: none;">Processing for API 1... <img src="<?= BOKUN_IMAGES_URL.'ajax-loading.gif'; ?>" width="35px;"></div>
                     <div id="bokun_loader_upgrade" class="bokun_loader" style="display: none;">Processing for API 2... <img src="<?= BOKUN_IMAGES_URL.'ajax-loading.gif'; ?>" width="35px;"></div>
-                                        
+
                 </div>
             </div>
 
