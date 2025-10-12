@@ -365,6 +365,9 @@ class BokunBookingManagement {
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('update_booking_nonce'),
             'team_member_nonce' => wp_create_nonce('add_team_member_nonce'),
+            'team_member_storage_key' => bbm_get_team_member_storage_key(),
+            'team_member_status_template' => __('Authorized as %s', 'bokun-bookings-manager'),
+            'team_member_storage_warning' => __('Your browser prevented us from remembering this choice for next time.', 'bokun-bookings-manager'),
         ]);
     }
 
