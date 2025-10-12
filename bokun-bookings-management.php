@@ -81,6 +81,7 @@ class BokunBookingManagement {
         add_action('init', array( $this,'bokun_register_product_taxonomy'));
         
         add_action('init', array( $this,'bokun_register_booking_status_taxonomy'));
+        add_action('init', array( $this,'bokun_register_team_member_taxonomy'));
         
 	}
     
@@ -111,6 +112,24 @@ class BokunBookingManagement {
                 'hierarchical' => false,
               'show_ui' => true,
             'show_in_nav_menus' => true,
+                'show_in_rest' => true,
+            ]
+        );
+    }
+
+    // Register custom taxonomy for Team Members
+    function bokun_register_team_member_taxonomy() {
+        register_taxonomy(
+            'team_member',
+            'bokun_booking',
+            [
+                'label' => __('Team Members'),
+                'rewrite' => ['slug' => 'team-member'],
+                'public' => true,
+                'hierarchical' => false,
+                'show_ui' => true,
+                'show_admin_column' => true,
+                'show_in_nav_menus' => true,
                 'show_in_rest' => true,
             ]
         );
@@ -151,7 +170,7 @@ class BokunBookingManagement {
         'show_in_rest' => true, // Enable REST API support for Elementor
         'supports' => ['title', 'editor', 'custom-fields', 'author', 'comments', 'revisions', 'thumbnail', 'excerpt', 'page-attributes'],
         'rewrite' => ['slug' => 'bokun-booking'],
-        'taxonomies' => ['alarm_status'], // Link custom taxonomy here
+        'taxonomies' => ['alarm_status', 'team_member'], // Link custom taxonomy here
         'capability_type' => 'post',
         'map_meta_cap' => true,
 		'show_ui' => true,
@@ -345,6 +364,7 @@ class BokunBookingManagement {
         wp_localize_script('bokun_bokun_booking_scripts', 'bbm_ajax', [
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('update_booking_nonce'),
+            'team_member_nonce' => wp_create_nonce('add_team_member_nonce'),
         ]);
     }
 
