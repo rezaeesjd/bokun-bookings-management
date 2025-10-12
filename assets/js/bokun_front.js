@@ -2,6 +2,8 @@ jQuery(function ($) {
 
         setImportProgress('reset');
 
+        var ajaxUrl = (typeof bokun_api_auth_vars !== 'undefined' && bokun_api_auth_vars.ajax_url) ? bokun_api_auth_vars.ajax_url : (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
+
         $(document).on('click', '.bokun_fetch_booking_data_front', function (e) {
                 e.preventDefault();
 
@@ -14,7 +16,7 @@ jQuery(function ($) {
 
                 $.ajax({
                         type: 'POST',
-                        url: ajaxurl,
+                        url: ajaxUrl,
                         data: {
                                 action: 'bokun_bookings_manager_page',
                                 security: bokun_api_auth_vars.nonce,
@@ -65,7 +67,7 @@ jQuery(function ($) {
 
                 $.ajax({
                         type: 'POST',
-                        url: ajaxurl,
+                        url: ajaxUrl,
                         data: {
                                 action: 'bokun_bookings_manager_page',
                                 security: bokun_api_auth_vars.nonce,
