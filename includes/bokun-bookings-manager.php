@@ -1,7 +1,7 @@
 <?php
 // Exit if accessed directly
 if (!defined('ABSPATH')) {
-    exit;
+    exit; 
 }
 
 // Force publish future-dated 'bokun_booking' posts
