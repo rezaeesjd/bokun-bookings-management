@@ -65,6 +65,22 @@
   /* Hidden initially */
 }
 
+.bokun-progress {
+  margin-top: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0073aa;
+  display: none;
+}
+
+.bokun-progress__value {
+  margin-left: 6px;
+}
+
+.bokun-progress.is-error {
+  color: #d63638;
+}
+
 
 .container-fluid{
   width: 100%;
