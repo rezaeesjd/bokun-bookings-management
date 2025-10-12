@@ -120,6 +120,7 @@ jQuery(function ($) {
                 var $message = $('#bokun_progress_message');
                 var $value = $('#bokun_progress_value');
                 var $bar = $('#bokun_progress_bar');
+                var totalImportItems = window.bokunImportProgress && window.bokunImportProgress.totalItems ? window.bokunImportProgress.totalItems : 2;
 
                 if (!$progress.length) {
                         return;
@@ -128,15 +129,50 @@ jQuery(function ($) {
                 $progress.stop(true, true);
 
                 var stepMap = {
-                        startApi1: { message: 'Import progress', value: 25 },
-                        api1Complete: { message: 'Import progress', value: 50 },
-                        startApi2: { message: 'Import progress', value: 75 },
-                        api2Complete: { message: 'Import complete', value: 100 }
+                        startApi1: { stage: 'start', current: 1 },
+                        api1Complete: { stage: 'complete', current: 1 },
+                        startApi2: { stage: 'start', current: 2 },
+                        api2Complete: { stage: 'complete', current: 2, isFinal: true }
                 };
+
+                function formatProgressMessage(current, total, stage, isFinal) {
+                        if (isFinal) {
+                                return 'Import complete (' + total + '/' + total + ')';
+                        }
+
+                        if (stage === 'start') {
+                                return 'Importing product ' + current + '/' + total;
+                        }
+
+                        return 'Completed product ' + current + '/' + total;
+                }
+
+                function computeProgressValue(current, total, stage, explicitValue) {
+                        if (typeof explicitValue === 'number') {
+                                return explicitValue;
+                        }
+
+                        var value;
+                        if (stage === 'start') {
+                                value = Math.round(((current - 1) / total) * 100);
+                        } else {
+                                value = Math.round((current / total) * 100);
+                        }
+
+                        if (value < 0) {
+                                value = 0;
+                        }
+
+                        if (value > 100) {
+                                value = 100;
+                        }
+
+                        return value;
+                }
 
                 if (step === 'reset') {
                         $progress.removeClass('is-error').hide();
-                        $message.text('Import progress');
+                        $message.text('Import progress (0/' + totalImportItems + ')');
                         $value.text('0%');
                         if ($bar.length) {
                                 $bar.css('width', '0%').attr('aria-valuenow', 0).data('progress-value', 0);
@@ -157,11 +193,17 @@ jQuery(function ($) {
 
                 if (stepMap[step]) {
                         var state = stepMap[step];
+                        var current = state.current || totalImportItems;
+                        var stage = state.stage || 'complete';
+                        var isFinal = !!state.isFinal;
+                        var message = formatProgressMessage(current, totalImportItems, stage, isFinal);
+                        var progressValue = computeProgressValue(current, totalImportItems, stage, state.value);
+
                         $progress.removeClass('is-error').show();
-                        $message.text(state.message);
-                        $value.text(state.value + '%');
+                        $message.text(message);
+                        $value.text(progressValue + '%');
                         if ($bar.length) {
-                                $bar.css('width', state.value + '%').attr('aria-valuenow', state.value).data('progress-value', state.value);
+                                $bar.css('width', progressValue + '%').attr('aria-valuenow', progressValue).data('progress-value', progressValue);
                         }
 
                         if (step === 'api2Complete') {
