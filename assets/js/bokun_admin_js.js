@@ -176,6 +176,7 @@ jQuery(document).ready(function ($) {
                 var $progress = jQuery('#bokun_progress');
                 var $message = jQuery('#bokun_progress_message');
                 var $value = jQuery('#bokun_progress_value');
+                var $bar = jQuery('#bokun_progress_bar');
 
                 if (!$progress.length) {
                         return;
@@ -194,6 +195,9 @@ jQuery(document).ready(function ($) {
                         $progress.removeClass('is-error').hide();
                         $message.text('Import progress');
                         $value.text('0%');
+                        if ($bar.length) {
+                                $bar.css('width', '0%').attr('aria-valuenow', 0).data('progress-value', 0);
+                        }
                         return;
                 }
 
@@ -201,6 +205,10 @@ jQuery(document).ready(function ($) {
                         $progress.addClass('is-error').show();
                         $message.text('Import interrupted');
                         $value.text('Check the error message for details.');
+                        if ($bar.length) {
+                                var lastValue = $bar.data('progress-value') || 0;
+                                $bar.attr('aria-valuenow', lastValue);
+                        }
                         return;
                 }
 
@@ -209,6 +217,9 @@ jQuery(document).ready(function ($) {
                         $progress.removeClass('is-error').show();
                         $message.text(state.message);
                         $value.text(state.value + '%');
+                        if ($bar.length) {
+                                $bar.css('width', state.value + '%').attr('aria-valuenow', state.value).data('progress-value', state.value);
+                        }
 
                         if (step === 'api2Complete') {
                                 setTimeout(function () {
