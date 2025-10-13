@@ -1247,8 +1247,31 @@ function bokun_team_member_get_page_identifier() {
  * @return string
  */
 function bokun_team_member_get_storage_key($page_identifier = null) {
+    $storage_key = 'bokunTeamMemberAuthorized_sitewide';
+
+    /**
+     * Filter the storage key used for client/server coordination.
+     *
+     * @param string      $storage_key    Calculated storage key.
+     * @param string|null $page_identifier Identifier associated with the current request.
+     */
+    return (string) apply_filters('bokun_team_member_storage_key', $storage_key, $page_identifier);
+}
+
+/**
+ * Retrieve the legacy per-page storage key used prior to the site-wide session.
+ *
+ * @param null|string $page_identifier
+ *
+ * @return string
+ */
+function bokun_team_member_get_legacy_storage_key($page_identifier = null) {
     if (null === $page_identifier) {
         $page_identifier = bokun_team_member_get_page_identifier();
+    }
+
+    if (!$page_identifier) {
+        return '';
     }
 
     return 'bokunTeamMemberAuthorized_' . $page_identifier;
@@ -1271,6 +1294,22 @@ function bokun_team_member_is_authorized($page_identifier = null) {
 
     if (isset($_COOKIE[$storage_key])) {
         $cookie_value = sanitize_text_field(wp_unslash($_COOKIE[$storage_key]));
+    } elseif (null !== $page_identifier) {
+        $legacy_key = bokun_team_member_get_legacy_storage_key($page_identifier);
+
+        if ($legacy_key && isset($_COOKIE[$legacy_key])) {
+            $cookie_value = sanitize_text_field(wp_unslash($_COOKIE[$legacy_key]));
+
+            if ($cookie_value) {
+                $expiration = time() + (defined('YEAR_IN_SECONDS') ? YEAR_IN_SECONDS : 31536000);
+
+                if (!headers_sent()) {
+                    setcookie($storage_key, $cookie_value, $expiration, '/');
+                }
+
+                $_COOKIE[$storage_key] = $cookie_value;
+            }
+        }
     }
 
     $authorized = !empty($cookie_value);
@@ -1391,8 +1430,9 @@ function bokun_team_member_submission_shortcode() {
     $input_id   = 'bokun-team-member-' . wp_rand(1000, 9999);
     $overlay_id = 'bokun-team-member-overlay-' . wp_rand(1000, 9999);
 
-    $page_identifier = bokun_team_member_get_page_identifier();
-    $storage_key     = bokun_team_member_get_storage_key($page_identifier);
+    $page_identifier      = bokun_team_member_get_page_identifier();
+    $storage_key          = bokun_team_member_get_storage_key($page_identifier);
+    $legacy_storage_key   = bokun_team_member_get_legacy_storage_key($page_identifier);
 
     ob_start();
     ?>
@@ -1400,7 +1440,7 @@ function bokun_team_member_submission_shortcode() {
         <div class="bokun-team-member-overlay__dialog">
             <h2 class="bokun-team-member-overlay__title"><?php esc_html_e('Team Member Verification', 'bokun-bookings-manager'); ?></h2>
             <p class="bokun-team-member-overlay__description"><?php esc_html_e('Enter your name to access this page.', 'bokun-bookings-manager'); ?></p>
-            <form class="bokun-team-member-form" data-overlay-id="<?php echo esc_attr($overlay_id); ?>" data-storage-key="<?php echo esc_attr($storage_key); ?>" novalidate>
+            <form class="bokun-team-member-form" data-overlay-id="<?php echo esc_attr($overlay_id); ?>" data-storage-key="<?php echo esc_attr($storage_key); ?>" data-legacy-storage-key="<?php echo esc_attr($legacy_storage_key); ?>" novalidate>
                 <label class="bokun-team-member-form__label" for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Team Member Name', 'bokun-bookings-manager'); ?></label>
                 <input class="bokun-team-member-form__input" type="text" id="<?php echo esc_attr($input_id); ?>" name="team_member_name" autocomplete="off" required>
                 <button class="bokun-team-member-form__button" type="submit"><?php esc_html_e('Confirm Access', 'bokun-bookings-manager'); ?></button>
@@ -1512,6 +1552,7 @@ function bokun_team_member_submission_shortcode() {
         (function() {
             var overlayId = <?php echo wp_json_encode($overlay_id); ?>;
             var storageKey = <?php echo wp_json_encode($storage_key); ?>;
+            var legacyStorageKey = <?php echo wp_json_encode($legacy_storage_key); ?>;
 
             function ensureOverlayInBody(element) {
                 if (!element) {
@@ -1543,25 +1584,59 @@ function bokun_team_member_submission_shortcode() {
                 document.cookie = encodeURIComponent(name) + '=' + encodeURIComponent(value) + '; expires=' + expires.toUTCString() + '; path=/';
             }
 
-            function getStoredName() {
+            function removeStoredName(key) {
+                if (!key) {
+                    return;
+                }
+
+                try {
+                    window.localStorage.removeItem(key);
+                } catch (error) {}
+
+                try {
+                    window.sessionStorage.removeItem(key);
+                } catch (error) {}
+
+                document.cookie = encodeURIComponent(key) + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            }
+
+            function readStoredName(key) {
+                if (!key) {
+                    return '';
+                }
+
                 var value = '';
 
                 try {
-                    value = window.localStorage.getItem(storageKey) || '';
+                    value = window.localStorage.getItem(key) || '';
                 } catch (error) {
                     value = '';
                 }
 
                 if (!value) {
                     try {
-                        value = window.sessionStorage.getItem(storageKey) || '';
+                        value = window.sessionStorage.getItem(key) || '';
                     } catch (error) {
                         value = '';
                     }
                 }
 
                 if (!value) {
-                    value = getCookieValue(storageKey);
+                    value = getCookieValue(key);
+                }
+
+                return value;
+            }
+
+            function getStoredName() {
+                var value = readStoredName(storageKey);
+
+                if (!value && legacyStorageKey) {
+                    value = readStoredName(legacyStorageKey);
+
+                    if (value) {
+                        saveName(value);
+                    }
                 }
 
                 return value;
@@ -1587,6 +1662,10 @@ function bokun_team_member_submission_shortcode() {
                 }
 
                 setCookie(storageKey, value);
+
+                if (legacyStorageKey && legacyStorageKey !== storageKey) {
+                    removeStoredName(legacyStorageKey);
+                }
             }
 
             function focusInput(element) {
@@ -1659,6 +1738,7 @@ function bokun_team_member_submission_shortcode() {
             window.bokunTeamMemberAccess = window.bokunTeamMemberAccess || {};
             window.bokunTeamMemberAccess[overlayId] = {
                 storageKey: storageKey,
+                legacyStorageKey: legacyStorageKey,
                 save: saveName,
                 unlock: function() {
                     var overlay = document.getElementById(overlayId);

@@ -9,7 +9,23 @@ jQuery(document).ready(function($) {
         document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + '; expires=' + expires.toUTCString() + '; path=/';
     }
 
-    function storeTeamMemberValue(key, value) {
+    function clearTeamMemberStorage(key) {
+        if (!key) {
+            return;
+        }
+
+        try {
+            window.localStorage.removeItem(key);
+        } catch (error) {}
+
+        try {
+            window.sessionStorage.removeItem(key);
+        } catch (error) {}
+
+        document.cookie = encodeURIComponent(key) + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    }
+
+    function storeTeamMemberValue(key, value, legacyKey) {
         if (!key) {
             return;
         }
@@ -33,6 +49,10 @@ jQuery(document).ready(function($) {
         }
 
         writeTeamMemberCookie(key, value);
+
+        if (legacyKey && legacyKey !== key) {
+            clearTeamMemberStorage(legacyKey);
+        }
     }
 
     // Handle checkbox change event for Full, Partial, and Not Available checkboxes
@@ -112,14 +132,15 @@ jQuery(document).ready(function($) {
                 }
 
                 var overlayId = $form.data('overlay-id');
-                var storageKey = $form.data('storage-key');
+                var storageKey = $form.data('storageKey') || $form.data('storage-key');
+                var legacyStorageKey = $form.data('legacyStorageKey') || $form.data('legacy-storage-key');
                 var accessRegistry = window.bokunTeamMemberAccess || {};
                 var accessEntry = overlayId ? accessRegistry[overlayId] : null;
 
                 if (accessEntry && typeof accessEntry.save === 'function') {
                     accessEntry.save(teamMemberName);
                 } else if (storageKey) {
-                    storeTeamMemberValue(storageKey, teamMemberName);
+                    storeTeamMemberValue(storageKey, teamMemberName, legacyStorageKey);
                 }
 
                 if (accessEntry && typeof accessEntry.unlock === 'function') {
