@@ -82,6 +82,7 @@
 
 .bokun-progress__message {
   flex: 1;
+  white-space: pre-line;
 }
 
 .bokun-progress__value {

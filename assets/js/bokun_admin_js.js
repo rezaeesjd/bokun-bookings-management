@@ -3,6 +3,7 @@ jQuery(document).ready(function ($) {
 
         var importProgressPollers = {};
         var progressPollInterval = 1000;
+        var CONTEXT_DISPLAY_ORDER = ['fetch', 'upgrade'];
 
         function startImportProgressPolling(mode, options) {
                 options = options || {};
@@ -58,7 +59,8 @@ jQuery(document).ready(function ($) {
                                                 summary: summary,
                                                 label: data.label || options.label,
                                                 isFinal: data.status === 'completed',
-                                                useAbsolute: true
+                                                useAbsolute: true,
+                                                context: mode
                                         };
 
                                         if (data.message) {
@@ -120,19 +122,24 @@ jQuery(document).ready(function ($) {
 			window.bokunImportProgress.completedItems = 0;
 		}
 
-		if (typeof window.bokunImportProgress.fallbackTotal !== 'number' || isNaN(window.bokunImportProgress.fallbackTotal)) {
-			window.bokunImportProgress.fallbackTotal = 2;
-		}
+                if (typeof window.bokunImportProgress.fallbackTotal !== 'number' || isNaN(window.bokunImportProgress.fallbackTotal)) {
+                        window.bokunImportProgress.fallbackTotal = 2;
+                }
 
-		return window.bokunImportProgress;
-	}
+                if (!window.bokunImportProgress.contextMessages || typeof window.bokunImportProgress.contextMessages !== 'object') {
+                        window.bokunImportProgress.contextMessages = {};
+                }
 
-	function resetImportProgressState(total) {
-		var state = getImportProgressState();
-		state.totalItems = typeof total === 'number' && total > 0 ? total : 0;
-		state.completedItems = 0;
-		state.fallbackTotal = 2;
-	}
+                return window.bokunImportProgress;
+        }
+
+        function resetImportProgressState(total) {
+                var state = getImportProgressState();
+                state.totalItems = typeof total === 'number' && total > 0 ? total : 0;
+                state.completedItems = 0;
+                state.fallbackTotal = 2;
+                state.contextMessages = {};
+        }
 
 	function updateImportProgressFromSummary(summary, options) {
 		if (!summary || typeof summary !== 'object') {
@@ -166,7 +173,8 @@ jQuery(document).ready(function ($) {
                         summary: summary,
                         label: label,
                         isFinal: !!options.isFinal,
-                        useAbsolute: true
+                        useAbsolute: true,
+                        context: options.context
                 });
         }
 
@@ -264,7 +272,9 @@ jQuery(document).ready(function ($) {
                                         stopImportProgressPolling('fetch');
                                         if (res.data && res.data.import_summary) {
                                                 updateImportProgressFromSummary(res.data.import_summary, {
-                                                        label: 'Imported items from API 1'
+                                                        label: 'Imported items from API 1',
+                                                        isFinal: true,
+                                                        context: 'fetch'
                                                 });
                                         } else {
                                                 setImportProgress('api1Complete');
@@ -330,7 +340,8 @@ jQuery(document).ready(function ($) {
                                         if (res.data && res.data.import_summary) {
                                                 updateImportProgressFromSummary(res.data.import_summary, {
                                                         label: 'Imported items from API 2',
-                                                        isFinal: true
+                                                        isFinal: true,
+                                                        context: 'upgrade'
                                                 });
                                         } else {
                                                 setImportProgress('api2Complete');
@@ -384,6 +395,10 @@ jQuery(document).ready(function ($) {
 
                 var progressState = getImportProgressState();
                 var totalImportItems = typeof progressState.totalItems === 'number' && !isNaN(progressState.totalItems) ? progressState.totalItems : 0;
+
+                if (!progressState.contextMessages || typeof progressState.contextMessages !== 'object') {
+                        progressState.contextMessages = {};
+                }
 
                 function toNumber(value) {
                         var number = typeof value === 'number' ? value : parseInt(value, 10);
@@ -502,6 +517,45 @@ jQuery(document).ready(function ($) {
                         // away automatically.
                 }
 
+                function buildAggregatedMessage(contextKey, message, isFinal) {
+                        var contextMessages = progressState.contextMessages;
+
+                        if (!contextMessages || typeof contextMessages !== 'object') {
+                                contextMessages = {};
+                                progressState.contextMessages = contextMessages;
+                        }
+
+                        if (contextKey) {
+                                if (isFinal) {
+                                        contextMessages[contextKey] = message;
+                                } else if (Object.prototype.hasOwnProperty.call(contextMessages, contextKey)) {
+                                        delete contextMessages[contextKey];
+                                }
+                        }
+
+                        var lines = [];
+
+                        CONTEXT_DISPLAY_ORDER.forEach(function (key) {
+                                if (contextMessages[key]) {
+                                        lines.push(contextMessages[key]);
+                                }
+                        });
+
+                        if (contextKey && CONTEXT_DISPLAY_ORDER.indexOf(contextKey) === -1 && contextMessages[contextKey]) {
+                                lines.push(contextMessages[contextKey]);
+                        }
+
+                        if ((!contextKey || !isFinal || !contextMessages[contextKey]) && message) {
+                                lines.push(message);
+                        }
+
+                        if (!lines.length && message) {
+                                lines.push(message);
+                        }
+
+                        return lines.join('\n');
+                }
+
                 $progress.stop(true, true);
 
                 if (step === 'reset') {
@@ -509,6 +563,7 @@ jQuery(document).ready(function ($) {
                         progressState.totalItems = resetTotal !== null && resetTotal > 0 ? resetTotal : 0;
                         progressState.completedItems = 0;
                         progressState.fallbackTotal = 2;
+                        progressState.contextMessages = {};
 
                         var resetMessage = progressState.totalItems > 0 ? 'Import progress (0/' + progressState.totalItems + ')' : 'Import progress';
                         $progress.removeClass('is-error').hide();
@@ -523,6 +578,7 @@ jQuery(document).ready(function ($) {
                 }
 
                 if (step === 'error') {
+                        progressState.contextMessages = {};
                         $progress.addClass('is-error').show();
                         $message.text('Import interrupted');
                         $value.text('Check the error message for details.');
@@ -610,6 +666,7 @@ jQuery(document).ready(function ($) {
                         totalImportItems = progressState.totalItems;
                         var currentValue = progressState.completedItems;
                         var isFinal = !!options.isFinal;
+                        var contextKey = typeof options.context === 'string' ? options.context : null;
 
                         var message;
 
@@ -627,15 +684,17 @@ jQuery(document).ready(function ($) {
 
                         var progressValue = totalImportItems > 0 ? computeProgressValue(currentValue, totalImportItems, 'complete') : (isFinal ? 100 : 0);
 
-                        renderProgress(message, progressValue, isFinal);
+                        var aggregatedMessage = buildAggregatedMessage(contextKey, message, isFinal);
+
+                        renderProgress(aggregatedMessage, progressValue, isFinal);
                         return;
                 }
 
                 var stepMap = {
-                        startApi1: { stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, message: 'Fetching items from API 1…' },
-                        api1Complete: { stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, message: 'Finished API 1' },
-                        startApi2: { stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, message: 'Fetching items from API 2… ({current} processed so far)' },
-                        api2Complete: { stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, isFinal: true, message: 'Finished API 2' }
+                        startApi1: { context: 'fetch', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, message: 'Fetching items from API 1…' },
+                        api1Complete: { context: 'fetch', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, isFinal: true, message: 'Finished API 1' },
+                        startApi2: { context: 'upgrade', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, message: 'Fetching items from API 2… ({current} processed so far)' },
+                        api2Complete: { context: 'upgrade', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, isFinal: true, message: 'Finished API 2' }
                 };
 
                 if (stepMap[step]) {
@@ -667,7 +726,9 @@ jQuery(document).ready(function ($) {
 
                         var progressValue = computeProgressValue(current, totalImportItems, stage, state.value, fallbackTotal, fallbackCurrent);
 
-                        renderProgress(message, progressValue, !!state.isFinal);
+                        var aggregatedMessage = buildAggregatedMessage(state.context || null, message, !!state.isFinal);
+
+                        renderProgress(aggregatedMessage, progressValue, !!state.isFinal);
                 }
         }
 
