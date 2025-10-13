@@ -1,4 +1,34 @@
 jQuery(document).ready(function($) {
+    function storeTeamMemberValue(key, value) {
+        if (!key) {
+            return;
+        }
+
+        var stored = false;
+
+        try {
+            window.localStorage.setItem(key, value);
+            stored = true;
+        } catch (error) {
+            stored = false;
+        }
+
+        if (!stored) {
+            try {
+                window.sessionStorage.setItem(key, value);
+                stored = true;
+            } catch (error) {
+                stored = false;
+            }
+        }
+
+        if (!stored) {
+            var expires = new Date();
+            expires.setFullYear(expires.getFullYear() + 1);
+            document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + '; expires=' + expires.toUTCString() + '; path=/';
+        }
+    }
+
     // Handle checkbox change event for Full, Partial, and Not Available checkboxes
     $(document).on('change', '.booking-checkbox', function() {
         var $checkbox = $(this);
@@ -73,6 +103,32 @@ jQuery(document).ready(function($) {
                 $message.text(response.data && response.data.message ? response.data.message : 'Saved');
                 if (response.data && response.data.created) {
                     $input.val('');
+                }
+
+                var overlayId = $form.data('overlay-id');
+                var storageKey = $form.data('storage-key');
+                var accessRegistry = window.bokunTeamMemberAccess || {};
+                var accessEntry = overlayId ? accessRegistry[overlayId] : null;
+
+                if (accessEntry && typeof accessEntry.save === 'function') {
+                    accessEntry.save(teamMemberName);
+                } else if (storageKey) {
+                    storeTeamMemberValue(storageKey, teamMemberName);
+                }
+
+                if (accessEntry && typeof accessEntry.unlock === 'function') {
+                    accessEntry.unlock();
+                } else if (overlayId) {
+                    var overlay = document.getElementById(overlayId);
+
+                    if (overlay) {
+                        overlay.classList.remove('is-visible');
+                        overlay.setAttribute('aria-hidden', 'true');
+                    }
+
+                    $('body').removeClass('bokun-team-member-overlay-active');
+                } else {
+                    $('body').removeClass('bokun-team-member-overlay-active');
                 }
             } else {
                 var errorMessage = response && response.data && response.data.message ? response.data.message : 'Unable to save team member.';
