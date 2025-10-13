@@ -1707,6 +1707,8 @@ function bokun_team_member_reset_button_shortcode($atts) {
             var buttonId = <?php echo wp_json_encode($button_id); ?>;
             var storageKey = <?php echo wp_json_encode($storage_key); ?>;
 
+            var TEAM_MEMBER_STORAGE_PREFIX = 'bokunTeamMemberAuthorized_';
+
             function removeStorageValue(key) {
                 if (!key) {
                     return;
@@ -1721,6 +1723,51 @@ function bokun_team_member_reset_button_shortcode($atts) {
                 } catch (error) {}
 
                 document.cookie = encodeURIComponent(key) + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            }
+
+            function clearStorageWithPrefix(storage, prefix) {
+                if (!storage || typeof storage.length === 'undefined') {
+                    return;
+                }
+
+                for (var index = storage.length - 1; index >= 0; index--) {
+                    var storageKey = storage.key(index);
+
+                    if (storageKey && storageKey.indexOf(prefix) === 0) {
+                        try {
+                            storage.removeItem(storageKey);
+                        } catch (error) {}
+                    }
+                }
+            }
+
+            function clearCookiesWithPrefix(prefix) {
+                if (!document.cookie || !prefix) {
+                    return;
+                }
+
+                var cookies = document.cookie.split(';');
+
+                for (var i = 0; i < cookies.length; i++) {
+                    var cookie = cookies[i].trim();
+
+                    if (!cookie) {
+                        continue;
+                    }
+
+                    var separatorIndex = cookie.indexOf('=');
+                    var name = separatorIndex >= 0 ? cookie.substring(0, separatorIndex) : cookie;
+
+                    if (name && name.indexOf(prefix) === 0) {
+                        document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+                    }
+                }
+            }
+
+            function clearAllTeamMemberStorage() {
+                clearStorageWithPrefix(window.localStorage, TEAM_MEMBER_STORAGE_PREFIX);
+                clearStorageWithPrefix(window.sessionStorage, TEAM_MEMBER_STORAGE_PREFIX);
+                clearCookiesWithPrefix(TEAM_MEMBER_STORAGE_PREFIX);
             }
 
             function lockOverlay(entry, overlayId) {
@@ -1765,6 +1812,8 @@ function bokun_team_member_reset_button_shortcode($atts) {
             }
 
             function resetTeamMemberSession() {
+                clearAllTeamMemberStorage();
+
                 if (storageKey) {
                     removeStorageValue(storageKey);
                 }
