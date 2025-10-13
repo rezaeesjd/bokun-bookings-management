@@ -55,16 +55,6 @@
   background-color: #005a8c;
 }
 
-.bokun_loader {
-  margin-top: 20px;
-  padding: 10px;
-  font-size: 16px;
-  color: #0073aa;
-  font-weight: bold;
-  display: none;
-  /* Hidden initially */
-}
-
 .bokun-progress {
   margin-top: 10px;
   font-size: 14px;
@@ -85,8 +75,21 @@
   white-space: pre-line;
 }
 
-.bokun-progress__value {
+.bokun-progress__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-left: 6px;
+}
+
+.bokun-progress__value {
+  margin: 0;
+}
+
+.bokun-progress__spinner {
+  width: 18px;
+  height: 18px;
+  display: none;
 }
 
 .bokun-progress__track {

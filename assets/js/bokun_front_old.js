@@ -21,11 +21,9 @@
 					var msg_all = decodeHTMLEntities(res.data.msg);
 				}
 			},
-			error: function (xhr, status, error) {
-				jQuery('#bokun_loader').hide();
-            
-				// Parse the response text and format the message
-				var responseText = xhr.responseText;
+                        error: function (xhr, status, error) {
+                                // Parse the response text and format the message
+                                var responseText = xhr.responseText;
 				try {
 					var parsedResponse = JSON.parse(responseText);
 					var formattedMessage = `Error: ${parsedResponse.message}`;
@@ -65,11 +63,9 @@
 					alert(res.data.msg);
 				}
 			},
-			error: function (xhr, status, error) {
-				jQuery('#bokun_loader').hide();
-            
-				// Parse the response text and format the message
-				var responseText = xhr.responseText;
+                        error: function (xhr, status, error) {
+                                // Parse the response text and format the message
+                                var responseText = xhr.responseText;
 				try {
 					var parsedResponse = JSON.parse(responseText);
 					var formattedMessage = `Error: ${parsedResponse.message}`;

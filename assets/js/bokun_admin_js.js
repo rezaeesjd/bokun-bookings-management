@@ -261,7 +261,6 @@ jQuery(document).ready(function ($) {
         jQuery(document).on('click', '.bokun_fetch_booking_data', function (e) {
                 e.preventDefault();
                 jQuery('.msg_sec').hide();
-                jQuery('#bokun_loader').show();
                 stopAllImportProgressPolling();
                 resetImportProgressState();
                 setImportProgress('reset');
@@ -280,7 +279,6 @@ jQuery(document).ready(function ($) {
 			dataType: 'json',
 			success: function (res) {
 
-                                jQuery('#bokun_loader').hide();
                                 jQuery('.msg_success, .msg_error').hide();
                                 if (res.success) {
                                         stopImportProgressPolling('fetch');
@@ -305,7 +303,6 @@ jQuery(document).ready(function ($) {
                                 }
                         },
                         error: function (xhr, status, error) {
-                                jQuery('#bokun_loader').hide();
                                 stopImportProgressPolling('fetch');
                                 setImportProgress('error');
 
@@ -327,8 +324,6 @@ jQuery(document).ready(function ($) {
 
         function call_from_secound_api() {
 
-                jQuery('#bokun_loader').hide();
-                jQuery('#bokun_loader_upgrade').show();
                 var progressState = getImportProgressState();
                 setImportProgress('startApi2', {
                         current: progressState.completedItems,
@@ -346,7 +341,6 @@ jQuery(document).ready(function ($) {
                         dataType: 'json',
                         success: function (res) {
 
-                                jQuery('#bokun_loader_upgrade').hide();
                                 jQuery('.msg_success_upgrade, .msg_error_upgrade').hide();
 
                                 if (res.success) {
@@ -371,7 +365,6 @@ jQuery(document).ready(function ($) {
                                 }
                         },
                         error: function (xhr, status, error) {
-                                jQuery('#bokun_loader_upgrade').hide();
                                 stopImportProgressPolling('upgrade');
                                 setImportProgress('error');
                                 var responseText = xhr.responseText;
@@ -400,12 +393,27 @@ jQuery(document).ready(function ($) {
                 var $message = jQuery('#bokun_progress_message');
                 var $value = jQuery('#bokun_progress_value');
                 var $bar = jQuery('#bokun_progress_bar');
+                var $spinner = jQuery('#bokun_progress_spinner');
 
                 if (!$progress.length) {
                         return;
                 }
 
                 options = options || {};
+
+                function setSpinnerVisible(visible) {
+                        if (!$spinner.length) {
+                                return;
+                        }
+
+                        if (visible) {
+                                $spinner.show();
+                        } else {
+                                $spinner.hide();
+                        }
+                }
+
+                setSpinnerVisible(false);
 
                 var progressState = getImportProgressState();
                 var totalImportItems = typeof progressState.totalItems === 'number' && !isNaN(progressState.totalItems) ? progressState.totalItems : 0;
@@ -583,6 +591,7 @@ jQuery(document).ready(function ($) {
                         $progress.removeClass('is-error').hide();
                         $message.text(resetMessage);
                         $value.text('0%');
+                        setSpinnerVisible(false);
 
                         if ($bar.length) {
                                 $bar.css('width', '0%').attr('aria-valuenow', 0).data('progress-value', 0);
@@ -596,6 +605,7 @@ jQuery(document).ready(function ($) {
                         $progress.addClass('is-error').show();
                         $message.text('Import interrupted');
                         $value.text('Check the error message for details.');
+                        setSpinnerVisible(false);
 
                         if ($bar.length) {
                                 var lastValue = $bar.data('progress-value') || 0;
@@ -720,6 +730,7 @@ jQuery(document).ready(function ($) {
                         var aggregatedMessage = buildAggregatedMessage(contextKey, message, isFinal);
 
                         renderProgress(aggregatedMessage, progressValue, isFinal);
+                        setSpinnerVisible(!isFinal);
                         return;
                 }
 
@@ -762,6 +773,7 @@ jQuery(document).ready(function ($) {
                         var aggregatedMessage = buildAggregatedMessage(state.context || null, message, !!state.isFinal);
 
                         renderProgress(aggregatedMessage, progressValue, !!state.isFinal);
+                        setSpinnerVisible(!state.isFinal);
                 }
         }
 
