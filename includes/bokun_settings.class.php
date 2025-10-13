@@ -14,6 +14,9 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
             add_action('wp_ajax_bokun_bookings_manager_page',array( $this, "bokun_bookings_manager_page" ), 10  );
             add_action('wp_ajax_nopriv_bokun_bookings_manager_page',array( $this, "bokun_bookings_manager_page" ), 10  );
 
+            add_action('wp_ajax_bokun_get_import_progress', array($this, 'bokun_get_import_progress'), 10);
+            add_action('wp_ajax_nopriv_bokun_get_import_progress', array($this, 'bokun_get_import_progress'), 10);
+
         } 
 
         
@@ -25,7 +28,8 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
                 wp_die();
             }
 
-            $mode = $_POST['mode'];
+            $mode = isset($_POST['mode']) ? sanitize_key(wp_unslash($_POST['mode'])) : '';
+            $progress_context = ($mode === 'upgrade') ? 'upgrade' : 'fetch';
             // If nonce check passes, proceed with your logic
             if ($mode === 'upgrade') {
                 $bookings = bokun_fetch_bookings('upgrade'); // Replace with your actual function
@@ -37,9 +41,21 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
             // print_r($bookings);
             // die;
             if (is_string($bookings)) {
+                $normalized_message = trim($bookings);
+                $is_error_message = stripos($normalized_message, 'error') === 0;
+
+                bokun_set_import_progress_state($progress_context, array(
+                    'status'    => $is_error_message ? 'error' : 'completed',
+                    'total'     => 0,
+                    'processed' => 0,
+                    'created'   => 0,
+                    'updated'   => 0,
+                    'skipped'   => 0,
+                    'message'   => $is_error_message ? bokun_get_import_progress_message($progress_context, 'error') : bokun_get_import_progress_message($progress_context, 'completed'),
+                ));
                 wp_send_json_success(array('msg' => esc_html($bookings), 'status' => false));
             } else {
-                $import_summary = bokun_save_bookings_as_posts($bookings);
+                $import_summary = bokun_save_bookings_as_posts($bookings, $progress_context);
 
                 if (!is_array($import_summary)) {
                     $import_summary = array();
@@ -63,6 +79,23 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
             }
 
             wp_die(); // Always end AJAX functions with wp_die()
+        }
+
+        function bokun_get_import_progress() {
+            if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
+                wp_send_json_error(array('msg' => 'Nonce verification failed.'));
+                wp_die();
+            }
+
+            $mode = isset($_POST['mode']) ? sanitize_key(wp_unslash($_POST['mode'])) : '';
+            $progress = bokun_get_import_progress_state($mode);
+
+            if (!is_array($progress)) {
+                $progress = array();
+            }
+
+            wp_send_json_success($progress);
+            wp_die();
         }
        
         function bokun_save_api_auth() {

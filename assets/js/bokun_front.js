@@ -1,5 +1,109 @@
 jQuery(function ($) {
 
+        var ajaxUrl = (typeof bokun_api_auth_vars !== 'undefined' && bokun_api_auth_vars.ajax_url) ? bokun_api_auth_vars.ajax_url : (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
+        var importProgressPollers = {};
+        var progressPollInterval = 1000;
+
+        function startImportProgressPolling(mode, options) {
+                options = options || {};
+
+                if (!mode || importProgressPollers[mode]) {
+                        return;
+                }
+
+                if (!ajaxUrl) {
+                        return;
+                }
+
+                var interval = Math.max(parseInt(options.interval, 10) || progressPollInterval, 500);
+                var requestInFlight = false;
+
+                function performPoll() {
+                        if (requestInFlight) {
+                                return;
+                        }
+
+                        requestInFlight = true;
+
+                        $.ajax({
+                                type: 'POST',
+                                url: ajaxUrl,
+                                data: {
+                                        action: 'bokun_get_import_progress',
+                                        security: bokun_api_auth_vars.nonce,
+                                        mode: mode
+                                },
+                                dataType: 'json'
+                        }).done(function (res) {
+                                if (!res) {
+                                        return;
+                                }
+
+                                if (res.success && res.data) {
+                                        var data = res.data;
+                                        var summary = {
+                                                total: typeof data.total === 'number' ? data.total : null,
+                                                processed: typeof data.processed === 'number' ? data.processed : null,
+                                                created: typeof data.created === 'number' ? data.created : null,
+                                                updated: typeof data.updated === 'number' ? data.updated : null,
+                                                skipped: typeof data.skipped === 'number' ? data.skipped : null
+                                        };
+
+                                        if (summary.total === null && summary.processed === null && summary.created === null && summary.updated === null && summary.skipped === null) {
+                                                summary.total = 0;
+                                                summary.processed = 0;
+                                        }
+
+                                        var progressOptions = {
+                                                summary: summary,
+                                                label: data.label || options.label,
+                                                isFinal: data.status === 'completed',
+                                                useAbsolute: true
+                                        };
+
+                                        if (data.message) {
+                                                progressOptions.message = data.message;
+                                        }
+
+                                        setImportProgress('summaryUpdate', progressOptions);
+
+                                        if (data.status === 'completed') {
+                                                stopImportProgressPolling(mode);
+                                        }
+
+                                        if (data.status === 'error') {
+                                                stopImportProgressPolling(mode);
+                                                setImportProgress('error');
+                                        }
+                                } else {
+                                        stopImportProgressPolling(mode);
+                                }
+                        }).always(function () {
+                                requestInFlight = false;
+                        });
+                }
+
+                performPoll();
+                importProgressPollers[mode] = setInterval(performPoll, interval);
+        }
+
+        function stopImportProgressPolling(mode) {
+                if (!mode || !importProgressPollers[mode]) {
+                        return;
+                }
+
+                clearInterval(importProgressPollers[mode]);
+                delete importProgressPollers[mode];
+        }
+
+        function stopAllImportProgressPolling() {
+                for (var key in importProgressPollers) {
+                        if (Object.prototype.hasOwnProperty.call(importProgressPollers, key)) {
+                                stopImportProgressPolling(key);
+                        }
+                }
+        }
+
         resetImportProgressState();
         setImportProgress('reset');
 
@@ -61,11 +165,10 @@ jQuery(function ($) {
                 setImportProgress('summaryUpdate', {
                         summary: summary,
                         label: label,
-                        isFinal: !!options.isFinal
+                        isFinal: !!options.isFinal,
+                        useAbsolute: true
                 });
         }
-
-        var ajaxUrl = (typeof bokun_api_auth_vars !== 'undefined' && bokun_api_auth_vars.ajax_url) ? bokun_api_auth_vars.ajax_url : (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
 
         $(document).on('click', '.bokun_fetch_booking_data_front', function (e) {
                 e.preventDefault();
@@ -75,11 +178,13 @@ jQuery(function ($) {
                 $button.text('Processing…');
                 $('.msg_sec').hide();
                 $('#bokun_loader').show();
+                stopAllImportProgressPolling();
                 resetImportProgressState();
                 setImportProgress('reset');
                 setImportProgress('startApi1', {
                         current: 0
                 });
+                startImportProgressPolling('fetch');
 
                 $.ajax({
                         type: 'POST',
@@ -96,6 +201,7 @@ jQuery(function ($) {
                                 $('.msg_success, .msg_error').hide();
 
                                 if (res.success) {
+                                        stopImportProgressPolling('fetch');
                                         if (res.data && res.data.import_summary) {
                                                 updateImportProgressFromSummary(res.data.import_summary, {
                                                         label: 'Imported items from API 1'
@@ -105,6 +211,7 @@ jQuery(function ($) {
                                         }
                                         call_from_second_api_front();
                                 } else {
+                                        stopImportProgressPolling('fetch');
                                         setImportProgress('error');
                                         alert(res.data.msg);
                                 }
@@ -112,6 +219,7 @@ jQuery(function ($) {
                         error: function (xhr, status, error) {
                                 $('#bokun_loader').hide();
                                 $button.text('Fetch');
+                                stopImportProgressPolling('fetch');
                                 setImportProgress('error');
 
                                 var responseText = xhr.responseText;
@@ -141,6 +249,7 @@ jQuery(function ($) {
                         current: progressState.completedItems,
                         totalItems: progressState.totalItems
                 });
+                startImportProgressPolling('upgrade');
 
                 $.ajax({
                         type: 'POST',
@@ -154,6 +263,7 @@ jQuery(function ($) {
                         success: function (res) {
                                 $('#bokun_loader_upgrade').hide();
                                 $button.text('Fetch');
+                                stopImportProgressPolling('upgrade');
 
                                 if (res.success) {
                                         if (res.data && res.data.import_summary) {
@@ -175,6 +285,7 @@ jQuery(function ($) {
                                 $('#bokun_loader_upgrade').hide();
                                 $('#bokun_loader').hide();
                                 $button.text('Fetch');
+                                stopImportProgressPolling('upgrade');
                                 setImportProgress('error');
 
                                 var responseText = xhr.responseText;
@@ -375,6 +486,7 @@ jQuery(function ($) {
                         var skippedCount = summary.skipped !== undefined ? toNumber(summary.skipped) : null;
                         var derivedTotal = 0;
                         var hasDerivedTotal = false;
+                        var useAbsolute = !!options.useAbsolute;
 
                         if (createdCount !== null && createdCount >= 0) {
                                 derivedTotal += createdCount;
@@ -391,7 +503,7 @@ jQuery(function ($) {
                                 hasDerivedTotal = hasDerivedTotal || skippedCount > 0;
                         }
 
-                        if (totalToAdd === null || totalToAdd <= 0) {
+                        if (totalToAdd === null || totalToAdd < 0) {
                                 if (processedValue !== null && processedValue > 0) {
                                         totalToAdd = processedValue;
                                 } else if (hasDerivedTotal && derivedTotal > 0) {
@@ -399,8 +511,12 @@ jQuery(function ($) {
                                 }
                         }
 
-                        if (totalToAdd !== null && totalToAdd > 0) {
-                                progressState.totalItems += totalToAdd;
+                        if (totalToAdd !== null) {
+                                if (useAbsolute) {
+                                        progressState.totalItems = Math.max(totalToAdd, 0);
+                                } else if (totalToAdd > 0) {
+                                        progressState.totalItems += totalToAdd;
+                                }
                         }
 
                         if (processedValue === null) {
@@ -417,7 +533,13 @@ jQuery(function ($) {
                                 processedValue = 0;
                         }
 
-                        progressState.completedItems += processedValue;
+                        if (useAbsolute) {
+                                if (processedValue !== null) {
+                                        progressState.completedItems = processedValue;
+                                }
+                        } else {
+                                progressState.completedItems += processedValue;
+                        }
 
                         if (progressState.totalItems < progressState.completedItems) {
                                 progressState.totalItems = progressState.completedItems;
