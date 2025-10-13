@@ -437,11 +437,8 @@ jQuery(function ($) {
                                 $bar.css('width', safeValue + '%').attr('aria-valuenow', safeValue).data('progress-value', safeValue);
                         }
 
-                        if (isFinal) {
-                                setTimeout(function () {
-                                        $progress.fadeOut(300);
-                                }, 2000);
-                        }
+                        // Keep the progress visible after a successful fetch so visitors
+                        // can review the final status without it fading out automatically.
                 }
 
                 $progress.stop(true, true);
