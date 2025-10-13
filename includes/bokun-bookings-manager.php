@@ -1509,6 +1509,12 @@ function bokun_team_member_submission_shortcode() {
 
                 if (document.body) {
                     document.body.classList.remove('bokun-team-member-overlay-active');
+
+                    if (document.body.classList.contains('bokun-team-member-gate')) {
+                        setTimeout(function() {
+                            window.location.reload();
+                        }, 50);
+                    }
                 }
             }
 
