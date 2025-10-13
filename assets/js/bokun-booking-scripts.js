@@ -1,4 +1,14 @@
 jQuery(document).ready(function($) {
+    function writeTeamMemberCookie(key, value) {
+        if (!key) {
+            return;
+        }
+
+        var expires = new Date();
+        expires.setFullYear(expires.getFullYear() + 1);
+        document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + '; expires=' + expires.toUTCString() + '; path=/';
+    }
+
     function storeTeamMemberValue(key, value) {
         if (!key) {
             return;
@@ -22,11 +32,7 @@ jQuery(document).ready(function($) {
             }
         }
 
-        if (!stored) {
-            var expires = new Date();
-            expires.setFullYear(expires.getFullYear() + 1);
-            document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + '; expires=' + expires.toUTCString() + '; path=/';
-        }
+        writeTeamMemberCookie(key, value);
     }
 
     // Handle checkbox change event for Full, Partial, and Not Available checkboxes
