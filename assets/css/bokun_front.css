@@ -24,8 +24,21 @@
   white-space: pre-line;
 }
 
-.bokun-progress__value {
+.bokun-progress__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-left: 6px;
+}
+
+.bokun-progress__value {
+  margin: 0;
+}
+
+.bokun-progress__spinner {
+  width: 18px;
+  height: 18px;
+  display: none;
 }
 
 .bokun-progress__track {
@@ -53,9 +66,3 @@
   background: #d63638;
 }
 
-.bokun_loader {
-  font-size: 14px;
-  color: #0073aa;
-  font-weight: 600;
-  display: none;
-}

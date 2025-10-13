@@ -18,14 +18,15 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 <div id="bokun_progress" class="bokun-progress" style="display:none;" role="status" aria-live="polite">
                     <div class="bokun-progress__header">
                         <span id="bokun_progress_message" class="bokun-progress__message">Import progress</span>
-                        <span id="bokun_progress_value" class="bokun-progress__value">0%</span>
+                        <span class="bokun-progress__status">
+                            <span id="bokun_progress_value" class="bokun-progress__value">0%</span>
+                            <img id="bokun_progress_spinner" class="bokun-progress__spinner" src="<?= BOKUN_IMAGES_URL.'ajax-loading.gif'; ?>" alt="Loading" width="18" height="18">
+                        </span>
                     </div>
                     <div class="bokun-progress__track" aria-hidden="true">
                         <div id="bokun_progress_bar" class="bokun-progress__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
                     </div>
                 </div>
-                <div id="bokun_loader" class="bokun_loader" style="display:none;">Processing for API 1…</div>
-                <div id="bokun_loader_upgrade" class="bokun_loader" style="display:none;">Processing for API 2…</div>
             </div>
             <?php
             return ob_get_clean();
