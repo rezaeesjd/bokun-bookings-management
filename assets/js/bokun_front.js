@@ -572,7 +572,7 @@ jQuery(function ($) {
 
                 var stepMap = {
                         startApi1: { stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, message: 'Fetching items from API 1…' },
-                        api1Complete: { stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, message: 'Finished API 1' },
+                        api1Complete: { stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, isFinal: true, message: 'Finished API 1' },
                         startApi2: { stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, message: 'Fetching items from API 2… ({current} processed so far)' },
                         api2Complete: { stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, isFinal: true, message: 'Finished API 2' }
                 };
