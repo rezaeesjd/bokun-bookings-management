@@ -182,6 +182,18 @@ function bokun_fetch_bookings($upgrade = '') {
 
 // Save Bokun bookings as WordPress posts
 function bokun_save_bookings_as_posts($bookings) {
+    $stats = array(
+        'total'     => is_array($bookings) ? count($bookings) : 0,
+        'processed' => 0,
+        'created'   => 0,
+        'updated'   => 0,
+        'skipped'   => 0,
+    );
+
+    if (!is_array($bookings) || empty($bookings)) {
+        return $stats;
+    }
+
     // Step 1: Collect all confirmation codes from the imported bookings
     $imported_confirmation_codes = [];
     foreach ($bookings as $booking) {
@@ -218,15 +230,14 @@ function bokun_save_bookings_as_posts($bookings) {
 
     // Step 3: Process imported bookings and save or update as usual
     foreach ($bookings as $booking) {
-        // Remaining code for processing individual bookings
         if (empty($booking['confirmationCode'])) {
+            $stats['skipped']++;
             continue;
         }
 
         $confirmationCode = $booking['confirmationCode'];
         $post_title = $confirmationCode;
 
-        // Fetch or calculate the startDateTime for the post_date
         $startDateTime = !empty($booking['productBookings'][0]['startDateTime'])
                             ? $booking['productBookings'][0]['startDateTime']
                             : (!empty($booking['productBookings'][0]['startDate'])
@@ -234,6 +245,7 @@ function bokun_save_bookings_as_posts($bookings) {
                                 : '');
 
         if (empty($startDateTime)) {
+            $stats['skipped']++;
             continue;
         }
 
@@ -269,36 +281,41 @@ function bokun_save_bookings_as_posts($bookings) {
             $post_id = $existing_post[0];
             $has_changes = bokun_check_for_changes($post_id, $booking);
             if ($has_changes) {
-                wp_update_post(array_merge(['ID' => $post_id], $post_data));
+                $update_result = wp_update_post(array_merge(['ID' => $post_id], $post_data));
+                if (is_wp_error($update_result) || 0 === $update_result) {
+                    $stats['skipped']++;
+                } else {
+                    $stats['updated']++;
+                }
+            } else {
+                $stats['skipped']++;
             }
         } else {
             $post_id = wp_insert_post($post_data);
-            if (is_wp_error($post_id)) {
+            if (is_wp_error($post_id) || 0 === $post_id) {
+                $stats['skipped']++;
                 continue;
             }
+            $stats['created']++;
         }
 
-        // Save fields for both new and updated posts
         bokun_save_specific_fields($post_id, $booking);
         bokun_save_all_fields_as_meta($post_id, $booking);
         process_price_categories_and_save($post_id, $booking);
         bokun_calculate_booking_status($post_id, $booking['productBookings'][0]['product']['title'] ?? '', $startDateTime);
 
-        // Extract, process, and save the inclusions as clean text
-// Extract inclusions text from productBookings_0_notes_0_body
-$inclusions_text = $booking['productBookings'][0]['notes'][0]['body'] ?? '';
+        $inclusions_text = $booking['productBookings'][0]['notes'][0]['body'] ?? '';
+        $inclusions_clean = bokun_get_inclusions_clean($inclusions_text);
 
-// Process the inclusions to remove content up to the third occurrence of '---'
-$inclusions_clean = bokun_get_inclusions_clean($inclusions_text);
-
-if (!empty($inclusions_clean)) {
-    update_post_meta($post_id, 'inclusions_clean', $inclusions_clean);
-}
-
+        if (!empty($inclusions_clean)) {
+            update_post_meta($post_id, 'inclusions_clean', $inclusions_clean);
+        }
     }
+
+    $stats['processed'] = $stats['created'] + $stats['updated'] + $stats['skipped'];
+
+    return $stats;
 }
-
-
 
 // Function to check if fields have changed, excluding 'bookingmade'
 function bokun_check_for_changes($post_id, $booking) {
@@ -965,10 +982,28 @@ add_action('rest_api_init', function () {
 // Callback function for the endpoint to import bookings
 function bokun_import_bookings() {
     // Fetch and process the bookings
-    $bookings = bokun_fetch_bookings();    
+    $bookings = bokun_fetch_bookings();
     if (is_array($bookings)) {
-        bokun_save_bookings_as_posts($bookings);
-        return new WP_REST_Response('Bookings imported successfully.', 200);
+        $summary = bokun_save_bookings_as_posts($bookings);
+        if (!is_array($summary)) {
+            $summary = array();
+        }
+
+        $normalized_summary = array(
+            'total'     => isset($summary['total']) ? intval($summary['total']) : 0,
+            'processed' => isset($summary['processed']) ? intval($summary['processed']) : 0,
+            'created'   => isset($summary['created']) ? intval($summary['created']) : 0,
+            'updated'   => isset($summary['updated']) ? intval($summary['updated']) : 0,
+            'skipped'   => isset($summary['skipped']) ? intval($summary['skipped']) : 0,
+        );
+
+        return new WP_REST_Response(
+            array(
+                'message' => 'Bookings imported successfully.',
+                'summary' => $normalized_summary,
+            ),
+            200
+        );
     } else {
         return new WP_REST_Response('Error fetching bookings: ' . $bookings, 500);
     }
