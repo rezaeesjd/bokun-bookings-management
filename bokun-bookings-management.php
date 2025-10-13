@@ -54,6 +54,7 @@ $bokun_version = '1.0.0';
 
 class BokunBookingManagement {
     var $bokun_settings = '';
+    var $bokun_booking_history = 'bokun_booking_history';
 
 	function __construct() {
         global $wpdb;
@@ -185,9 +186,9 @@ class BokunBookingManagement {
         do_action('bokun_txt_domain');
     }
 
-	static function bokun_install() {
+        static function bokun_install() {
 
-		global $wpdb, $rb, $bokun_version;
+                global $wpdb, $rb, $bokun_version;
 
         $charset_collate = $wpdb->get_charset_collate();
         require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
@@ -195,9 +196,26 @@ class BokunBookingManagement {
         update_option( "bokun_plugin", true );
         update_option( "bokun_version", $bokun_version );
 
-        $wpdb->prefix;
-        
-	}
+        $table_name = $wpdb->prefix . 'bokun_booking_history';
+
+        $sql = "CREATE TABLE $table_name (
+            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+            post_id BIGINT(20) UNSIGNED NULL,
+            booking_id VARCHAR(191) NOT NULL,
+            action_type VARCHAR(50) NOT NULL,
+            is_checked TINYINT(1) NOT NULL DEFAULT 0,
+            user_id BIGINT(20) UNSIGNED NULL,
+            user_name VARCHAR(191) NULL,
+            actor_source VARCHAR(50) NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY  (id),
+            KEY booking_id (booking_id),
+            KEY created_at (created_at)
+        ) $charset_collate;";
+
+        dbDelta($sql);
+
+        }
 
     static function bokun_deactivation() {
         // deactivation process here
@@ -210,9 +228,14 @@ class BokunBookingManagement {
                 'cap' => 'manage_options', // Capability required to access this submenu
                 'slug' => $this->bokun_settings, // Slug of the submenu
             ),
+            array(
+                'name' => __('Booking History', 'BOKUN_txt_domain'),
+                'cap'  => 'manage_options',
+                'slug' => $this->bokun_booking_history,
+            ),
         );
-		return $bokun_admin_menu;
-	}
+                return $bokun_admin_menu;
+        }
 
 	function bokun_add_menu() {
 
@@ -244,12 +267,13 @@ class BokunBookingManagement {
 		}
 	}
 
-	function bokun_admin_slugs() {
-		$bokun_pages_slug = array(
-			$this->bokun_settings,
-		);
-		return $bokun_pages_slug;
-	}
+        function bokun_admin_slugs() {
+                $bokun_pages_slug = array(
+                        $this->bokun_settings,
+                        $this->bokun_booking_history,
+                );
+                return $bokun_pages_slug;
+        }
 
 	function bokun_is_page() {
 		if( isset( $_REQUEST['page'] ) && in_array( $_REQUEST['page'], $this->bokun_admin_slugs() ) ) {
@@ -372,12 +396,17 @@ class BokunBookingManagement {
 		global $rb,$bokun_settings,$bokun_booking,$bokun_timing;
 		if( isset($_REQUEST['page']) && $_REQUEST['page'] != '' ){
             switch ( $_REQUEST['page'] ) {
-				case $this->bokun_settings:
-					$bokun_settings->bokun_display_settings();
-					break;
-			}
-		}
-	}
+                                case $this->bokun_settings:
+                                        $bokun_settings->bokun_display_settings();
+                                        break;
+                                case $this->bokun_booking_history:
+                                        if (file_exists(BOKUN_INCLUDES_DIR . 'bokun_booking_history.view.php')) {
+                                            include_once BOKUN_INCLUDES_DIR . 'bokun_booking_history.view.php';
+                                        }
+                                        break;
+                        }
+                }
+        }
 
     function bokun_write_log( $content = '', $file_name = 'bokun_log.txt' ) {
         $file = __DIR__ . '/log/' . $file_name;    

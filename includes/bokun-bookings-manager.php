@@ -859,36 +859,146 @@ function bokun_register_alarm_status_taxonomy() {
 }
 add_action('init', 'bokun_register_alarm_status_taxonomy');
 
+function bokun_booking_history_table_exists() {
+    static $table_exists = null;
+
+    if (null !== $table_exists) {
+        return $table_exists;
+    }
+
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'bokun_booking_history';
+    $like_name  = $wpdb->esc_like($table_name);
+    $table_exists = ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $like_name)) === $table_name);
+
+    return $table_exists;
+}
+
+function bokun_get_team_member_name_from_cookies() {
+    foreach ($_COOKIE as $cookie_name => $value) {
+        if (0 === strpos($cookie_name, 'bokunTeamMemberAuthorized_')) {
+            $team_member_name = sanitize_text_field(wp_unslash($value));
+
+            if (!empty($team_member_name)) {
+                return $team_member_name;
+            }
+        }
+    }
+
+    return '';
+}
+
+function bokun_get_booking_history_actor_details() {
+    $user_id = get_current_user_id();
+
+    if ($user_id) {
+        $user = get_user_by('id', $user_id);
+        $user_name = '';
+
+        if ($user) {
+            $user_name = $user->display_name ? $user->display_name : $user->user_login;
+        }
+
+        return [
+            'user_id'      => $user_id,
+            'user_name'    => sanitize_text_field($user_name),
+            'actor_source' => 'wp_user',
+        ];
+    }
+
+    $team_member_name = bokun_get_team_member_name_from_cookies();
+
+    if (!empty($team_member_name)) {
+        return [
+            'user_id'      => 0,
+            'user_name'    => $team_member_name,
+            'actor_source' => 'team_member',
+        ];
+    }
+
+    return [
+        'user_id'      => 0,
+        'user_name'    => '',
+        'actor_source' => 'guest',
+    ];
+}
+
+function bokun_record_booking_history($post_id, $booking_id, $action_type, $checked) {
+    if (!bokun_booking_history_table_exists()) {
+        return;
+    }
+
+    global $wpdb;
+
+    $details = bokun_get_booking_history_actor_details();
+
+    $table_name = $wpdb->prefix . 'bokun_booking_history';
+
+    $wpdb->insert(
+        $table_name,
+        [
+            'post_id'      => $post_id ? (int) $post_id : null,
+            'booking_id'   => $booking_id,
+            'action_type'  => $action_type,
+            'is_checked'   => $checked ? 1 : 0,
+            'user_id'      => $details['user_id'] ?: null,
+            'user_name'    => $details['user_name'],
+            'actor_source' => $details['actor_source'],
+            'created_at'   => current_time('mysql'),
+        ],
+        [
+            '%d',
+            '%s',
+            '%s',
+            '%d',
+            '%d',
+            '%s',
+            '%s',
+            '%s',
+        ]
+    );
+}
+
 // Handle AJAX request to update booking status and track click logs
 function update_booking_status() {
     check_ajax_referer('update_booking_nonce', 'security');
 
-    $booking_id = sanitize_text_field($_POST['booking_id']);
-    $checked = filter_var($_POST['checked'], FILTER_VALIDATE_BOOLEAN);
-    $type = sanitize_text_field($_POST['type']); // "full", "partial", or "not-available"
+    $booking_id = isset($_POST['booking_id']) ? sanitize_text_field(wp_unslash($_POST['booking_id'])) : '';
+    $checked    = isset($_POST['checked']) ? filter_var(wp_unslash($_POST['checked']), FILTER_VALIDATE_BOOLEAN) : false;
+    $type       = isset($_POST['type']) ? strtolower(sanitize_text_field(wp_unslash($_POST['type']))) : '';
 
     if (empty($booking_id)) {
         wp_send_json_error(['message' => 'Invalid booking ID provided.']);
         wp_die();
     }
 
+    $allowed_types = ['full', 'partial', 'not-available'];
+
+    if (!in_array($type, $allowed_types, true)) {
+        wp_send_json_error(['message' => 'Invalid booking status type provided.']);
+        wp_die();
+    }
+
     $args = [
-        'post_type' => 'bokun_booking',
-        'meta_query' => [
+        'post_type'      => 'bokun_booking',
+        'posts_per_page' => 1,
+        'meta_query'     => [
             [
-                'key' => '_confirmation_code',
-                'value' => $booking_id,
-                'compare' => '='
-            ]
-        ]
+                'key'     => '_confirmation_code',
+                'value'   => $booking_id,
+                'compare' => '=',
+            ],
+        ],
     ];
 
-    $query = new WP_Query($args);
+    $query   = new WP_Query($args);
+    $updated = false;
 
     if ($query->have_posts()) {
         while ($query->have_posts()) {
             $query->the_post();
-            $post_id = get_the_ID();
+            $post_id  = get_the_ID();
             $taxonomy = 'booking_status';
 
             if ($type === 'not-available') {
@@ -914,8 +1024,14 @@ function update_booking_status() {
                 }
             }
 
-            wp_send_json_success(['message' => 'Booking status updated']);
+            bokun_record_booking_history($post_id, $booking_id, $type, $checked);
+            $updated = true;
         }
+        wp_reset_postdata();
+    }
+
+    if ($updated) {
+        wp_send_json_success(['message' => 'Booking status updated']);
     } else {
         wp_send_json_error(['message' => 'Booking ID not found.']);
     }
