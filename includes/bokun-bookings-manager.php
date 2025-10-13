@@ -1099,27 +1099,184 @@ function booking_checkbox_shortcode($atts) {
 }
 add_shortcode('booking_checkbox', 'booking_checkbox_shortcode');
 
-// Display a form to add Team Member taxonomy terms from the front-end
-function bokun_team_member_submission_shortcode() {
-    $input_id   = 'bokun-team-member-' . wp_rand(1000, 9999);
-    $overlay_id = 'bokun-team-member-overlay-' . wp_rand(1000, 9999);
-
+/**
+ * Retrieve the identifier used to scope team member authorization.
+ *
+ * @return string
+ */
+function bokun_team_member_get_page_identifier() {
     $page_identifier = 0;
 
     if (function_exists('get_queried_object_id')) {
         $page_identifier = get_queried_object_id();
     }
 
-    if (!$page_identifier) {
+    if (!$page_identifier && function_exists('get_the_ID')) {
         $page_identifier = get_the_ID();
     }
 
     if (!$page_identifier) {
-        $request_uri     = isset($_SERVER['REQUEST_URI']) ? wp_unslash($_SERVER['REQUEST_URI']) : '';
+        $request_uri = isset($_SERVER['REQUEST_URI']) ? wp_unslash($_SERVER['REQUEST_URI']) : '';
         $page_identifier = 'url_' . md5(home_url($request_uri));
     }
 
-    $storage_key = 'bokunTeamMemberAuthorized_' . $page_identifier;
+    return (string) $page_identifier;
+}
+
+/**
+ * Build the storage key used for client/server coordination.
+ *
+ * @param null|string $page_identifier
+ *
+ * @return string
+ */
+function bokun_team_member_get_storage_key($page_identifier = null) {
+    if (null === $page_identifier) {
+        $page_identifier = bokun_team_member_get_page_identifier();
+    }
+
+    return 'bokunTeamMemberAuthorized_' . $page_identifier;
+}
+
+/**
+ * Determine whether the current request has been authorized by a team member.
+ *
+ * @param null|string $page_identifier
+ *
+ * @return bool
+ */
+function bokun_team_member_is_authorized($page_identifier = null) {
+    if (is_user_logged_in() && current_user_can('manage_options')) {
+        return true;
+    }
+
+    $storage_key = bokun_team_member_get_storage_key($page_identifier);
+    $cookie_value = '';
+
+    if (isset($_COOKIE[$storage_key])) {
+        $cookie_value = sanitize_text_field(wp_unslash($_COOKIE[$storage_key]));
+    }
+
+    $authorized = !empty($cookie_value);
+
+    /**
+     * Filter whether the visitor is authorized to view the gated content.
+     *
+     * @param bool   $authorized   Current authorization determination.
+     * @param string $page_identifier Identifier used for the gate.
+     * @param string $storage_key  Cookie/local storage key inspected.
+     * @param string $cookie_value Raw cookie value.
+     */
+    return (bool) apply_filters(
+        'bokun_team_member_is_authorized',
+        $authorized,
+        $page_identifier,
+        $storage_key,
+        $cookie_value
+    );
+}
+
+/**
+ * Check if the active request should be gated behind the team member form.
+ *
+ * @return bool
+ */
+function bokun_team_member_should_gate_request() {
+    $should_gate = is_post_type_archive('bokun_booking') || is_singular('bokun_booking');
+
+    /**
+     * Filter whether the current request should be intercepted by the gate.
+     *
+     * @param bool $should_gate Calculated gating flag.
+     */
+    return (bool) apply_filters('bokun_team_member_should_gate_request', $should_gate);
+}
+
+/**
+ * Render the standalone gate page that only displays the authorization overlay.
+ *
+ * @return string
+ */
+function bokun_team_member_render_gate_page() {
+    ob_start();
+    status_header(403);
+    nocache_headers();
+    ?>
+    <!DOCTYPE html>
+    <html <?php language_attributes(); ?>>
+    <head>
+        <meta charset="<?php bloginfo('charset'); ?>">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <?php wp_head(); ?>
+        <style>
+            body.bokun-team-member-gate {
+                margin: 0;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #0f172a;
+            }
+
+            body.bokun-team-member-gate .bokun-team-member-overlay {
+                position: static;
+                inset: auto;
+            }
+        </style>
+    </head>
+    <body <?php body_class('bokun-team-member-gate'); ?>>
+        <?php
+        if (function_exists('wp_body_open')) {
+            wp_body_open();
+        }
+        echo do_shortcode('[team_member_field]');
+        ?>
+        <?php wp_footer(); ?>
+    </body>
+    </html>
+    <?php
+
+    return (string) ob_get_clean();
+}
+
+/**
+ * Enforce the gate by short-circuiting the request when necessary.
+ */
+function bokun_team_member_enforce_gate() {
+    if (is_admin() || wp_doing_ajax()) {
+        return;
+    }
+
+    if (defined('REST_REQUEST') && REST_REQUEST) {
+        return;
+    }
+
+    if (is_feed() || is_embed()) {
+        return;
+    }
+
+    if (!bokun_team_member_should_gate_request()) {
+        return;
+    }
+
+    $page_identifier = bokun_team_member_get_page_identifier();
+
+    if (bokun_team_member_is_authorized($page_identifier)) {
+        return;
+    }
+
+    echo bokun_team_member_render_gate_page();
+    exit;
+}
+add_action('template_redirect', 'bokun_team_member_enforce_gate', 0);
+
+// Display a form to add Team Member taxonomy terms from the front-end
+function bokun_team_member_submission_shortcode() {
+    $input_id   = 'bokun-team-member-' . wp_rand(1000, 9999);
+    $overlay_id = 'bokun-team-member-overlay-' . wp_rand(1000, 9999);
+
+    $page_identifier = bokun_team_member_get_page_identifier();
+    $storage_key     = bokun_team_member_get_storage_key($page_identifier);
 
     ob_start();
     ?>
@@ -1264,6 +1421,12 @@ function bokun_team_member_submission_shortcode() {
                 return '';
             }
 
+            function setCookie(name, value) {
+                var expires = new Date();
+                expires.setFullYear(expires.getFullYear() + 1);
+                document.cookie = encodeURIComponent(name) + '=' + encodeURIComponent(value) + '; expires=' + expires.toUTCString() + '; path=/';
+            }
+
             function getStoredName() {
                 var value = '';
 
@@ -1307,11 +1470,7 @@ function bokun_team_member_submission_shortcode() {
                     }
                 }
 
-                if (!stored) {
-                    var expires = new Date();
-                    expires.setFullYear(expires.getFullYear() + 1);
-                    document.cookie = encodeURIComponent(storageKey) + '=' + encodeURIComponent(value) + '; expires=' + expires.toUTCString() + '; path=/';
-                }
+                setCookie(storageKey, value);
             }
 
             function focusInput(element) {
@@ -1413,22 +1572,8 @@ function bokun_team_member_reset_button_shortcode($atts) {
 
     $button_id = 'bokun-team-member-reset-' . wp_rand(1000, 9999);
 
-    $page_identifier = 0;
-
-    if (function_exists('get_queried_object_id')) {
-        $page_identifier = get_queried_object_id();
-    }
-
-    if (!$page_identifier) {
-        $page_identifier = get_the_ID();
-    }
-
-    if (!$page_identifier) {
-        $request_uri     = isset($_SERVER['REQUEST_URI']) ? wp_unslash($_SERVER['REQUEST_URI']) : '';
-        $page_identifier = 'url_' . md5(home_url($request_uri));
-    }
-
-    $storage_key = 'bokunTeamMemberAuthorized_' . $page_identifier;
+    $page_identifier = bokun_team_member_get_page_identifier();
+    $storage_key     = bokun_team_member_get_storage_key($page_identifier);
 
     ob_start();
     ?>
