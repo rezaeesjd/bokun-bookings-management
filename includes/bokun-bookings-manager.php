@@ -1101,16 +1101,301 @@ add_shortcode('booking_checkbox', 'booking_checkbox_shortcode');
 
 // Display a form to add Team Member taxonomy terms from the front-end
 function bokun_team_member_submission_shortcode() {
-    $input_id = 'bokun-team-member-' . wp_rand(1000, 9999);
+    $input_id   = 'bokun-team-member-' . wp_rand(1000, 9999);
+    $overlay_id = 'bokun-team-member-overlay-' . wp_rand(1000, 9999);
+
+    $page_identifier = 0;
+
+    if (function_exists('get_queried_object_id')) {
+        $page_identifier = get_queried_object_id();
+    }
+
+    if (!$page_identifier) {
+        $page_identifier = get_the_ID();
+    }
+
+    if (!$page_identifier) {
+        $request_uri     = isset($_SERVER['REQUEST_URI']) ? wp_unslash($_SERVER['REQUEST_URI']) : '';
+        $page_identifier = 'url_' . md5(home_url($request_uri));
+    }
+
+    $storage_key = 'bokunTeamMemberAuthorized_' . $page_identifier;
 
     ob_start();
     ?>
-    <form class="bokun-team-member-form" novalidate>
-        <label for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Team Member Name', 'bokun-bookings-manager'); ?></label>
-        <input type="text" id="<?php echo esc_attr($input_id); ?>" name="team_member_name" required>
-        <button type="submit"><?php esc_html_e('Add Team Member', 'bokun-bookings-manager'); ?></button>
-        <span class="bokun-team-member-message" role="status" aria-live="polite"></span>
-    </form>
+    <div id="<?php echo esc_attr($overlay_id); ?>" class="bokun-team-member-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="bokun-team-member-overlay__dialog">
+            <h2 class="bokun-team-member-overlay__title"><?php esc_html_e('Team Member Verification', 'bokun-bookings-manager'); ?></h2>
+            <p class="bokun-team-member-overlay__description"><?php esc_html_e('Enter your name to access this page.', 'bokun-bookings-manager'); ?></p>
+            <form class="bokun-team-member-form" data-overlay-id="<?php echo esc_attr($overlay_id); ?>" data-storage-key="<?php echo esc_attr($storage_key); ?>" novalidate>
+                <label class="bokun-team-member-form__label" for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Team Member Name', 'bokun-bookings-manager'); ?></label>
+                <input class="bokun-team-member-form__input" type="text" id="<?php echo esc_attr($input_id); ?>" name="team_member_name" autocomplete="off" required>
+                <button class="bokun-team-member-form__button" type="submit"><?php esc_html_e('Confirm Access', 'bokun-bookings-manager'); ?></button>
+                <span class="bokun-team-member-message" role="status" aria-live="polite"></span>
+            </form>
+        </div>
+    </div>
+    <style>
+        body.bokun-team-member-overlay-active {
+            overflow: hidden;
+        }
+
+        .bokun-team-member-overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            background: rgba(15, 23, 42, 0.92);
+            z-index: 2147483000;
+        }
+
+        .bokun-team-member-overlay.is-visible {
+            display: flex;
+        }
+
+        .bokun-team-member-overlay__dialog {
+            width: 100%;
+            max-width: 420px;
+            padding: 2rem;
+            border-radius: 1rem;
+            background: #ffffff;
+            box-shadow: 0 30px 60px rgba(15, 23, 42, 0.35);
+            text-align: left;
+        }
+
+        .bokun-team-member-overlay__title {
+            margin: 0 0 0.75rem;
+            font-size: 1.5rem;
+            line-height: 1.2;
+            color: #0f172a;
+        }
+
+        .bokun-team-member-overlay__description {
+            margin: 0 0 1.5rem;
+            color: #475569;
+            font-size: 0.95rem;
+        }
+
+        .bokun-team-member-form {
+            display: grid;
+            gap: 1rem;
+        }
+
+        .bokun-team-member-form__label {
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .bokun-team-member-form__input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid #cbd5f1;
+            font-size: 1rem;
+            line-height: 1.25rem;
+        }
+
+        .bokun-team-member-form__input:focus {
+            border-color: #2563eb;
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+        }
+
+        .bokun-team-member-form__button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem 1.5rem;
+            border-radius: 999px;
+            border: none;
+            background: #2563eb;
+            color: #ffffff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .bokun-team-member-form__button:hover,
+        .bokun-team-member-form__button:focus {
+            background: #1d4ed8;
+        }
+
+        .bokun-team-member-form.is-loading .bokun-team-member-form__button {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        .bokun-team-member-message {
+            min-height: 1.5rem;
+            font-size: 0.9rem;
+            color: #0f172a;
+        }
+    </style>
+    <script>
+        (function() {
+            var overlayId = <?php echo wp_json_encode($overlay_id); ?>;
+            var storageKey = <?php echo wp_json_encode($storage_key); ?>;
+
+            function ensureOverlayInBody(element) {
+                if (!element) {
+                    return;
+                }
+
+                if (document.body && element.parentNode !== document.body) {
+                    document.body.appendChild(element);
+                }
+            }
+
+            function getCookieValue(name) {
+                var cookies = document.cookie ? document.cookie.split(';') : [];
+
+                for (var i = 0; i < cookies.length; i++) {
+                    var cookie = cookies[i].trim();
+
+                    if (cookie.indexOf(name + '=') === 0) {
+                        return decodeURIComponent(cookie.substring(name.length + 1));
+                    }
+                }
+
+                return '';
+            }
+
+            function getStoredName() {
+                var value = '';
+
+                try {
+                    value = window.localStorage.getItem(storageKey) || '';
+                } catch (error) {
+                    value = '';
+                }
+
+                if (!value) {
+                    try {
+                        value = window.sessionStorage.getItem(storageKey) || '';
+                    } catch (error) {
+                        value = '';
+                    }
+                }
+
+                if (!value) {
+                    value = getCookieValue(storageKey);
+                }
+
+                return value;
+            }
+
+            function saveName(value) {
+                var stored = false;
+
+                try {
+                    window.localStorage.setItem(storageKey, value);
+                    stored = true;
+                } catch (error) {
+                    stored = false;
+                }
+
+                if (!stored) {
+                    try {
+                        window.sessionStorage.setItem(storageKey, value);
+                        stored = true;
+                    } catch (error) {
+                        stored = false;
+                    }
+                }
+
+                if (!stored) {
+                    var expires = new Date();
+                    expires.setFullYear(expires.getFullYear() + 1);
+                    document.cookie = encodeURIComponent(storageKey) + '=' + encodeURIComponent(value) + '; expires=' + expires.toUTCString() + '; path=/';
+                }
+            }
+
+            function focusInput(element) {
+                if (!element) {
+                    return;
+                }
+
+                var input = element.querySelector('input[name="team_member_name"]');
+
+                if (input) {
+                    setTimeout(function() {
+                        try {
+                            input.focus();
+                            input.select();
+                        } catch (error) {}
+                    }, 50);
+                }
+            }
+
+            function lock(element) {
+                ensureOverlayInBody(element);
+
+                element.classList.add('is-visible');
+                element.setAttribute('aria-hidden', 'false');
+
+                if (document.body) {
+                    document.body.classList.add('bokun-team-member-overlay-active');
+                }
+
+                focusInput(element);
+            }
+
+            function unlock(element) {
+                element.classList.remove('is-visible');
+                element.setAttribute('aria-hidden', 'true');
+
+                if (document.body) {
+                    document.body.classList.remove('bokun-team-member-overlay-active');
+                }
+            }
+
+            function initOverlay() {
+                var overlay = document.getElementById(overlayId);
+
+                if (!overlay) {
+                    return;
+                }
+
+                ensureOverlayInBody(overlay);
+
+                if (getStoredName()) {
+                    unlock(overlay);
+                } else {
+                    lock(overlay);
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', initOverlay);
+            } else {
+                initOverlay();
+            }
+
+            window.bokunTeamMemberAccess = window.bokunTeamMemberAccess || {};
+            window.bokunTeamMemberAccess[overlayId] = {
+                storageKey: storageKey,
+                save: saveName,
+                unlock: function() {
+                    var overlay = document.getElementById(overlayId);
+
+                    if (overlay) {
+                        unlock(overlay);
+                    }
+                },
+                lock: function() {
+                    var overlay = document.getElementById(overlayId);
+
+                    if (overlay) {
+                        lock(overlay);
+                    }
+                }
+            };
+        })();
+    </script>
     <?php
 
     return ob_get_clean();
