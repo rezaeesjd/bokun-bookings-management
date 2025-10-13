@@ -63,7 +63,21 @@ jQuery(document).ready(function ($) {
                                                 context: mode
                                         };
 
-                                        if (data.message) {
+                                        if (typeof data.total_items === 'number') {
+                                                progressOptions.totalItems = data.total_items;
+                                        }
+
+                                        if (typeof data.current === 'number') {
+                                                progressOptions.current = data.current;
+                                        }
+
+                                        if (typeof data.percentage === 'number') {
+                                                progressOptions.value = data.percentage;
+                                        }
+
+                                        if (data.display_message) {
+                                                progressOptions.message = data.display_message;
+                                        } else if (data.message) {
                                                 progressOptions.message = data.message;
                                         }
 
@@ -601,6 +615,13 @@ jQuery(document).ready(function ($) {
                         var derivedTotal = 0;
                         var hasDerivedTotal = false;
                         var useAbsolute = !!options.useAbsolute;
+                        var explicitCurrent = options.current !== undefined ? toNumber(options.current) : null;
+                        var explicitTotal = options.totalItems !== undefined ? toNumber(options.totalItems) : null;
+                        var explicitValue = options.value !== undefined ? toNumber(options.value) : null;
+
+                        if (explicitTotal !== null && explicitTotal >= 0) {
+                                totalToAdd = explicitTotal;
+                        }
 
                         if (createdCount !== null && createdCount >= 0) {
                                 derivedTotal += createdCount;
@@ -643,6 +664,10 @@ jQuery(document).ready(function ($) {
                                 }
                         }
 
+                        if (explicitCurrent !== null) {
+                                processedValue = Math.max(explicitCurrent, 0);
+                        }
+
                         if (processedValue < 0) {
                                 processedValue = 0;
                         }
@@ -682,7 +707,15 @@ jQuery(document).ready(function ($) {
                                 }
                         }
 
-                        var progressValue = totalImportItems > 0 ? computeProgressValue(currentValue, totalImportItems, 'complete') : (isFinal ? 100 : 0);
+                        var progressValue;
+
+                        if (explicitValue !== null && explicitValue >= 0) {
+                                progressValue = clamp(explicitValue);
+                        } else if (totalImportItems > 0) {
+                                progressValue = computeProgressValue(currentValue, totalImportItems, 'complete');
+                        } else {
+                                progressValue = isFinal ? 100 : 0;
+                        }
 
                         var aggregatedMessage = buildAggregatedMessage(contextKey, message, isFinal);
 
