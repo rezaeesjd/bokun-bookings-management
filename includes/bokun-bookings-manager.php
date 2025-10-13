@@ -1402,6 +1402,146 @@ function bokun_team_member_submission_shortcode() {
 }
 add_shortcode('team_member_field', 'bokun_team_member_submission_shortcode');
 
+function bokun_team_member_reset_button_shortcode($atts) {
+    $atts = shortcode_atts(
+        array(
+            'label' => __('Reset Team Member Session', 'bokun-bookings-manager'),
+        ),
+        $atts,
+        'team_member_reset_button'
+    );
+
+    $button_id = 'bokun-team-member-reset-' . wp_rand(1000, 9999);
+
+    $page_identifier = 0;
+
+    if (function_exists('get_queried_object_id')) {
+        $page_identifier = get_queried_object_id();
+    }
+
+    if (!$page_identifier) {
+        $page_identifier = get_the_ID();
+    }
+
+    if (!$page_identifier) {
+        $request_uri     = isset($_SERVER['REQUEST_URI']) ? wp_unslash($_SERVER['REQUEST_URI']) : '';
+        $page_identifier = 'url_' . md5(home_url($request_uri));
+    }
+
+    $storage_key = 'bokunTeamMemberAuthorized_' . $page_identifier;
+
+    ob_start();
+    ?>
+    <button id="<?php echo esc_attr($button_id); ?>" class="bokun-team-member-reset-button" type="button">
+        <?php echo esc_html($atts['label']); ?>
+    </button>
+    <script>
+        (function() {
+            var buttonId = <?php echo wp_json_encode($button_id); ?>;
+            var storageKey = <?php echo wp_json_encode($storage_key); ?>;
+
+            function removeStorageValue(key) {
+                if (!key) {
+                    return;
+                }
+
+                try {
+                    window.localStorage.removeItem(key);
+                } catch (error) {}
+
+                try {
+                    window.sessionStorage.removeItem(key);
+                } catch (error) {}
+
+                document.cookie = encodeURIComponent(key) + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+            }
+
+            function lockOverlay(entry, overlayId) {
+                if (entry && typeof entry.lock === 'function') {
+                    entry.lock();
+                    return true;
+                }
+
+                if (!overlayId) {
+                    return false;
+                }
+
+                var overlay = document.getElementById(overlayId);
+
+                if (!overlay) {
+                    return false;
+                }
+
+                if (overlay.parentNode !== document.body && document.body) {
+                    document.body.appendChild(overlay);
+                }
+
+                overlay.classList.add('is-visible');
+                overlay.setAttribute('aria-hidden', 'false');
+
+                if (document.body) {
+                    document.body.classList.add('bokun-team-member-overlay-active');
+                }
+
+                var input = overlay.querySelector('input[name="team_member_name"]');
+
+                if (input) {
+                    setTimeout(function() {
+                        try {
+                            input.focus();
+                            input.select();
+                        } catch (error) {}
+                    }, 50);
+                }
+
+                return true;
+            }
+
+            function resetTeamMemberSession() {
+                if (storageKey) {
+                    removeStorageValue(storageKey);
+                }
+
+                var registry = window.bokunTeamMemberAccess || {};
+                var overlayIds = Object.keys(registry);
+                var locked = false;
+
+                for (var i = 0; i < overlayIds.length; i++) {
+                    var id = overlayIds[i];
+                    var entry = registry[id];
+
+                    if (entry && entry.storageKey) {
+                        removeStorageValue(entry.storageKey);
+                    }
+
+                    if (!locked) {
+                        locked = lockOverlay(entry, id);
+                    }
+                }
+
+                if (!locked) {
+                    lockOverlay(null, null);
+                }
+            }
+
+            var button = document.getElementById(buttonId);
+
+            if (!button) {
+                return;
+            }
+
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                resetTeamMemberSession();
+            });
+        })();
+    </script>
+    <?php
+
+    return ob_get_clean();
+}
+add_shortcode('team_member_reset_button', 'bokun_team_member_reset_button_shortcode');
+
 // Force publish future-dated 'bokun_booking' posts after they're saved
 function bokun_force_publish_after_save($post_id, $post, $update) {
     if (wp_is_post_autosave($post_id) || wp_is_post_revision($post_id)) {
