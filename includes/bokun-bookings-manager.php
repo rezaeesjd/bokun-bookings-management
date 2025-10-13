@@ -248,6 +248,10 @@ function bokun_get_import_progress_state($context) {
             'label'     => bokun_get_import_progress_label($context),
             'message'   => bokun_get_import_progress_message($context, 'idle'),
             'updated_at'=> time(),
+            'current'   => 0,
+            'remaining' => 0,
+            'total_items' => 0,
+            'percentage'=> 0,
         );
     } else {
         $state['context'] = $context;
@@ -263,6 +267,8 @@ function bokun_get_import_progress_state($context) {
 
         $state['updated_at'] = isset($state['updated_at']) ? (int) $state['updated_at'] : time();
     }
+
+    $state = bokun_enrich_import_progress_state($context, $state);
 
     return $state;
 }
@@ -298,12 +304,55 @@ function bokun_set_import_progress_state($context, $overrides = array()) {
         $state['message'] = bokun_get_import_progress_message($context, $state['status']);
     }
 
+    $state = bokun_enrich_import_progress_state($context, $state);
+
     $state['context'] = $context;
     $state['updated_at'] = time();
 
     set_transient($key, $state, 15 * MINUTE_IN_SECONDS);
 
     return $state;
+}
+
+function bokun_enrich_import_progress_state($context, $state) {
+    $status = isset($state['status']) ? strtolower($state['status']) : 'idle';
+    $total = isset($state['total']) ? max(0, (int) $state['total']) : 0;
+    $processed = isset($state['processed']) ? max(0, (int) $state['processed']) : 0;
+
+    if ($total <= 0 && $processed > 0) {
+        $total = $processed;
+    }
+
+    $current = $total > 0 ? min($processed, $total) : $processed;
+    $remaining = max($total - $current, 0);
+    $percentage = $total > 0 ? min(100, max(0, (int) round(($current / $total) * 100))) : ('completed' === $status ? 100 : 0);
+
+    $state['current'] = $current;
+    $state['remaining'] = $remaining;
+    $state['total_items'] = $total;
+    $state['percentage'] = $percentage;
+
+    $state['display_message'] = '';
+
+    if (!empty($state['message'])) {
+        $state['display_message'] = bokun_format_import_progress_message($context, $state['message'], $current, $total, $remaining);
+    }
+
+    return $state;
+}
+
+function bokun_format_import_progress_message($context, $message, $current, $total, $remaining) {
+    $message = (string) $message;
+    $label = bokun_get_import_progress_label($context);
+
+    $replacements = array(
+        '{label}'     => $label,
+        '{current}'   => (string) $current,
+        '{total}'     => (string) $total,
+        '{remaining}' => (string) $remaining,
+    );
+
+    return strtr($message, $replacements);
 }
 
 function bokun_reset_import_progress_state($context) {
