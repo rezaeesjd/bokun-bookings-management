@@ -37,10 +37,29 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
             // print_r($bookings);
             // die;
             if (is_string($bookings)) {
-                wp_send_json_success(array('msg' => esc_html($bookings),'status' => false));
+                wp_send_json_success(array('msg' => esc_html($bookings), 'status' => false));
             } else {
-                bokun_save_bookings_as_posts($bookings);
-                wp_send_json_success(array('msg' => 'Bookings have been successfully imported as custom posts.', 'status' => true));
+                $import_summary = bokun_save_bookings_as_posts($bookings);
+
+                if (!is_array($import_summary)) {
+                    $import_summary = array();
+                }
+
+                $normalized_summary = array(
+                    'total'     => isset($import_summary['total']) ? intval($import_summary['total']) : 0,
+                    'processed' => isset($import_summary['processed']) ? intval($import_summary['processed']) : 0,
+                    'created'   => isset($import_summary['created']) ? intval($import_summary['created']) : 0,
+                    'updated'   => isset($import_summary['updated']) ? intval($import_summary['updated']) : 0,
+                    'skipped'   => isset($import_summary['skipped']) ? intval($import_summary['skipped']) : 0,
+                );
+
+                wp_send_json_success(
+                    array(
+                        'msg'             => 'Bookings have been successfully imported as custom posts.',
+                        'status'          => true,
+                        'import_summary'  => $normalized_summary,
+                    )
+                );
             }
 
             wp_die(); // Always end AJAX functions with wp_die()
