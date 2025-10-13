@@ -180,8 +180,141 @@ function bokun_fetch_bookings($upgrade = '') {
     return 'No bookings available to process.';
 }
 
+function bokun_normalize_import_context($context) {
+    $context = is_string($context) ? strtolower($context) : '';
+    $context = sanitize_key($context);
+
+    if (empty($context)) {
+        $context = 'default';
+    }
+
+    return $context;
+}
+
+function bokun_get_import_progress_key($context) {
+    $context = bokun_normalize_import_context($context);
+
+    return 'bokun_import_progress_' . $context;
+}
+
+function bokun_get_import_progress_label($context) {
+    $context = bokun_normalize_import_context($context);
+
+    switch ($context) {
+        case 'upgrade':
+            return __('API 2 import', 'bokun-bookings-manager');
+        case 'fetch':
+            return __('API 1 import', 'bokun-bookings-manager');
+        default:
+            return __('Import', 'bokun-bookings-manager');
+    }
+}
+
+function bokun_get_import_progress_message($context, $status) {
+    $context = bokun_normalize_import_context($context);
+    $status = is_string($status) ? strtolower($status) : 'idle';
+    $label = bokun_get_import_progress_label($context);
+
+    switch ($status) {
+        case 'running':
+            /* translators: %s: API label. */
+            return sprintf(__('%s — importing product {current}/{total}', 'bokun-bookings-manager'), $label);
+        case 'completed':
+            /* translators: %s: API label. */
+            return sprintf(__('%s — import complete ({total}/{total})', 'bokun-bookings-manager'), $label);
+        case 'error':
+            /* translators: %s: API label. */
+            return sprintf(__('%s — import interrupted', 'bokun-bookings-manager'), $label);
+        default:
+            /* translators: %s: API label. */
+            return sprintf(__('%s — preparing import…', 'bokun-bookings-manager'), $label);
+    }
+}
+
+function bokun_get_import_progress_state($context) {
+    $context = bokun_normalize_import_context($context);
+    $key = bokun_get_import_progress_key($context);
+    $state = get_transient($key);
+
+    if (!is_array($state)) {
+        $state = array(
+            'status'    => 'idle',
+            'context'   => $context,
+            'total'     => 0,
+            'processed' => 0,
+            'created'   => 0,
+            'updated'   => 0,
+            'skipped'   => 0,
+            'label'     => bokun_get_import_progress_label($context),
+            'message'   => bokun_get_import_progress_message($context, 'idle'),
+            'updated_at'=> time(),
+        );
+    } else {
+        $state['context'] = $context;
+
+        if (!isset($state['label']) || '' === $state['label']) {
+            $state['label'] = bokun_get_import_progress_label($context);
+        }
+
+        if (empty($state['message'])) {
+            $status = isset($state['status']) ? $state['status'] : 'idle';
+            $state['message'] = bokun_get_import_progress_message($context, $status);
+        }
+
+        $state['updated_at'] = isset($state['updated_at']) ? (int) $state['updated_at'] : time();
+    }
+
+    return $state;
+}
+
+function bokun_set_import_progress_state($context, $overrides = array()) {
+    $context = bokun_normalize_import_context($context);
+    $key = bokun_get_import_progress_key($context);
+    $current_state = bokun_get_import_progress_state($context);
+
+    $overrides = is_array($overrides) ? array_filter($overrides, function ($value) {
+        return null !== $value;
+    }) : array();
+
+    $state = array_merge($current_state, $overrides);
+
+    if (!isset($state['status']) || '' === $state['status']) {
+        $state['status'] = 'idle';
+    }
+
+    $state['status'] = strtolower($state['status']);
+
+    foreach (array('total', 'processed', 'created', 'updated', 'skipped') as $numeric_key) {
+        if (isset($state[$numeric_key])) {
+            $state[$numeric_key] = max(0, (int) $state[$numeric_key]);
+        }
+    }
+
+    if (!isset($state['label']) || '' === $state['label']) {
+        $state['label'] = bokun_get_import_progress_label($context);
+    }
+
+    if (empty($state['message'])) {
+        $state['message'] = bokun_get_import_progress_message($context, $state['status']);
+    }
+
+    $state['context'] = $context;
+    $state['updated_at'] = time();
+
+    set_transient($key, $state, 15 * MINUTE_IN_SECONDS);
+
+    return $state;
+}
+
+function bokun_reset_import_progress_state($context) {
+    $context = bokun_normalize_import_context($context);
+    $key = bokun_get_import_progress_key($context);
+
+    delete_transient($key);
+}
+
 // Save Bokun bookings as WordPress posts
-function bokun_save_bookings_as_posts($bookings) {
+function bokun_save_bookings_as_posts($bookings, $context = 'default') {
     $stats = array(
         'total'     => is_array($bookings) ? count($bookings) : 0,
         'processed' => 0,
@@ -190,7 +323,28 @@ function bokun_save_bookings_as_posts($bookings) {
         'skipped'   => 0,
     );
 
+    $context = bokun_normalize_import_context($context);
+
+    bokun_set_import_progress_state($context, array(
+        'status'    => $stats['total'] > 0 ? 'running' : 'completed',
+        'total'     => $stats['total'],
+        'processed' => 0,
+        'created'   => 0,
+        'updated'   => 0,
+        'skipped'   => 0,
+        'message'   => $stats['total'] > 0 ? bokun_get_import_progress_message($context, 'running') : bokun_get_import_progress_message($context, 'completed'),
+    ));
+
     if (!is_array($bookings) || empty($bookings)) {
+        bokun_set_import_progress_state($context, array(
+            'status'    => 'completed',
+            'total'     => $stats['total'],
+            'processed' => 0,
+            'created'   => 0,
+            'updated'   => 0,
+            'skipped'   => $stats['skipped'],
+            'message'   => bokun_get_import_progress_message($context, 'completed'),
+        ));
         return $stats;
     }
 
@@ -232,6 +386,15 @@ function bokun_save_bookings_as_posts($bookings) {
     foreach ($bookings as $booking) {
         if (empty($booking['confirmationCode'])) {
             $stats['skipped']++;
+            bokun_set_import_progress_state($context, array(
+                'status'    => 'running',
+                'total'     => $stats['total'],
+                'processed' => $stats['created'] + $stats['updated'] + $stats['skipped'],
+                'created'   => $stats['created'],
+                'updated'   => $stats['updated'],
+                'skipped'   => $stats['skipped'],
+                'message'   => bokun_get_import_progress_message($context, 'running'),
+            ));
             continue;
         }
 
@@ -310,9 +473,29 @@ function bokun_save_bookings_as_posts($bookings) {
         if (!empty($inclusions_clean)) {
             update_post_meta($post_id, 'inclusions_clean', $inclusions_clean);
         }
+
+        bokun_set_import_progress_state($context, array(
+            'status'    => 'running',
+            'total'     => $stats['total'],
+            'processed' => $stats['created'] + $stats['updated'] + $stats['skipped'],
+            'created'   => $stats['created'],
+            'updated'   => $stats['updated'],
+            'skipped'   => $stats['skipped'],
+            'message'   => bokun_get_import_progress_message($context, 'running'),
+        ));
     }
 
     $stats['processed'] = $stats['created'] + $stats['updated'] + $stats['skipped'];
+
+    bokun_set_import_progress_state($context, array(
+        'status'    => 'completed',
+        'total'     => $stats['total'],
+        'processed' => $stats['processed'],
+        'created'   => $stats['created'],
+        'updated'   => $stats['updated'],
+        'skipped'   => $stats['skipped'],
+        'message'   => bokun_get_import_progress_message($context, 'completed'),
+    ));
 
     return $stats;
 }
@@ -984,7 +1167,7 @@ function bokun_import_bookings() {
     // Fetch and process the bookings
     $bookings = bokun_fetch_bookings();
     if (is_array($bookings)) {
-        $summary = bokun_save_bookings_as_posts($bookings);
+        $summary = bokun_save_bookings_as_posts($bookings, 'rest');
         if (!is_array($summary)) {
             $summary = array();
         }
