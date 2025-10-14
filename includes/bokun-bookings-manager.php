@@ -1236,10 +1236,6 @@ function booking_checkbox_shortcode($atts) {
             Partial
         </label>
         <label>
-            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="refund-partner" <?php echo $checked['refund-partner']; ?>>
-            Refund Requested from Partner
-        </label>
-        <label>
             <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="not-available" <?php echo $checked['not-available']; ?>>
             Not Available
         </label>
