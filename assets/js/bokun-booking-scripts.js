@@ -55,11 +55,11 @@ jQuery(document).ready(function($) {
         }
     }
 
-    // Handle checkbox change event for Full, Partial, and Not Available checkboxes
+    // Handle checkbox change event for Full, Partial, Refund Requested from Partner, and Not Available checkboxes
     $(document).on('change', '.booking-checkbox', function() {
         var $checkbox = $(this);
         var bookingId = $checkbox.data('booking-id');
-        var type = $checkbox.data('type'); // "full", "partial", or "not-available"
+        var type = $checkbox.data('type'); // "full", "partial", "refund-partner", or "not-available"
         var isChecked = $checkbox.is(':checked');
 
         $checkbox.siblings('.save-message, .loading-message').remove();
