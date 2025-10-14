@@ -1194,33 +1194,49 @@ function bokun_display_custom_fields_metabox($post) {
     echo '</table>';
 }
 
-// Display booking status checkboxes next to each booking
-function booking_checkbox_shortcode($atts) {
+/**
+ * Retrieve booking status data used by booking related shortcodes.
+ *
+ * @return array{
+ *     booking_id:string,
+ *     checked:array<string,string>
+ * }
+ */
+function bokun_get_booking_checkbox_data() {
     global $post;
+
     $booking_id = get_post_meta($post->ID, '_confirmation_code', true);
 
-    // Check if relevant booking status terms are assigned to the post
-    $full_checked           = has_term('full', 'booking_status', $post->ID) ? 'checked' : '';
-    $partial_checked        = has_term('partial', 'booking_status', $post->ID) ? 'checked' : '';
-    $refund_partner_checked = has_term('refund-requested-from-partner', 'booking_status', $post->ID) ? 'checked' : '';
+    return array(
+        'booking_id' => $booking_id,
+        'checked'    => array(
+            'full'              => has_term('full', 'booking_status', $post->ID) ? 'checked' : '',
+            'partial'           => has_term('partial', 'booking_status', $post->ID) ? 'checked' : '',
+            'refund-partner'    => has_term('refund-requested-from-partner', 'booking_status', $post->ID) ? 'checked' : '',
+            'not-available'     => has_term('not-available', 'booking_status', $post->ID) ? 'checked' : '',
+        ),
+    );
+}
+
+// Display booking status checkboxes next to each booking
+function booking_checkbox_shortcode($atts) {
+    $data = bokun_get_booking_checkbox_data();
+    $booking_id = $data['booking_id'];
+    $checked    = $data['checked'];
 
     ob_start();
     ?>
     <div class="elementor-widget-container">
         <label>
-            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="full" <?php echo $full_checked; ?>>
+            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="full" <?php echo $checked['full']; ?>>
             Full
         </label>
         <label>
-            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="partial" <?php echo $partial_checked; ?>>
+            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="partial" <?php echo $checked['partial']; ?>>
             Partial
         </label>
         <label>
-            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="refund-partner" <?php echo $refund_partner_checked; ?>>
-            Refund Requested from Partner
-        </label>
-        <label>
-            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="not-available" <?php echo has_term('not-available', 'booking_status', $post->ID) ? 'checked' : ''; ?>>
+            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="not-available" <?php echo $checked['not-available']; ?>>
             Not Available
         </label>
 
@@ -1229,6 +1245,25 @@ function booking_checkbox_shortcode($atts) {
     return ob_get_clean();
 }
 add_shortcode('booking_checkbox', 'booking_checkbox_shortcode');
+
+// Display only the refund requested from partner checkbox
+function refund_checkbox_shortcode($atts) {
+    $data = bokun_get_booking_checkbox_data();
+    $booking_id = $data['booking_id'];
+    $checked    = $data['checked'];
+
+    ob_start();
+    ?>
+    <div class="elementor-widget-container">
+        <label>
+            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="refund-partner" <?php echo $checked['refund-partner']; ?>>
+            Refund Requested from Partner
+        </label>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+add_shortcode('refund_checkbox', 'refund_checkbox_shortcode');
 
 /**
  * Retrieve the identifier used to scope team member authorization.
