@@ -973,7 +973,7 @@ function update_booking_status() {
         wp_die();
     }
 
-    $allowed_types = ['full', 'partial', 'not-available'];
+    $allowed_types = ['full', 'partial', 'not-available', 'refund-partner'];
 
     if (!in_array($type, $allowed_types, true)) {
         wp_send_json_error(['message' => 'Invalid booking status type provided.']);
@@ -1001,27 +1001,37 @@ function update_booking_status() {
             $post_id  = get_the_ID();
             $taxonomy = 'booking_status';
 
-            if ($type === 'not-available') {
-                if ($checked) {
-                    bokun_assign_tag_to_post($post_id, 'Not Available', $taxonomy);
-                } else {
-                    bokun_remove_tag_from_post($post_id, 'Not Available', $taxonomy);
-                }
-            } else {
-                $specific_term = ($type === 'full') ? 'Full' : 'Partial';
-
-                if ($checked) {
-                    bokun_assign_tag_to_post($post_id, 'Booking Made', $taxonomy);
-                    bokun_assign_tag_to_post($post_id, $specific_term, $taxonomy);
-                    bokun_remove_tag_from_post($post_id, 'Booking Not Made', $taxonomy);
-                } else {
-                    bokun_remove_tag_from_post($post_id, $specific_term, $taxonomy);
-                    $remaining_terms = wp_get_post_terms($post_id, $taxonomy, ['fields' => 'names']);
-                    if (!in_array('Full', $remaining_terms) && !in_array('Partial', $remaining_terms)) {
-                        bokun_assign_tag_to_post($post_id, 'Booking Not Made', $taxonomy);
-                        bokun_remove_tag_from_post($post_id, 'Booking Made', $taxonomy);
+            switch ($type) {
+                case 'not-available':
+                    if ($checked) {
+                        bokun_assign_tag_to_post($post_id, 'Not Available', $taxonomy);
+                    } else {
+                        bokun_remove_tag_from_post($post_id, 'Not Available', $taxonomy);
                     }
-                }
+                    break;
+                case 'refund-partner':
+                    if ($checked) {
+                        bokun_assign_tag_to_post($post_id, 'Refund Requested from Partner', $taxonomy);
+                    } else {
+                        bokun_remove_tag_from_post($post_id, 'Refund Requested from Partner', $taxonomy);
+                    }
+                    break;
+                default:
+                    $specific_term = ($type === 'full') ? 'Full' : 'Partial';
+
+                    if ($checked) {
+                        bokun_assign_tag_to_post($post_id, 'Booking Made', $taxonomy);
+                        bokun_assign_tag_to_post($post_id, $specific_term, $taxonomy);
+                        bokun_remove_tag_from_post($post_id, 'Booking Not Made', $taxonomy);
+                    } else {
+                        bokun_remove_tag_from_post($post_id, $specific_term, $taxonomy);
+                        $remaining_terms = wp_get_post_terms($post_id, $taxonomy, ['fields' => 'names']);
+                        if (!in_array('Full', $remaining_terms) && !in_array('Partial', $remaining_terms)) {
+                            bokun_assign_tag_to_post($post_id, 'Booking Not Made', $taxonomy);
+                            bokun_remove_tag_from_post($post_id, 'Booking Made', $taxonomy);
+                        }
+                    }
+                    break;
             }
 
             bokun_record_booking_history($post_id, $booking_id, $type, $checked);
@@ -1184,14 +1194,15 @@ function bokun_display_custom_fields_metabox($post) {
     echo '</table>';
 }
 
-// Display checkboxes for "Full" and "Partial" next to each booking
+// Display booking status checkboxes next to each booking
 function booking_checkbox_shortcode($atts) {
     global $post;
     $booking_id = get_post_meta($post->ID, '_confirmation_code', true);
 
-    // Check if 'full' or 'partial' term is assigned to the post
-    $full_checked = has_term('full', 'booking_status', $post->ID) ? 'checked' : '';
-    $partial_checked = has_term('partial', 'booking_status', $post->ID) ? 'checked' : '';
+    // Check if relevant booking status terms are assigned to the post
+    $full_checked           = has_term('full', 'booking_status', $post->ID) ? 'checked' : '';
+    $partial_checked        = has_term('partial', 'booking_status', $post->ID) ? 'checked' : '';
+    $refund_partner_checked = has_term('refund-requested-from-partner', 'booking_status', $post->ID) ? 'checked' : '';
 
     ob_start();
     ?>
@@ -1205,9 +1216,13 @@ function booking_checkbox_shortcode($atts) {
             Partial
         </label>
         <label>
-    <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="not-available" <?php echo has_term('not-available', 'booking_status', $post->ID) ? 'checked' : ''; ?>>
-    Not Available
-</label>
+            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="refund-partner" <?php echo $refund_partner_checked; ?>>
+            Refund Requested from Partner
+        </label>
+        <label>
+            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="not-available" <?php echo has_term('not-available', 'booking_status', $post->ID) ? 'checked' : ''; ?>>
+            Not Available
+        </label>
 
     </div>
     <?php
