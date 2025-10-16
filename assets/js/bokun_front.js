@@ -187,6 +187,7 @@ jQuery(function ($) {
                         summary: summary,
                         label: label,
                         isFinal: !!options.isFinal,
+                        keepSpinner: !!options.keepSpinner,
                         useAbsolute: true,
                         context: options.context
                 });
@@ -226,6 +227,7 @@ jQuery(function ($) {
                                                         updateImportProgressFromSummary(res.data.import_summary, {
                                                                 label: 'Imported items from API 1',
                                                                 isFinal: true,
+                                                                keepSpinner: true,
                                                                 context: 'fetch'
                                                         });
                                                 } else {
@@ -668,13 +670,14 @@ jQuery(function ($) {
                         var aggregatedMessage = buildAggregatedMessage(contextKey, message, isFinal);
 
                         renderProgress(aggregatedMessage, progressValue, isFinal);
-                        setSpinnerVisible(!isFinal);
+                        var shouldShowSpinner = options.keepSpinner ? true : !isFinal;
+                        setSpinnerVisible(shouldShowSpinner);
                         return;
                 }
 
                 var stepMap = {
                         startApi1: { context: 'fetch', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, message: 'Fetching items from API 1…' },
-                        api1Complete: { context: 'fetch', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, isFinal: true, message: 'Finished API 1' },
+                        api1Complete: { context: 'fetch', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, isFinal: true, keepSpinner: true, message: 'Finished API 1' },
                         startApi2: { context: 'upgrade', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, message: 'Fetching items from API 2… ({current} processed so far)' },
                         api2Complete: { context: 'upgrade', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, isFinal: true, message: 'Finished API 2' }
                 };
@@ -711,7 +714,8 @@ jQuery(function ($) {
                         var aggregatedMessage = buildAggregatedMessage(state.context || null, message, !!state.isFinal);
 
                         renderProgress(aggregatedMessage, progressValue, !!state.isFinal);
-                        setSpinnerVisible(!state.isFinal);
+                        var shouldShowSpinner = state.keepSpinner ? true : !state.isFinal;
+                        setSpinnerVisible(shouldShowSpinner);
                 }
         }
 
