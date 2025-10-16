@@ -668,7 +668,8 @@ jQuery(function ($) {
                         var aggregatedMessage = buildAggregatedMessage(contextKey, message, isFinal);
 
                         renderProgress(aggregatedMessage, progressValue, isFinal);
-                        setSpinnerVisible(!isFinal);
+                        var shouldShowSpinner = !isFinal || contextKey === 'fetch';
+                        setSpinnerVisible(shouldShowSpinner);
                         return;
                 }
 
@@ -711,7 +712,8 @@ jQuery(function ($) {
                         var aggregatedMessage = buildAggregatedMessage(state.context || null, message, !!state.isFinal);
 
                         renderProgress(aggregatedMessage, progressValue, !!state.isFinal);
-                        setSpinnerVisible(!state.isFinal);
+                        var shouldShowSpinnerForStep = !state.isFinal || state.context === 'fetch';
+                        setSpinnerVisible(shouldShowSpinnerForStep);
                 }
         }
 
