@@ -513,6 +513,7 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
 
         bokun_save_specific_fields($post_id, $booking);
         bokun_save_all_fields_as_meta($post_id, $booking);
+        bokun_save_meeting_point_meta($post_id, $booking, $context);
         process_price_categories_and_save($post_id, $booking);
         bokun_calculate_booking_status($post_id, $booking['productBookings'][0]['product']['title'] ?? '', $startDateTime);
 
@@ -830,6 +831,592 @@ function is_json($string) {
     }
     json_decode($string);
     return (json_last_error() === JSON_ERROR_NONE);
+}
+
+/**
+ * Store meeting-point metadata using the legacy meta key format that other
+ * extensions expect (bk_meetingpoint*).
+ *
+ * @param int    $post_id Booking post ID.
+ * @param array  $booking Raw booking payload from the Bókun API.
+ * @param string $context Import context determining which API credentials to use.
+ */
+function bokun_save_meeting_point_meta($post_id, $booking, $context = 'default') {
+    bokun_delete_meeting_point_meta($post_id);
+
+    $start_points = bokun_extract_meeting_points($booking, $context);
+
+    if (empty($start_points)) {
+        return;
+    }
+
+    if (!is_array($start_points)) {
+        update_post_meta($post_id, 'bk_meetingpointtitle', sanitize_text_field((string) $start_points));
+        return;
+    }
+
+    $start_points = array_values((array) $start_points);
+
+    foreach ($start_points as $index => $start_point) {
+        if (is_array($start_point)) {
+            if (isset($start_point['title']) && '' !== $start_point['title']) {
+                update_post_meta(
+                    $post_id,
+                    'bk_meetingpointtitle_' . $index,
+                    sanitize_text_field($start_point['title'])
+                );
+            }
+
+            foreach ($start_point as $field => $value) {
+                if ('title' === $field) {
+                    continue;
+                }
+
+                bokun_store_meeting_point_field($post_id, $index, $field, $value);
+            }
+        } else {
+            update_post_meta(
+                $post_id,
+                'bk_meetingpointtitle_' . $index,
+                sanitize_text_field(is_scalar($start_point) ? (string) $start_point : wp_json_encode($start_point))
+            );
+        }
+    }
+}
+
+/**
+ * Remove previously stored meeting-point metadata to avoid stale values.
+ *
+ * @param int $post_id Booking post ID.
+ */
+function bokun_delete_meeting_point_meta($post_id) {
+    $all_meta = get_post_meta($post_id);
+
+    if (!is_array($all_meta)) {
+        return;
+    }
+
+    foreach ($all_meta as $meta_key => $values) {
+        if (0 === strpos($meta_key, 'bk_meetingpointtitle') || 0 === strpos($meta_key, 'bk_meetingpoint_')) {
+            delete_post_meta($post_id, $meta_key);
+        }
+    }
+}
+
+/**
+ * Extract the start points array from a booking payload.
+ *
+ * @param array  $booking Booking payload from the API.
+ * @param string $context Import context determining which API credentials to use.
+ *
+ * @return mixed Meeting-point data (array|string|null).
+ */
+function bokun_extract_meeting_points($booking, $context = 'default') {
+    if (!is_array($booking)) {
+        return null;
+    }
+
+    $product_bookings = $booking['productBookings'] ?? [];
+
+    if (is_array($product_bookings)) {
+        foreach ($product_bookings as $product_booking) {
+            if (!is_array($product_booking)) {
+                continue;
+            }
+
+            if (!empty($product_booking['product']['startPoints'])) {
+                return $product_booking['product']['startPoints'];
+            }
+
+            if (!empty($product_booking['startPoints'])) {
+                return $product_booking['startPoints'];
+            }
+
+            if (!empty($product_booking['product']['startPoint'])) {
+                return $product_booking['product']['startPoint'];
+            }
+        }
+    }
+
+    if (!empty($booking['startPoints'])) {
+        return $booking['startPoints'];
+    }
+
+    $product_ids = bokun_get_booking_product_ids($booking);
+
+    if (!empty($product_ids)) {
+        $external_start_points = bokun_get_meeting_points_from_product_lists_for_ids($product_ids, $context);
+
+        if (!empty($external_start_points)) {
+            return $external_start_points;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Attempt to locate meeting-point data for a product by querying configured product lists.
+ *
+ * @param int    $product_id Product (activity) identifier.
+ * @param string $context    Import context determining which API credentials to use.
+ *
+ * @return mixed Meeting-point data or null when unavailable.
+ */
+function bokun_get_meeting_points_from_product_lists($product_id, $context = 'default') {
+    $product_id = (int) $product_id;
+
+    if ($product_id <= 0) {
+        return null;
+    }
+
+    return bokun_get_meeting_points_from_product_lists_for_ids([$product_id], $context);
+}
+
+/**
+ * Attempt to locate meeting-point data for any of the provided product identifiers
+ * by querying configured product lists.
+ *
+ * @param int[] $product_ids Product (activity) identifiers.
+ * @param string $context    Import context determining which API credentials to use.
+ *
+ * @return mixed Meeting-point data or null when unavailable.
+ */
+function bokun_get_meeting_points_from_product_lists_for_ids($product_ids, $context = 'default') {
+    $product_ids = bokun_normalize_identifier_list((array) $product_ids);
+
+    if (empty($product_ids)) {
+        return null;
+    }
+
+    $context = bokun_normalize_import_context($context);
+    $product_list_ids = bokun_get_product_list_ids($context);
+
+    if (empty($product_list_ids)) {
+        return null;
+    }
+
+    foreach ($product_list_ids as $list_id) {
+        $activities = bokun_fetch_product_list_activities($list_id, $context);
+
+        if (empty($activities)) {
+            continue;
+        }
+
+        foreach ($activities as $activity) {
+            if (!is_array($activity)) {
+                continue;
+            }
+
+            $activity_ids = bokun_collect_numeric_identifiers($activity, ['id', 'productId', 'activityId', 'experienceId']);
+
+            if (empty($activity_ids) || empty(array_intersect($product_ids, $activity_ids))) {
+                continue;
+            }
+
+            if (!empty($activity['startPoints'])) {
+                return $activity['startPoints'];
+            }
+
+            if (!empty($activity['startPoint'])) {
+                return $activity['startPoint'];
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Determine the product ID represented in the booking payload.
+ *
+ * @param array $booking Booking payload.
+ *
+ * @return int Product identifier or 0 when unavailable.
+ */
+function bokun_get_booking_product_id($booking) {
+    $product_ids = bokun_get_booking_product_ids($booking);
+
+    if (empty($product_ids)) {
+        return 0;
+    }
+
+    return (int) $product_ids[0];
+}
+
+/**
+ * Determine the product IDs represented in the booking payload.
+ *
+ * @param array $booking Booking payload.
+ *
+ * @return int[] Product identifiers.
+ */
+function bokun_get_booking_product_ids($booking) {
+    if (!is_array($booking)) {
+        return [];
+    }
+
+    $identifiers = [];
+
+    $product_bookings = $booking['productBookings'] ?? [];
+
+    if (is_array($product_bookings)) {
+        foreach ($product_bookings as $product_booking) {
+            if (!is_array($product_booking)) {
+                continue;
+            }
+
+            if (isset($product_booking['product']) && is_array($product_booking['product'])) {
+                $identifiers = array_merge(
+                    $identifiers,
+                    bokun_collect_numeric_identifiers($product_booking['product'], ['id', 'productId', 'activityId', 'experienceId'])
+                );
+            }
+
+            $identifiers = array_merge(
+                $identifiers,
+                bokun_collect_numeric_identifiers($product_booking, ['productId', 'activityId', 'experienceId'])
+            );
+        }
+    }
+
+    if (isset($booking['product']) && is_array($booking['product'])) {
+        $identifiers = array_merge(
+            $identifiers,
+            bokun_collect_numeric_identifiers($booking['product'], ['id', 'productId', 'activityId', 'experienceId'])
+        );
+    }
+
+    $identifiers = array_merge(
+        $identifiers,
+        bokun_collect_numeric_identifiers($booking, ['productId', 'activityId', 'experienceId'])
+    );
+
+    return bokun_normalize_identifier_list($identifiers);
+}
+
+/**
+ * Collect numeric identifier values from the provided payload.
+ *
+ * @param array $payload Source payload.
+ * @param array $keys    Keys that may contain identifier values.
+ *
+ * @return int[] Ordered list of identifiers found in the payload.
+ */
+function bokun_collect_numeric_identifiers($payload, $keys) {
+    if (!is_array($payload) || empty($keys)) {
+        return [];
+    }
+
+    $identifiers = [];
+    $queue = [$payload];
+
+    while (!empty($queue)) {
+        $current = array_shift($queue);
+
+        if (!is_array($current)) {
+            continue;
+        }
+
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $current)) {
+                continue;
+            }
+
+            $value = $current[$key];
+
+            if (is_array($value) || is_object($value)) {
+                continue;
+            }
+
+            if (!is_scalar($value) && !is_null($value)) {
+                continue;
+            }
+
+            if (!is_numeric($value)) {
+                continue;
+            }
+
+            $identifier = (int) $value;
+
+            if ($identifier > 0 && !in_array($identifier, $identifiers, true)) {
+                $identifiers[] = $identifier;
+            }
+        }
+
+        foreach ($current as $value) {
+            if (is_array($value)) {
+                $queue[] = $value;
+            }
+        }
+    }
+
+    return $identifiers;
+}
+
+/**
+ * Normalise a list of identifiers by removing invalid and duplicate entries.
+ *
+ * @param array $identifiers Raw identifiers.
+ *
+ * @return int[] Sanitized identifiers.
+ */
+function bokun_normalize_identifier_list($identifiers) {
+    $normalized = [];
+
+    foreach ((array) $identifiers as $identifier) {
+        if (is_string($identifier) && !is_numeric($identifier)) {
+            continue;
+        }
+
+        $identifier = (int) $identifier;
+
+        if ($identifier <= 0) {
+            continue;
+        }
+
+        if (!in_array($identifier, $normalized, true)) {
+            $normalized[] = $identifier;
+        }
+    }
+
+    return $normalized;
+}
+
+/**
+ * Retrieve configured product list identifiers for meeting-point lookups.
+ *
+ * @param string $context Import context determining which API credentials to use.
+ *
+ * @return int[] Array of list identifiers.
+ */
+function bokun_get_product_list_ids($context = 'default') {
+    $context = bokun_normalize_import_context($context);
+
+    $option_key = 'upgrade' === $context ? 'bokun_product_list_ids_upgrade' : 'bokun_product_list_ids';
+    $stored_value = get_option($option_key, '');
+
+    if (is_string($stored_value)) {
+        $list_ids = array_filter(array_map('trim', explode(',', $stored_value)));
+    } elseif (is_array($stored_value)) {
+        $list_ids = $stored_value;
+    } else {
+        $list_ids = [];
+    }
+
+    $list_ids = array_map('intval', (array) $list_ids);
+    $list_ids = array_filter($list_ids, function ($value) {
+        return $value > 0;
+    });
+
+    $list_ids = apply_filters('bokun_meeting_point_product_lists', array_values($list_ids), $context);
+
+    $list_ids = array_map('intval', (array) $list_ids);
+    $list_ids = array_values(array_unique(array_filter($list_ids, function ($value) {
+        return $value > 0;
+    })));
+
+    return $list_ids;
+}
+
+/**
+ * Fetch activities contained in a product list from the Bókun API.
+ *
+ * @param int    $list_id Product list identifier.
+ * @param string $context Import context determining which API credentials to use.
+ *
+ * @return array Normalised array of activities in the product list.
+ */
+function bokun_fetch_product_list_activities($list_id, $context = 'default') {
+    $list_id = (int) $list_id;
+
+    if ($list_id <= 0) {
+        return [];
+    }
+
+    $context = bokun_normalize_import_context($context);
+    $cache_key = sprintf('bokun_product_list_%s_%d', $context, $list_id);
+    $cached = get_transient($cache_key);
+
+    if (false !== $cached) {
+        return is_array($cached) ? $cached : [];
+    }
+
+    list($api_key, $secret_key) = bokun_get_api_credentials_for_context($context);
+
+    if (empty($api_key) || empty($secret_key)) {
+        return [];
+    }
+
+    $endpoint = sprintf('/product-list.json/%d', $list_id);
+    $url      = BOKUN_API_BASE_URL . $endpoint;
+    $date     = bokun_format_date();
+    $method   = 'GET';
+    $signature = bokun_generate_signature($date, $api_key, $method, $endpoint, $secret_key);
+
+    $args = [
+        'headers' => [
+            'X-Bokun-AccessKey' => $api_key,
+            'X-Bokun-Date'      => $date,
+            'X-Bokun-Signature' => $signature,
+            'Accept'            => 'application/json',
+        ],
+        'timeout' => apply_filters('bokun_product_list_request_timeout', 30, $list_id, $context),
+    ];
+
+    $response = wp_remote_get($url, $args);
+
+    if (is_wp_error($response)) {
+        return [];
+    }
+
+    $code = wp_remote_retrieve_response_code($response);
+
+    if (200 !== $code) {
+        return [];
+    }
+
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+
+    if (!is_array($data)) {
+        return [];
+    }
+
+    $activities = bokun_normalize_product_list_payload($data);
+
+    $cache_ttl = apply_filters('bokun_product_list_cache_ttl', HOUR_IN_SECONDS, $list_id, $context, $activities);
+
+    if ((int) $cache_ttl > 0) {
+        set_transient($cache_key, $activities, (int) $cache_ttl);
+    }
+
+    return $activities;
+}
+
+/**
+ * Normalise the product list payload into an array of activities.
+ *
+ * @param array $payload Raw product list payload.
+ *
+ * @return array Normalised activities.
+ */
+function bokun_normalize_product_list_payload($payload) {
+    $activities = [];
+
+    if (isset($payload['items']) && is_array($payload['items'])) {
+        foreach ($payload['items'] as $item) {
+            if (isset($item['activity']) && is_array($item['activity'])) {
+                $activities[] = $item['activity'];
+                continue;
+            }
+
+            if (isset($item['product']) && is_array($item['product'])) {
+                $activities[] = $item['product'];
+                continue;
+            }
+
+            if (is_array($item)) {
+                $activities[] = $item;
+            }
+        }
+    }
+
+    if (isset($payload['activities']) && is_array($payload['activities'])) {
+        foreach ($payload['activities'] as $activity) {
+            if (is_array($activity)) {
+                $activities[] = $activity;
+            }
+        }
+    }
+
+    if (isset($payload['activity']) && is_array($payload['activity'])) {
+        $activities[] = $payload['activity'];
+    }
+
+    if (isset($payload['products']) && is_array($payload['products'])) {
+        foreach ($payload['products'] as $product) {
+            if (is_array($product)) {
+                $activities[] = $product;
+            }
+        }
+    }
+
+    $activities = apply_filters('bokun_product_list_activities', $activities, $payload);
+
+    return array_values($activities);
+}
+
+/**
+ * Retrieve API credentials for the given import context.
+ *
+ * @param string $context Import context determining which API credentials to use.
+ *
+ * @return array Array containing the access key and secret key.
+ */
+function bokun_get_api_credentials_for_context($context = 'default') {
+    $context = bokun_normalize_import_context($context);
+
+    if ('upgrade' === $context) {
+        $api_key    = get_option('bokun_api_key_upgrade', '');
+        $secret_key = get_option('bokun_secret_key_upgrade', '');
+    } else {
+        $api_key    = get_option('bokun_api_key', '');
+        $secret_key = get_option('bokun_secret_key', '');
+    }
+
+    return [$api_key, $secret_key];
+}
+
+/**
+ * Recursively store a meeting-point field as post meta.
+ *
+ * @param int    $post_id Booking post ID.
+ * @param int    $index   Meeting point index.
+ * @param string $field   Current field name.
+ * @param mixed  $value   Field value.
+ * @param string $prefix  Parent field prefix.
+ */
+function bokun_store_meeting_point_field($post_id, $index, $field, $value, $prefix = '') {
+    $field_fragment = bokun_normalize_meeting_point_key_fragment($field);
+
+    $meta_prefix = $prefix ? $prefix . '_' . $field_fragment : $field_fragment;
+
+    if (is_array($value) || is_object($value)) {
+        foreach ((array) $value as $child_key => $child_value) {
+            bokun_store_meeting_point_field($post_id, $index, (string) $child_key, $child_value, $meta_prefix);
+        }
+
+        return;
+    }
+
+    if (null === $value) {
+        $value_to_save = '';
+    } elseif (is_bool($value)) {
+        $value_to_save = $value ? '1' : '0';
+    } elseif (is_numeric($value)) {
+        $value_to_save = $value + 0;
+    } else {
+        $value_to_save = sanitize_text_field((string) $value);
+    }
+
+    $meta_key = sprintf('bk_meetingpoint_%s_%d', $meta_prefix, $index);
+    update_post_meta($post_id, $meta_key, $value_to_save);
+}
+
+/**
+ * Normalise fragments used in meeting-point meta keys.
+ *
+ * @param string $fragment Raw field name.
+ *
+ * @return string Normalised fragment containing only lowercase letters, numbers and underscores.
+ */
+function bokun_normalize_meeting_point_key_fragment($fragment) {
+    $fragment = strtolower((string) $fragment);
+    $fragment = preg_replace('/[^a-z0-9]+/', '_', $fragment);
+    $fragment = trim($fragment, '_');
+
+    return '' === $fragment ? 'field' : $fragment;
 }
 
 // Register Alarm Status taxonomy and create default terms
