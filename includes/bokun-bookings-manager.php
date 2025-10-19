@@ -513,6 +513,7 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
 
         bokun_save_specific_fields($post_id, $booking);
         bokun_save_all_fields_as_meta($post_id, $booking);
+        bokun_save_meeting_point_meta($post_id, $booking);
         process_price_categories_and_save($post_id, $booking);
         bokun_calculate_booking_status($post_id, $booking['productBookings'][0]['product']['title'] ?? '', $startDateTime);
 
@@ -830,6 +831,167 @@ function is_json($string) {
     }
     json_decode($string);
     return (json_last_error() === JSON_ERROR_NONE);
+}
+
+/**
+ * Store meeting-point metadata using the legacy meta key format that other
+ * extensions expect (bk_meetingpoint*).
+ *
+ * @param int   $post_id Booking post ID.
+ * @param array $booking Raw booking payload from the Bókun API.
+ */
+function bokun_save_meeting_point_meta($post_id, $booking) {
+    bokun_delete_meeting_point_meta($post_id);
+
+    $start_points = bokun_extract_meeting_points($booking);
+
+    if (empty($start_points)) {
+        return;
+    }
+
+    if (!is_array($start_points)) {
+        update_post_meta($post_id, 'bk_meetingpointtitle', sanitize_text_field((string) $start_points));
+        return;
+    }
+
+    $start_points = array_values((array) $start_points);
+
+    foreach ($start_points as $index => $start_point) {
+        if (is_array($start_point)) {
+            if (isset($start_point['title']) && '' !== $start_point['title']) {
+                update_post_meta(
+                    $post_id,
+                    'bk_meetingpointtitle_' . $index,
+                    sanitize_text_field($start_point['title'])
+                );
+            }
+
+            foreach ($start_point as $field => $value) {
+                if ('title' === $field) {
+                    continue;
+                }
+
+                bokun_store_meeting_point_field($post_id, $index, $field, $value);
+            }
+        } else {
+            update_post_meta(
+                $post_id,
+                'bk_meetingpointtitle_' . $index,
+                sanitize_text_field(is_scalar($start_point) ? (string) $start_point : wp_json_encode($start_point))
+            );
+        }
+    }
+}
+
+/**
+ * Remove previously stored meeting-point metadata to avoid stale values.
+ *
+ * @param int $post_id Booking post ID.
+ */
+function bokun_delete_meeting_point_meta($post_id) {
+    $all_meta = get_post_meta($post_id);
+
+    if (!is_array($all_meta)) {
+        return;
+    }
+
+    foreach ($all_meta as $meta_key => $values) {
+        if (0 === strpos($meta_key, 'bk_meetingpointtitle') || 0 === strpos($meta_key, 'bk_meetingpoint_')) {
+            delete_post_meta($post_id, $meta_key);
+        }
+    }
+}
+
+/**
+ * Extract the start points array from a booking payload.
+ *
+ * @param array $booking Booking payload from the API.
+ *
+ * @return mixed Meeting-point data (array|string|null).
+ */
+function bokun_extract_meeting_points($booking) {
+    if (!is_array($booking)) {
+        return null;
+    }
+
+    $product_bookings = $booking['productBookings'] ?? [];
+
+    if (is_array($product_bookings)) {
+        foreach ($product_bookings as $product_booking) {
+            if (!is_array($product_booking)) {
+                continue;
+            }
+
+            if (!empty($product_booking['product']['startPoints'])) {
+                return $product_booking['product']['startPoints'];
+            }
+
+            if (!empty($product_booking['startPoints'])) {
+                return $product_booking['startPoints'];
+            }
+
+            if (!empty($product_booking['product']['startPoint'])) {
+                return $product_booking['product']['startPoint'];
+            }
+        }
+    }
+
+    if (!empty($booking['startPoints'])) {
+        return $booking['startPoints'];
+    }
+
+    return null;
+}
+
+/**
+ * Recursively store a meeting-point field as post meta.
+ *
+ * @param int    $post_id Booking post ID.
+ * @param int    $index   Meeting point index.
+ * @param string $field   Current field name.
+ * @param mixed  $value   Field value.
+ * @param string $prefix  Parent field prefix.
+ */
+function bokun_store_meeting_point_field($post_id, $index, $field, $value, $prefix = '') {
+    $field_fragment = bokun_normalize_meeting_point_key_fragment($field);
+
+    $meta_prefix = $prefix ? $prefix . '_' . $field_fragment : $field_fragment;
+
+    if (is_array($value) || is_object($value)) {
+        foreach ((array) $value as $child_key => $child_value) {
+            bokun_store_meeting_point_field($post_id, $index, (string) $child_key, $child_value, $meta_prefix);
+        }
+
+        return;
+    }
+
+    if (null === $value) {
+        $value_to_save = '';
+    } elseif (is_bool($value)) {
+        $value_to_save = $value ? '1' : '0';
+    } elseif (is_numeric($value)) {
+        $value_to_save = $value + 0;
+    } else {
+        $value_to_save = sanitize_text_field((string) $value);
+    }
+
+    $meta_key = sprintf('bk_meetingpoint_%s_%d', $meta_prefix, $index);
+    update_post_meta($post_id, $meta_key, $value_to_save);
+}
+
+/**
+ * Normalise fragments used in meeting-point meta keys.
+ *
+ * @param string $fragment Raw field name.
+ *
+ * @return string Normalised fragment containing only lowercase letters, numbers and underscores.
+ */
+function bokun_normalize_meeting_point_key_fragment($fragment) {
+    $fragment = strtolower((string) $fragment);
+    $fragment = preg_replace('/[^a-z0-9]+/', '_', $fragment);
+    $fragment = trim($fragment, '_');
+
+    return '' === $fragment ? 'field' : $fragment;
 }
 
 // Register Alarm Status taxonomy and create default terms
