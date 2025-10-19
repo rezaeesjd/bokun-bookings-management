@@ -362,6 +362,43 @@ function bokun_reset_import_progress_state($context) {
     delete_transient($key);
 }
 
+/**
+ * Ensure the Bokun booking custom post type is registered before attempting to
+ * create or update posts.
+ *
+ * Running imports before WordPress executes the `init` action means the custom
+ * post type registration that normally occurs on that hook has not happened
+ * yet. Creating posts in that state triggers capability checks against an
+ * unknown post type, which raises the "map_meta_cap was called incorrectly"
+ * notice logged in production. This helper makes a best effort to register the
+ * post type on demand (using the plugin's bootstrap class when available) so
+ * the importer can run without emitting warnings.
+ *
+ * @return bool Whether the custom post type is available for use.
+ */
+function bokun_ensure_booking_post_type_registered() {
+    if (post_type_exists('bokun_booking')) {
+        return true;
+    }
+
+    if (!function_exists('register_post_type')) {
+        return false;
+    }
+
+    global $rb;
+
+    if (isset($rb) && is_object($rb) && method_exists($rb, 'bokun_register_custom_post_type')) {
+        $rb->bokun_register_custom_post_type();
+
+        if (post_type_exists('bokun_booking')) {
+            remove_action('init', array($rb, 'bokun_register_custom_post_type'));
+            return true;
+        }
+    }
+
+    return post_type_exists('bokun_booking');
+}
+
 // Save Bokun bookings as WordPress posts
 function bokun_save_bookings_as_posts($bookings, $context = 'default') {
     $stats = array(
@@ -373,6 +410,26 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
     );
 
     $context = bokun_normalize_import_context($context);
+
+    if (!bokun_ensure_booking_post_type_registered()) {
+        $stats['skipped'] = $stats['total'];
+
+        $error_message = __('The Bokun Booking post type is not registered. Import aborted to avoid capability errors.', 'bokun-bookings-manager');
+
+        bokun_set_import_progress_state($context, array(
+            'status'    => 'error',
+            'total'     => $stats['total'],
+            'processed' => 0,
+            'created'   => 0,
+            'updated'   => 0,
+            'skipped'   => $stats['skipped'],
+            'message'   => $error_message,
+        ));
+
+        error_log($error_message);
+
+        return $stats;
+    }
 
     bokun_set_import_progress_state($context, array(
         'status'    => $stats['total'] > 0 ? 'running' : 'completed',
@@ -513,6 +570,7 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
 
         bokun_save_specific_fields($post_id, $booking);
         bokun_save_all_fields_as_meta($post_id, $booking);
+        bokun_save_meeting_point_meta($post_id, $booking, $context);
         process_price_categories_and_save($post_id, $booking);
         bokun_calculate_booking_status($post_id, $booking['productBookings'][0]['product']['title'] ?? '', $startDateTime);
 
@@ -830,6 +888,845 @@ function is_json($string) {
     }
     json_decode($string);
     return (json_last_error() === JSON_ERROR_NONE);
+}
+
+/**
+ * Store meeting-point metadata using the legacy meta key format that other
+ * extensions expect (bk_meetingpoint*).
+ *
+ * @param int    $post_id Booking post ID.
+ * @param array  $booking Raw booking payload from the Bókun API.
+ * @param string $context Import context determining which API credentials to use.
+ */
+function bokun_save_meeting_point_meta($post_id, $booking, $context = 'default') {
+    bokun_log_meeting_point_step('Saving meeting-point metadata for booking.', [
+        'post_id' => (int) $post_id,
+        'context' => bokun_normalize_import_context($context),
+    ]);
+
+    $start_points = bokun_extract_meeting_points($booking, $context);
+
+    bokun_log_meeting_point_step('Meeting-point payload extracted.', [
+        'type'  => is_array($start_points) ? 'array' : gettype($start_points),
+        'count' => is_array($start_points) ? count($start_points) : null,
+    ]);
+
+    bokun_store_meeting_point_meta_on_post($post_id, $start_points);
+
+    $product_ids = bokun_get_booking_product_ids($booking);
+
+    bokun_log_meeting_point_step('Collected product identifiers from booking.', [
+        'product_ids' => $product_ids,
+    ]);
+
+    if (!empty($product_ids)) {
+        bokun_store_meeting_point_meta_on_products($product_ids, $start_points, $context);
+    }
+}
+
+/**
+ * Write a structured log entry for meeting-point processing steps.
+ *
+ * @param string $message Human-readable description of the current step.
+ * @param array  $context Optional contextual data to include in the log entry.
+ */
+function bokun_log_meeting_point_step($message, $context = []) {
+    $disabled = apply_filters('bokun_disable_meeting_point_logging', false, $message, $context);
+
+    if ($disabled) {
+        return;
+    }
+
+    $log_entry = '[Bokun Meeting Points] ' . $message;
+
+    if (!empty($context)) {
+        $encoded_context = wp_json_encode($context);
+
+        if (false !== $encoded_context) {
+            $log_entry .= ' :: ' . $encoded_context;
+        }
+    }
+
+    error_log($log_entry);
+}
+
+/**
+ * Store meeting-point data on a post using the legacy meta structure.
+ *
+ * @param int   $post_id      Post identifier that will receive the metadata.
+ * @param mixed $start_points Meeting-point payload from the API.
+ */
+function bokun_store_meeting_point_meta_on_post($post_id, $start_points) {
+    $post_id = (int) $post_id;
+
+    if ($post_id <= 0) {
+        return;
+    }
+
+    bokun_delete_meeting_point_meta($post_id);
+
+    if (empty($start_points)) {
+        bokun_log_meeting_point_step('No meeting-point data available for post.', [
+            'post_id' => $post_id,
+        ]);
+        return;
+    }
+
+    if (!is_array($start_points)) {
+        update_post_meta($post_id, 'bk_meetingpointtitle', sanitize_text_field((string) $start_points));
+        bokun_log_meeting_point_step('Saved scalar meeting-point title.', [
+            'post_id' => $post_id,
+            'title'   => sanitize_text_field((string) $start_points),
+        ]);
+        return;
+    }
+
+    $start_points = array_values((array) $start_points);
+
+    $primary_title = null;
+
+    foreach ($start_points as $index => $start_point) {
+        if (is_array($start_point)) {
+            if (isset($start_point['title']) && '' !== $start_point['title']) {
+                $sanitized_title = sanitize_text_field($start_point['title']);
+
+                update_post_meta(
+                    $post_id,
+                    'bk_meetingpointtitle_' . $index,
+                    $sanitized_title
+                );
+
+                if (null === $primary_title) {
+                    $primary_title = $sanitized_title;
+                }
+
+                bokun_log_meeting_point_step('Saved meeting-point title for index.', [
+                    'post_id' => $post_id,
+                    'index'   => $index,
+                    'title'   => $sanitized_title,
+                ]);
+            }
+        } else {
+            $sanitized_value = sanitize_text_field(is_scalar($start_point) ? (string) $start_point : wp_json_encode($start_point));
+
+            update_post_meta(
+                $post_id,
+                'bk_meetingpointtitle_' . $index,
+                $sanitized_value
+            );
+
+            if (null === $primary_title) {
+                $primary_title = $sanitized_value;
+            }
+
+            bokun_log_meeting_point_step('Saved non-array meeting-point entry as title.', [
+                'post_id' => $post_id,
+                'index'   => $index,
+                'title'   => $sanitized_value,
+            ]);
+        }
+    }
+
+    if (null !== $primary_title) {
+        update_post_meta($post_id, 'bk_meetingpointtitle', $primary_title);
+        bokun_log_meeting_point_step('Saved primary meeting-point title.', [
+            'post_id' => $post_id,
+            'title'   => $primary_title,
+        ]);
+    } else {
+        bokun_log_meeting_point_step('Meeting-point payload did not contain a title.', [
+            'post_id' => $post_id,
+        ]);
+    }
+}
+
+/**
+ * Store meeting-point metadata on related product posts so companion plugins can
+ * read the legacy meta keys from the expected location.
+ *
+ * @param int[] $product_ids  Bokun product identifiers.
+ * @param mixed $start_points Meeting-point payload from the API.
+ * @param string $context     Import context determining which API credentials to use.
+ */
+function bokun_store_meeting_point_meta_on_products($product_ids, $start_points, $context = 'default') {
+    $product_ids = bokun_normalize_identifier_list($product_ids);
+
+    if (empty($product_ids)) {
+        return;
+    }
+
+    $context = bokun_normalize_import_context($context);
+    $product_post_ids = bokun_find_product_post_ids_for_bokun_ids($product_ids, $context);
+
+    bokun_log_meeting_point_step('Resolved WordPress products for Bokun IDs.', [
+        'bokun_ids'   => $product_ids,
+        'product_ids' => $product_post_ids,
+        'context'     => $context,
+    ]);
+
+    if (empty($product_post_ids)) {
+        return;
+    }
+
+    foreach ($product_post_ids as $product_post_id) {
+        bokun_store_meeting_point_meta_on_post($product_post_id, $start_points);
+    }
+}
+
+/**
+ * Locate WordPress product posts that represent the provided Bokun products.
+ *
+ * @param int[]  $product_ids Bokun product identifiers.
+ * @param string $context     Import context determining which API credentials to use.
+ *
+ * @return int[] WordPress product post IDs.
+ */
+function bokun_find_product_post_ids_for_bokun_ids($product_ids, $context = 'default') {
+    $product_ids = bokun_normalize_identifier_list($product_ids);
+
+    if (empty($product_ids)) {
+        return [];
+    }
+
+    $context = bokun_normalize_import_context($context);
+
+    $meta_keys = apply_filters(
+        'bokun_meeting_point_product_meta_keys',
+        [
+            '_bokun_product_id',
+            'bokun_product_id',
+            '_bokun_activity_id',
+            'bokun_activity_id',
+        ],
+        $product_ids,
+        $context
+    );
+
+    $post_types = apply_filters(
+        'bokun_meeting_point_product_post_types',
+        ['product'],
+        $product_ids,
+        $context
+    );
+
+    if (empty($post_types) || empty($meta_keys)) {
+        return [];
+    }
+
+    $found_posts = [];
+
+    static $lookup_cache = [];
+
+    foreach ($product_ids as $product_id) {
+        foreach ((array) $meta_keys as $meta_key) {
+            if (!is_string($meta_key) || '' === trim($meta_key)) {
+                continue;
+            }
+
+            $cache_key = implode(':', [$context, $meta_key, $product_id]);
+
+            if (!array_key_exists($cache_key, $lookup_cache)) {
+                $query_args = [
+                    'post_type'              => (array) $post_types,
+                    'post_status'            => 'any',
+                    'numberposts'            => -1,
+                    'fields'                 => 'ids',
+                    'suppress_filters'       => true,
+                    'update_post_meta_cache' => false,
+                    'update_post_term_cache' => false,
+                    'meta_query'             => [
+                        [
+                            'key'   => $meta_key,
+                            'value' => $product_id,
+                        ],
+                    ],
+                ];
+
+                $posts = get_posts($query_args);
+
+                if (!is_array($posts)) {
+                    $posts = [];
+                }
+
+                $lookup_cache[$cache_key] = array_values(array_unique(array_map('intval', $posts)));
+            }
+
+            if (!empty($lookup_cache[$cache_key])) {
+                $found_posts = array_merge($found_posts, $lookup_cache[$cache_key]);
+            }
+        }
+    }
+
+    $found_posts = array_values(array_unique(array_filter(array_map('intval', $found_posts))));
+
+    return apply_filters('bokun_meeting_point_product_post_ids', $found_posts, $product_ids, $context);
+}
+
+/**
+ * Remove previously stored meeting-point metadata to avoid stale values.
+ *
+ * @param int $post_id Booking post ID.
+ */
+function bokun_delete_meeting_point_meta($post_id) {
+    $all_meta = get_post_meta($post_id);
+
+    if (!is_array($all_meta)) {
+        return;
+    }
+
+    foreach ($all_meta as $meta_key => $values) {
+        if (0 === strpos($meta_key, 'bk_meetingpointtitle') || 0 === strpos($meta_key, 'bk_meetingpoint_')) {
+            delete_post_meta($post_id, $meta_key);
+        }
+    }
+}
+
+/**
+ * Extract the start points array from a booking payload.
+ *
+ * @param array  $booking Booking payload from the API.
+ * @param string $context Import context determining which API credentials to use.
+ *
+ * @return mixed Meeting-point data (array|string|null).
+ */
+function bokun_extract_meeting_points($booking, $context = 'default') {
+    if (!is_array($booking)) {
+        return null;
+    }
+
+    $product_bookings = $booking['productBookings'] ?? [];
+
+    if (is_array($product_bookings)) {
+        foreach ($product_bookings as $product_booking) {
+            if (!is_array($product_booking)) {
+                continue;
+            }
+
+            if (!empty($product_booking['product']['startPoints'])) {
+                bokun_log_meeting_point_step('Found meeting points within product booking payload.', [
+                    'source' => 'product.startPoints',
+                ]);
+                return $product_booking['product']['startPoints'];
+            }
+
+            if (!empty($product_booking['startPoints'])) {
+                bokun_log_meeting_point_step('Found meeting points within product booking startPoints.', [
+                    'source' => 'productBooking.startPoints',
+                ]);
+                return $product_booking['startPoints'];
+            }
+
+            if (!empty($product_booking['product']['startPoint'])) {
+                bokun_log_meeting_point_step('Found single meeting point within product booking payload.', [
+                    'source' => 'product.startPoint',
+                ]);
+                return $product_booking['product']['startPoint'];
+            }
+        }
+    }
+
+    if (!empty($booking['startPoints'])) {
+        bokun_log_meeting_point_step('Found meeting points at booking root.', [
+            'source' => 'booking.startPoints',
+        ]);
+        return $booking['startPoints'];
+    }
+
+    $product_ids = bokun_get_booking_product_ids($booking);
+
+    if (!empty($product_ids)) {
+        bokun_log_meeting_point_step('Falling back to product-list lookup for meeting points.', [
+            'product_ids' => $product_ids,
+            'context'     => bokun_normalize_import_context($context),
+        ]);
+        $external_start_points = bokun_get_meeting_points_from_product_lists_for_ids($product_ids, $context);
+
+        if (!empty($external_start_points)) {
+            return $external_start_points;
+        }
+    }
+
+    bokun_log_meeting_point_step('Meeting-point lookup completed without results.', []);
+
+    return null;
+}
+
+/**
+ * Attempt to locate meeting-point data for a product by querying configured product lists.
+ *
+ * @param int    $product_id Product (activity) identifier.
+ * @param string $context    Import context determining which API credentials to use.
+ *
+ * @return mixed Meeting-point data or null when unavailable.
+ */
+function bokun_get_meeting_points_from_product_lists($product_id, $context = 'default') {
+    $product_id = (int) $product_id;
+
+    if ($product_id <= 0) {
+        return null;
+    }
+
+    return bokun_get_meeting_points_from_product_lists_for_ids([$product_id], $context);
+}
+
+/**
+ * Attempt to locate meeting-point data for any of the provided product identifiers
+ * by querying configured product lists.
+ *
+ * @param int[] $product_ids Product (activity) identifiers.
+ * @param string $context    Import context determining which API credentials to use.
+ *
+ * @return mixed Meeting-point data or null when unavailable.
+ */
+function bokun_get_meeting_points_from_product_lists_for_ids($product_ids, $context = 'default') {
+    $product_ids = bokun_normalize_identifier_list((array) $product_ids);
+
+    if (empty($product_ids)) {
+        return null;
+    }
+
+    $context = bokun_normalize_import_context($context);
+    $product_list_ids = bokun_get_product_list_ids($context);
+
+    bokun_log_meeting_point_step('Attempting product-list lookup for meeting points.', [
+        'bokun_ids'     => $product_ids,
+        'context'       => $context,
+        'product_lists' => $product_list_ids,
+    ]);
+
+    if (empty($product_list_ids)) {
+        bokun_log_meeting_point_step('No product lists configured for meeting-point lookup.', [
+            'context' => $context,
+        ]);
+        return null;
+    }
+
+    foreach ($product_list_ids as $list_id) {
+        $activities = bokun_fetch_product_list_activities($list_id, $context);
+
+        bokun_log_meeting_point_step('Fetched product-list activities for lookup.', [
+            'list_id'        => $list_id,
+            'activity_count' => is_array($activities) ? count($activities) : null,
+        ]);
+
+        if (empty($activities)) {
+            continue;
+        }
+
+        foreach ($activities as $activity) {
+            if (!is_array($activity)) {
+                continue;
+            }
+
+            $activity_ids = bokun_collect_numeric_identifiers($activity, ['id', 'productId', 'activityId', 'experienceId']);
+
+            if (empty($activity_ids) || empty(array_intersect($product_ids, $activity_ids))) {
+                continue;
+            }
+
+            if (!empty($activity['startPoints'])) {
+                bokun_log_meeting_point_step('Matched activity startPoints from product list.', [
+                    'list_id'      => $list_id,
+                    'activity_ids' => $activity_ids,
+                ]);
+
+                return $activity['startPoints'];
+            }
+
+            if (!empty($activity['startPoint'])) {
+                bokun_log_meeting_point_step('Matched activity startPoint from product list.', [
+                    'list_id'      => $list_id,
+                    'activity_ids' => $activity_ids,
+                ]);
+
+                return $activity['startPoint'];
+            }
+        }
+    }
+
+    bokun_log_meeting_point_step('No meeting points found in configured product lists.', [
+        'bokun_ids' => $product_ids,
+        'context'   => $context,
+    ]);
+
+    return null;
+}
+
+/**
+ * Determine the product ID represented in the booking payload.
+ *
+ * @param array $booking Booking payload.
+ *
+ * @return int Product identifier or 0 when unavailable.
+ */
+function bokun_get_booking_product_id($booking) {
+    $product_ids = bokun_get_booking_product_ids($booking);
+
+    if (empty($product_ids)) {
+        return 0;
+    }
+
+    return (int) $product_ids[0];
+}
+
+/**
+ * Determine the product IDs represented in the booking payload.
+ *
+ * @param array $booking Booking payload.
+ *
+ * @return int[] Product identifiers.
+ */
+function bokun_get_booking_product_ids($booking) {
+    if (!is_array($booking)) {
+        return [];
+    }
+
+    $identifiers = [];
+
+    $product_bookings = $booking['productBookings'] ?? [];
+
+    if (is_array($product_bookings)) {
+        foreach ($product_bookings as $product_booking) {
+            if (!is_array($product_booking)) {
+                continue;
+            }
+
+            if (isset($product_booking['product']) && is_array($product_booking['product'])) {
+                $identifiers = array_merge(
+                    $identifiers,
+                    bokun_collect_numeric_identifiers($product_booking['product'], ['id', 'productId', 'activityId', 'experienceId'])
+                );
+            }
+
+            $identifiers = array_merge(
+                $identifiers,
+                bokun_collect_numeric_identifiers($product_booking, ['productId', 'activityId', 'experienceId'])
+            );
+        }
+    }
+
+    if (isset($booking['product']) && is_array($booking['product'])) {
+        $identifiers = array_merge(
+            $identifiers,
+            bokun_collect_numeric_identifiers($booking['product'], ['id', 'productId', 'activityId', 'experienceId'])
+        );
+    }
+
+    $identifiers = array_merge(
+        $identifiers,
+        bokun_collect_numeric_identifiers($booking, ['productId', 'activityId', 'experienceId'])
+    );
+
+    return bokun_normalize_identifier_list($identifiers);
+}
+
+/**
+ * Collect numeric identifier values from the provided payload.
+ *
+ * @param array $payload Source payload.
+ * @param array $keys    Keys that may contain identifier values.
+ *
+ * @return int[] Ordered list of identifiers found in the payload.
+ */
+function bokun_collect_numeric_identifiers($payload, $keys) {
+    if (!is_array($payload) || empty($keys)) {
+        return [];
+    }
+
+    $identifiers = [];
+    $queue = [$payload];
+
+    while (!empty($queue)) {
+        $current = array_shift($queue);
+
+        if (!is_array($current)) {
+            continue;
+        }
+
+        foreach ($keys as $key) {
+            if (!array_key_exists($key, $current)) {
+                continue;
+            }
+
+            $value = $current[$key];
+
+            if (is_array($value) || is_object($value)) {
+                continue;
+            }
+
+            if (!is_scalar($value) && !is_null($value)) {
+                continue;
+            }
+
+            if (!is_numeric($value)) {
+                continue;
+            }
+
+            $identifier = (int) $value;
+
+            if ($identifier > 0 && !in_array($identifier, $identifiers, true)) {
+                $identifiers[] = $identifier;
+            }
+        }
+
+        foreach ($current as $value) {
+            if (is_array($value)) {
+                $queue[] = $value;
+            }
+        }
+    }
+
+    return $identifiers;
+}
+
+/**
+ * Normalise a list of identifiers by removing invalid and duplicate entries.
+ *
+ * @param array $identifiers Raw identifiers.
+ *
+ * @return int[] Sanitized identifiers.
+ */
+function bokun_normalize_identifier_list($identifiers) {
+    $normalized = [];
+
+    foreach ((array) $identifiers as $identifier) {
+        if (is_string($identifier) && !is_numeric($identifier)) {
+            continue;
+        }
+
+        $identifier = (int) $identifier;
+
+        if ($identifier <= 0) {
+            continue;
+        }
+
+        if (!in_array($identifier, $normalized, true)) {
+            $normalized[] = $identifier;
+        }
+    }
+
+    return $normalized;
+}
+
+/**
+ * Retrieve configured product list identifiers for meeting-point lookups.
+ *
+ * @param string $context Import context determining which API credentials to use.
+ *
+ * @return int[] Array of list identifiers.
+ */
+function bokun_get_product_list_ids($context = 'default') {
+    $context = bokun_normalize_import_context($context);
+
+    $option_key = 'upgrade' === $context ? 'bokun_product_list_ids_upgrade' : 'bokun_product_list_ids';
+    $stored_value = get_option($option_key, '');
+
+    if (is_string($stored_value)) {
+        $list_ids = array_filter(array_map('trim', explode(',', $stored_value)));
+    } elseif (is_array($stored_value)) {
+        $list_ids = $stored_value;
+    } else {
+        $list_ids = [];
+    }
+
+    $list_ids = array_map('intval', (array) $list_ids);
+    $list_ids = array_filter($list_ids, function ($value) {
+        return $value > 0;
+    });
+
+    $list_ids = apply_filters('bokun_meeting_point_product_lists', array_values($list_ids), $context);
+
+    $list_ids = array_map('intval', (array) $list_ids);
+    $list_ids = array_values(array_unique(array_filter($list_ids, function ($value) {
+        return $value > 0;
+    })));
+
+    return $list_ids;
+}
+
+/**
+ * Fetch activities contained in a product list from the Bókun API.
+ *
+ * @param int    $list_id Product list identifier.
+ * @param string $context Import context determining which API credentials to use.
+ *
+ * @return array Normalised array of activities in the product list.
+ */
+function bokun_fetch_product_list_activities($list_id, $context = 'default') {
+    $list_id = (int) $list_id;
+
+    if ($list_id <= 0) {
+        return [];
+    }
+
+    $context = bokun_normalize_import_context($context);
+    $cache_key = sprintf('bokun_product_list_%s_%d', $context, $list_id);
+    $cached = get_transient($cache_key);
+
+    if (false !== $cached) {
+        bokun_log_meeting_point_step('Using cached product-list activities.', [
+            'list_id'      => $list_id,
+            'context'      => $context,
+            'cached_count' => is_array($cached) ? count($cached) : null,
+        ]);
+        return is_array($cached) ? $cached : [];
+    }
+
+    list($api_key, $secret_key) = bokun_get_api_credentials_for_context($context);
+
+    bokun_log_meeting_point_step('Fetching product-list activities from API.', [
+        'list_id'     => $list_id,
+        'context'     => $context,
+        'has_api_key' => !empty($api_key),
+        'has_secret'  => !empty($secret_key),
+    ]);
+
+    if (empty($api_key) || empty($secret_key)) {
+        bokun_log_meeting_point_step('Missing API credentials for product-list lookup.', [
+            'list_id' => $list_id,
+            'context' => $context,
+        ]);
+        return [];
+    }
+
+    $endpoint = sprintf('/product-list.json/%d', $list_id);
+    $url      = BOKUN_API_BASE_URL . $endpoint;
+    $date     = bokun_format_date();
+    $method   = 'GET';
+    $signature = bokun_generate_signature($date, $api_key, $method, $endpoint, $secret_key);
+
+    $args = [
+        'headers' => [
+            'X-Bokun-AccessKey' => $api_key,
+            'X-Bokun-Date'      => $date,
+            'X-Bokun-Signature' => $signature,
+            'Accept'            => 'application/json',
+        ],
+        'timeout' => apply_filters('bokun_product_list_request_timeout', 30, $list_id, $context),
+    ];
+
+    $response = wp_remote_get($url, $args);
+
+    if (is_wp_error($response)) {
+        bokun_log_meeting_point_step('Product-list request failed.', [
+            'list_id' => $list_id,
+            'context' => $context,
+            'error'   => $response->get_error_message(),
+        ]);
+        return [];
+    }
+
+    $code = wp_remote_retrieve_response_code($response);
+
+    if (200 !== $code) {
+        bokun_log_meeting_point_step('Unexpected status code from product-list request.', [
+            'list_id' => $list_id,
+            'context' => $context,
+            'status'  => $code,
+        ]);
+        return [];
+    }
+
+    $body = wp_remote_retrieve_body($response);
+    $data = json_decode($body, true);
+
+    if (!is_array($data)) {
+        bokun_log_meeting_point_step('Invalid product-list response payload.', [
+            'list_id' => $list_id,
+            'context' => $context,
+        ]);
+        return [];
+    }
+
+    $activities = bokun_normalize_product_list_payload($data);
+
+    bokun_log_meeting_point_step('Product-list response normalised.', [
+        'list_id'        => $list_id,
+        'context'        => $context,
+        'activity_count' => count($activities),
+    ]);
+
+    $cache_ttl = apply_filters('bokun_product_list_cache_ttl', HOUR_IN_SECONDS, $list_id, $context, $activities);
+
+    if ((int) $cache_ttl > 0) {
+        set_transient($cache_key, $activities, (int) $cache_ttl);
+    }
+
+    return $activities;
+}
+
+/**
+ * Normalise the product list payload into an array of activities.
+ *
+ * @param array $payload Raw product list payload.
+ *
+ * @return array Normalised activities.
+ */
+function bokun_normalize_product_list_payload($payload) {
+    $activities = [];
+
+    if (isset($payload['items']) && is_array($payload['items'])) {
+        foreach ($payload['items'] as $item) {
+            if (isset($item['activity']) && is_array($item['activity'])) {
+                $activities[] = $item['activity'];
+                continue;
+            }
+
+            if (isset($item['product']) && is_array($item['product'])) {
+                $activities[] = $item['product'];
+                continue;
+            }
+
+            if (is_array($item)) {
+                $activities[] = $item;
+            }
+        }
+    }
+
+    if (isset($payload['activities']) && is_array($payload['activities'])) {
+        foreach ($payload['activities'] as $activity) {
+            if (is_array($activity)) {
+                $activities[] = $activity;
+            }
+        }
+    }
+
+    if (isset($payload['activity']) && is_array($payload['activity'])) {
+        $activities[] = $payload['activity'];
+    }
+
+    if (isset($payload['products']) && is_array($payload['products'])) {
+        foreach ($payload['products'] as $product) {
+            if (is_array($product)) {
+                $activities[] = $product;
+            }
+        }
+    }
+
+    $activities = apply_filters('bokun_product_list_activities', $activities, $payload);
+
+    return array_values($activities);
+}
+
+/**
+ * Retrieve API credentials for the given import context.
+ *
+ * @param string $context Import context determining which API credentials to use.
+ *
+ * @return array Array containing the access key and secret key.
+ */
+function bokun_get_api_credentials_for_context($context = 'default') {
+    $context = bokun_normalize_import_context($context);
+
+    if ('upgrade' === $context) {
+        $api_key    = get_option('bokun_api_key_upgrade', '');
+        $secret_key = get_option('bokun_secret_key_upgrade', '');
+    } else {
+        $api_key    = get_option('bokun_api_key', '');
+        $secret_key = get_option('bokun_secret_key', '');
+    }
+
+    return [$api_key, $secret_key];
 }
 
 // Register Alarm Status taxonomy and create default terms
