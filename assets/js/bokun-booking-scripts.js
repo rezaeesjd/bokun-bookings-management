@@ -62,6 +62,10 @@ jQuery(document).ready(function($) {
         var type = $checkbox.data('type'); // "full", "partial", "refund-partner", or "not-available"
         var isChecked = $checkbox.is(':checked');
 
+        if (typeof bbm_ajax === 'undefined' || !bbm_ajax.nonce || !bbm_ajax.ajax_url) {
+            return;
+        }
+
         $checkbox.siblings('.save-message, .loading-message').remove();
         $checkbox.after('<span class="loading-message" style="color: blue; margin-left: 10px;">Loading...</span>');
 
