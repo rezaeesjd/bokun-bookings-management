@@ -1,16 +1,21 @@
 jQuery(document).ready(function($) {
     function writeTeamMemberCookie(key, value) {
-        if (!key) {
+        if (!key || typeof document === 'undefined') {
             return;
         }
 
         var expires = new Date();
         expires.setFullYear(expires.getFullYear() + 1);
-        document.cookie = encodeURIComponent(key) + '=' + encodeURIComponent(value) + '; expires=' + expires.toUTCString() + '; path=/';
+        document.cookie = [
+            encodeURIComponent(key) + '=' + encodeURIComponent(value || ''),
+            'expires=' + expires.toUTCString(),
+            'path=/',
+            'SameSite=Lax'
+        ].join('; ');
     }
 
     function clearTeamMemberStorage(key) {
-        if (!key) {
+        if (!key || typeof document === 'undefined') {
             return;
         }
 
@@ -22,7 +27,12 @@ jQuery(document).ready(function($) {
             window.sessionStorage.removeItem(key);
         } catch (error) {}
 
-        document.cookie = encodeURIComponent(key) + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+        document.cookie = [
+            encodeURIComponent(key) + '=;',
+            'expires=Thu, 01 Jan 1970 00:00:00 GMT',
+            'path=/',
+            'SameSite=Lax'
+        ].join('; ');
     }
 
     function storeTeamMemberValue(key, value, legacyKey) {
@@ -67,7 +77,16 @@ jQuery(document).ready(function($) {
         }
 
         $checkbox.siblings('.save-message, .loading-message').remove();
-        $checkbox.after('<span class="loading-message" style="color: blue; margin-left: 10px;">Loading...</span>');
+
+        var loadingMessage = $('<span/>', {
+            class: 'loading-message',
+            text: 'Loading...'
+        }).css({
+            color: 'blue',
+            marginLeft: '10px'
+        });
+
+        $checkbox.after(loadingMessage);
 
         // Send AJAX request to update booking status
         $.ajax({
@@ -83,15 +102,29 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 $checkbox.siblings('.loading-message').remove();
-                if (response.success) {
-                    $checkbox.after('<span class="save-message" style="color: green; margin-left: 10px;">Saved</span>');
-                } else {
-                    $checkbox.after('<span class="save-message" style="color: red; margin-left: 10px;">Error</span>');
-                }
+
+                var messageOptions = {
+                    class: 'save-message',
+                    text: response && response.success ? 'Saved' : 'Error'
+                };
+
+                var messageStyles = {
+                    color: response && response.success ? 'green' : 'red',
+                    marginLeft: '10px'
+                };
+
+                $('<span/>', messageOptions).css(messageStyles).insertAfter($checkbox);
             },
             error: function() {
                 $checkbox.siblings('.loading-message').remove();
-                $checkbox.after('<span class="save-message" style="color: red; margin-left: 10px;">Error</span>');
+
+                $('<span/>', {
+                    class: 'save-message',
+                    text: 'Error'
+                }).css({
+                    color: 'red',
+                    marginLeft: '10px'
+                }).insertAfter($checkbox);
             }
         });
     });
@@ -130,7 +163,13 @@ jQuery(document).ready(function($) {
             }
         }).done(function(response) {
             if (response && response.success) {
-                $message.text(response.data && response.data.message ? response.data.message : 'Saved');
+                var successMessage = 'Saved';
+
+                if (response.data && response.data.message) {
+                    successMessage = response.data.message;
+                }
+
+                $message.text(successMessage);
                 if (response.data && response.data.created) {
                     $input.val('');
                 }
@@ -162,7 +201,12 @@ jQuery(document).ready(function($) {
                     $('body').removeClass('bokun-team-member-overlay-active');
                 }
             } else {
-                var errorMessage = response && response.data && response.data.message ? response.data.message : 'Unable to save team member.';
+                var errorMessage = 'Unable to save team member.';
+
+                if (response && response.data && response.data.message) {
+                    errorMessage = response.data.message;
+                }
+
                 $message.text(errorMessage);
             }
         }).fail(function() {
