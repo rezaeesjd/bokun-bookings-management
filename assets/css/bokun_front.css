@@ -76,6 +76,24 @@
   border-collapse: collapse;
 }
 
+.bokun-booking-history-table thead .bokun-booking-history-filters th {
+  padding: 8px;
+}
+
+.bokun-booking-history-filter {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ccd0d4;
+  border-radius: 4px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.bokun-booking-history-filter:focus {
+  outline: 2px solid #2271b1;
+  outline-offset: 0;
+}
+
 .bokun-booking-history .bokun-history-toolbar {
   display: flex;
   flex-wrap: wrap;
