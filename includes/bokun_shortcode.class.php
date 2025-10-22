@@ -168,12 +168,281 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 );
             }
 
+            $filter_options = [
+                'action' => [],
+                'status' => [],
+                'actor'  => [],
+                'source' => [],
+            ];
+
+            $processed_logs = [];
+
+            foreach ($logs as $log) {
+                $timestamp = strtotime($log['created_at']);
+                $formatted_date = $timestamp ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $timestamp) : $log['created_at'];
+                $action_label = ucwords(str_replace('-', ' ', $log['action_type']));
+                $status_label = !empty($log['is_checked']) ? __('Checked', 'BOKUN_txt_domain') : __('Unchecked', 'BOKUN_txt_domain');
+                $actor_label  = $log['user_name'];
+
+                if (empty($actor_label) && !empty($log['user_id'])) {
+                    $user = get_user_by('id', (int) $log['user_id']);
+                    if ($user) {
+                        $actor_label = $user->display_name ? $user->display_name : $user->user_login;
+                    }
+                }
+
+                if (empty($actor_label)) {
+                    $actor_label = __('Unknown', 'BOKUN_txt_domain');
+                }
+
+                switch ($log['actor_source']) {
+                    case 'wp_user':
+                        $source_label = __('WordPress User', 'BOKUN_txt_domain');
+                        break;
+                    case 'team_member':
+                        $source_label = __('Team Member', 'BOKUN_txt_domain');
+                        break;
+                    default:
+                        $source_label = __('Guest', 'BOKUN_txt_domain');
+                        break;
+                }
+
+                $booking_display = esc_html($log['booking_id']);
+
+                if (!empty($log['post_id'])) {
+                    $edit_link = get_permalink((int) $log['post_id']);
+                    if ($edit_link) {
+                        $booking_display = sprintf(
+                            '<a href="%s">%s</a>',
+                            esc_url($edit_link),
+                            esc_html($log['booking_id'])
+                        );
+                    }
+                }
+
+                $action_value = sanitize_title($action_label);
+                $status_value = sanitize_title($status_label);
+                $actor_value  = sanitize_title($actor_label);
+                $source_value = sanitize_title($source_label);
+
+                if (!isset($filter_options['action'][$action_value])) {
+                    $filter_options['action'][$action_value] = $action_label;
+                }
+
+                if (!isset($filter_options['status'][$status_value])) {
+                    $filter_options['status'][$status_value] = $status_label;
+                }
+
+                if (!isset($filter_options['actor'][$actor_value])) {
+                    $filter_options['actor'][$actor_value] = $actor_label;
+                }
+
+                if (!isset($filter_options['source'][$source_value])) {
+                    $filter_options['source'][$source_value] = $source_label;
+                }
+
+                $processed_logs[] = [
+                    'date'           => $formatted_date,
+                    'booking_display'=> $booking_display,
+                    'action_label'   => $action_label,
+                    'action_value'   => $action_value,
+                    'status_label'   => $status_label,
+                    'status_value'   => $status_value,
+                    'actor_label'    => $actor_label,
+                    'actor_value'    => $actor_value,
+                    'source_label'   => $source_label,
+                    'source_value'   => $source_value,
+                ];
+            }
+
+            foreach ($filter_options as $key => $options) {
+                if (!empty($options)) {
+                    natcasesort($options);
+                    $filter_options[$key] = $options;
+                }
+            }
+
             $this->enqueue_booking_history_assets($export_title);
+
+            $table_id = sanitize_html_class('bokun-booking-history-table-' . uniqid());
 
             ob_start();
             ?>
             <div class="bokun-booking-history" data-export-title="<?php echo esc_attr($export_title); ?>">
-                <table class="bokun-booking-history-table display" aria-describedby="bokun-booking-history-caption">
+                <div class="bokun-history-filters" data-target-table="<?php echo esc_attr($table_id); ?>" aria-label="<?php esc_attr_e('Booking history filters', 'BOKUN_txt_domain'); ?>">
+                    <?php
+                    $filter_labels = [
+                        'action' => __('Action', 'BOKUN_txt_domain'),
+                        'status' => __('Status', 'BOKUN_txt_domain'),
+                        'actor'  => __('Actor', 'BOKUN_txt_domain'),
+                        'source' => __('Source', 'BOKUN_txt_domain'),
+                    ];
+
+                    $filter_columns = [
+                        'action' => 2,
+                        'status' => 3,
+                        'actor'  => 4,
+                        'source' => 5,
+                    ];
+
+                    $filter_index = 0;
+                    foreach ($filter_options as $filter_key => $options) :
+                        if (empty($options)) {
+                            continue;
+                        }
+
+                        $filter_index++;
+                        $search_id = sanitize_html_class('bokun-history-filter-' . $filter_key . '-search-' . $filter_index . '-' . uniqid());
+                        $search_label = sprintf(__('Search %s', 'BOKUN_txt_domain'), $filter_labels[$filter_key]);
+                    ?>
+                        <div class="bokun-history-filter" data-filter-key="<?php echo esc_attr($filter_key); ?>" data-filter-column="<?php echo isset($filter_columns[$filter_key]) ? (int) $filter_columns[$filter_key] : 0; ?>">
+                            <details>
+                                <summary><?php echo esc_html($filter_labels[$filter_key]); ?></summary>
+                                <div class="bokun-history-filter-search">
+                                    <label for="<?php echo esc_attr($search_id); ?>"><?php echo esc_html($search_label); ?></label>
+                                    <input type="text" id="<?php echo esc_attr($search_id); ?>" class="bokun-history-filter-text" data-filter-text placeholder="<?php echo esc_attr($search_label); ?>" />
+                                </div>
+                                <div class="bokun-history-filter-actions">
+                                    <button type="button" class="button" data-filter-select-all><?php esc_html_e('Select All', 'BOKUN_txt_domain'); ?></button>
+                                    <button type="button" class="button" data-filter-clear><?php esc_html_e('Clear', 'BOKUN_txt_domain'); ?></button>
+                                </div>
+                                <div class="bokun-history-filter-options">
+                                    <ul>
+                                        <?php foreach ($options as $option_value => $option_label) :
+                                            $option_label_text = wp_strip_all_tags($option_label);
+                                            $option_match = $option_label_text;
+                                            if (function_exists('mb_strtolower')) {
+                                                $option_match = mb_strtolower($option_match);
+                                            } else {
+                                                $option_match = strtolower($option_match);
+                                            }
+                                            $option_match = trim($option_match);
+                                        ?>
+                                            <li>
+                                                <label>
+                                                    <input type="checkbox" value="<?php echo esc_attr($option_value); ?>" data-filter-match="<?php echo esc_attr($option_match); ?>" checked />
+                                                    <span><?php echo esc_html($option_label); ?></span>
+                                                </label>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                </div>
+                            </details>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <style>
+                    .bokun-history-filters {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 12px;
+                        margin: 0 0 16px;
+                    }
+
+                    .bokun-history-filter {
+                        position: relative;
+                        min-width: 180px;
+                    }
+
+                    .bokun-history-filter details {
+                        border: 1px solid #dcdcde;
+                        border-radius: 4px;
+                        background: #fff;
+                    }
+
+                    .bokun-history-filter summary {
+                        padding: 8px 12px;
+                        cursor: pointer;
+                        font-weight: 600;
+                        list-style: none;
+                    }
+
+                    .bokun-history-filter summary::-webkit-details-marker {
+                        display: none;
+                    }
+
+                    .bokun-history-filter summary:after {
+                        content: '\25BC';
+                        float: right;
+                        font-size: 10px;
+                        margin-top: 4px;
+                    }
+
+                    .bokun-history-filter details[open] summary {
+                        border-bottom: 1px solid #dcdcde;
+                    }
+
+                    .bokun-history-filter details[open] summary:after {
+                        content: '\25B2';
+                    }
+
+                    .bokun-history-filter-search {
+                        padding: 12px 12px 0;
+                    }
+
+                    .bokun-history-filter-search label {
+                        display: block;
+                        font-size: 12px;
+                        font-weight: 600;
+                        margin: 0 0 4px;
+                    }
+
+                    .bokun-history-filter-search input[type="text"] {
+                        width: 100%;
+                        border: 1px solid #dcdcde;
+                        border-radius: 3px;
+                        padding: 6px 8px;
+                        font-size: 13px;
+                    }
+
+                    .bokun-history-filter-search input[type="text"]:focus {
+                        border-color: #2271b1;
+                        box-shadow: 0 0 0 1px rgba(34, 113, 177, 0.2);
+                        outline: none;
+                    }
+
+                    .bokun-history-filter-actions {
+                        display: flex;
+                        gap: 8px;
+                        padding: 8px 12px 0;
+                    }
+
+                    .bokun-history-filter-actions button {
+                        background: #f6f7f7;
+                        border: 1px solid #dcdcde;
+                        border-radius: 3px;
+                        cursor: pointer;
+                        font-size: 12px;
+                        padding: 4px 8px;
+                    }
+
+                    .bokun-history-filter-actions button:hover {
+                        background: #fff;
+                    }
+
+                    .bokun-history-filter-options {
+                        max-height: 200px;
+                        overflow: auto;
+                        padding: 8px 12px 12px;
+                    }
+
+                    .bokun-history-filter-options ul {
+                        margin: 8px 0 0;
+                    }
+
+                    .bokun-history-filter-options li {
+                        list-style: none;
+                        margin-bottom: 6px;
+                    }
+
+                    .bokun-history-filter-options label {
+                        display: flex;
+                        gap: 6px;
+                        font-size: 13px;
+                        cursor: pointer;
+                    }
+                </style>
+                <table class="bokun-booking-history-table display" id="<?php echo esc_attr($table_id); ?>" aria-describedby="bokun-booking-history-caption">
                     <caption id="bokun-booking-history-caption" class="screen-reader-text"><?php esc_html_e('Booking history activities', 'BOKUN_txt_domain'); ?></caption>
                     <thead>
                         <tr>
@@ -186,60 +455,14 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($logs as $log) :
-                            $timestamp = strtotime($log['created_at']);
-                            $formatted_date = $timestamp ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $timestamp) : $log['created_at'];
-                            $action_label = ucwords(str_replace('-', ' ', $log['action_type']));
-                            $status_label = !empty($log['is_checked']) ? __('Checked', 'BOKUN_txt_domain') : __('Unchecked', 'BOKUN_txt_domain');
-                            $actor_label  = $log['user_name'];
-
-                            if (empty($actor_label) && !empty($log['user_id'])) {
-                                $user = get_user_by('id', (int) $log['user_id']);
-                                if ($user) {
-                                    $actor_label = $user->display_name ? $user->display_name : $user->user_login;
-                                }
-                            }
-
-                            if (empty($actor_label)) {
-                                $actor_label = __('Unknown', 'BOKUN_txt_domain');
-                            }
-
-                            switch ($log['actor_source']) {
-                                case 'wp_user':
-                                    $source_label = __('WordPress User', 'BOKUN_txt_domain');
-                                    break;
-                                case 'team_member':
-                                    $source_label = __('Team Member', 'BOKUN_txt_domain');
-                                    break;
-                                default:
-                                    $source_label = __('Guest', 'BOKUN_txt_domain');
-                                    break;
-                            }
-
-                            $booking_id = $log['booking_id'];
-
-                            if (!empty($log['post_id'])) {
-                                $edit_link = get_permalink((int) $log['post_id']);
-                                if ($edit_link) {
-                                    $booking_id = sprintf(
-                                        '<a href="%s">%s</a>',
-                                        esc_url($edit_link),
-                                        esc_html($log['booking_id'])
-                                    );
-                                } else {
-                                    $booking_id = esc_html($log['booking_id']);
-                                }
-                            } else {
-                                $booking_id = esc_html($log['booking_id']);
-                            }
-                        ?>
-                            <tr>
-                                <td data-title="<?php esc_attr_e('Date', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($formatted_date); ?></td>
-                                <td data-title="<?php esc_attr_e('Booking ID', 'BOKUN_txt_domain'); ?>"><?php echo wp_kses_post($booking_id); ?></td>
-                                <td data-title="<?php esc_attr_e('Action', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($action_label); ?></td>
-                                <td data-title="<?php esc_attr_e('Status', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($status_label); ?></td>
-                                <td data-title="<?php esc_attr_e('Actor', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($actor_label); ?></td>
-                                <td data-title="<?php esc_attr_e('Source', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($source_label); ?></td>
+                        <?php foreach ($processed_logs as $log) : ?>
+                            <tr data-action="<?php echo esc_attr($log['action_value']); ?>" data-status="<?php echo esc_attr($log['status_value']); ?>" data-actor="<?php echo esc_attr($log['actor_value']); ?>" data-source="<?php echo esc_attr($log['source_value']); ?>">
+                                <td data-title="<?php esc_attr_e('Date', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($log['date']); ?></td>
+                                <td data-title="<?php esc_attr_e('Booking ID', 'BOKUN_txt_domain'); ?>"><?php echo wp_kses_post($log['booking_display']); ?></td>
+                                <td data-title="<?php esc_attr_e('Action', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($log['action_label']); ?></td>
+                                <td data-title="<?php esc_attr_e('Status', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($log['status_label']); ?></td>
+                                <td data-title="<?php esc_attr_e('Actor', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($log['actor_label']); ?></td>
+                                <td data-title="<?php esc_attr_e('Source', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($log['source_label']); ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
