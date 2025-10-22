@@ -16,6 +16,12 @@ $filter_options = [
     'actor'  => [],
     'source' => [],
 ];
+$filter_columns = [
+    'action' => 2,
+    'status' => 3,
+    'actor'  => 4,
+    'source' => 5,
+];
 
 if ($table_exists) {
     $limit = apply_filters('bokun_booking_history_page_limit', 100);
@@ -173,6 +179,31 @@ if (!empty($logs)) {
                 content: '\25B2';
             }
 
+            .bokun-history-filter-search {
+                padding: 12px 12px 0;
+            }
+
+            .bokun-history-filter-search label {
+                display: block;
+                font-size: 12px;
+                font-weight: 600;
+                margin: 0 0 4px;
+            }
+
+            .bokun-history-filter-search input[type="text"] {
+                width: 100%;
+                border: 1px solid #dcdcde;
+                border-radius: 3px;
+                padding: 6px 8px;
+                font-size: 13px;
+            }
+
+            .bokun-history-filter-search input[type="text"]:focus {
+                border-color: #2271b1;
+                box-shadow: 0 0 0 1px rgba(34, 113, 177, 0.2);
+                outline: none;
+            }
+
             .bokun-history-filter-options {
                 max-height: 200px;
                 overflow: auto;
@@ -224,25 +255,42 @@ if (!empty($logs)) {
         ];
         ?>
 
-        <div class="bokun-history-filters" aria-label="<?php esc_attr_e('Booking history filters', 'BOKUN_txt_domain'); ?>">
+        <?php $filter_index = 0; ?>
+        <div class="bokun-history-filters" data-target-table="bokun-booking-history-table" aria-label="<?php esc_attr_e('Booking history filters', 'BOKUN_txt_domain'); ?>">
             <?php foreach ($filter_options as $filter_key => $options) :
                 if (empty($options)) {
                     continue;
                 }
+                $filter_index++;
+                $search_id = sanitize_html_class('bokun-history-filter-' . $filter_key . '-search-' . $filter_index);
+                $search_label = sprintf(__('Search %s', 'BOKUN_txt_domain'), $filter_labels[$filter_key]);
             ?>
-                <div class="bokun-history-filter" data-filter-key="<?php echo esc_attr($filter_key); ?>">
+                <div class="bokun-history-filter" data-filter-key="<?php echo esc_attr($filter_key); ?>" data-filter-column="<?php echo isset($filter_columns[$filter_key]) ? (int) $filter_columns[$filter_key] : 0; ?>">
                     <details>
                         <summary><?php echo esc_html($filter_labels[$filter_key]); ?></summary>
+                        <div class="bokun-history-filter-search">
+                            <label for="<?php echo esc_attr($search_id); ?>"><?php echo esc_html($search_label); ?></label>
+                            <input type="text" id="<?php echo esc_attr($search_id); ?>" class="bokun-history-filter-text" data-filter-text placeholder="<?php echo esc_attr($search_label); ?>" />
+                        </div>
                         <div class="bokun-history-filter-actions">
                             <button type="button" class="button" data-filter-select-all><?php esc_html_e('Select All', 'BOKUN_txt_domain'); ?></button>
                             <button type="button" class="button" data-filter-clear><?php esc_html_e('Clear', 'BOKUN_txt_domain'); ?></button>
                         </div>
                         <div class="bokun-history-filter-options">
                             <ul>
-                                <?php foreach ($options as $option_value => $option_label) : ?>
+                                <?php foreach ($options as $option_value => $option_label) :
+                                    $option_label_text = wp_strip_all_tags($option_label);
+                                    $option_match = $option_label_text;
+                                    if (function_exists('mb_strtolower')) {
+                                        $option_match = mb_strtolower($option_match);
+                                    } else {
+                                        $option_match = strtolower($option_match);
+                                    }
+                                    $option_match = trim($option_match);
+                                ?>
                                     <li>
                                         <label>
-                                            <input type="checkbox" value="<?php echo esc_attr($option_value); ?>" checked />
+                                            <input type="checkbox" value="<?php echo esc_attr($option_value); ?>" data-filter-match="<?php echo esc_attr($option_match); ?>" checked />
                                             <span><?php echo esc_html($option_label); ?></span>
                                         </label>
                                     </li>
@@ -292,15 +340,18 @@ if (!empty($logs)) {
         <script>
             document.addEventListener('DOMContentLoaded', function () {
                 const filters = document.querySelectorAll('.bokun-history-filter');
-                const rows = Array.from(document.querySelectorAll('.bokun-booking-history-row'));
+                const table = document.getElementById('bokun-booking-history-table');
+                const rows = table ? Array.from(table.querySelectorAll('tbody tr.bokun-booking-history-row')) : [];
                 const activeFilters = new Map();
+                const textFilters = new Map();
+                const filterColumns = new Map();
 
                 const applyFilters = function () {
                     rows.forEach(function (row) {
                         let visible = true;
 
                         activeFilters.forEach(function (values, key) {
-                            if (!values.length) {
+                            if (!values.length || !visible) {
                                 return;
                             }
 
@@ -310,15 +361,47 @@ if (!empty($logs)) {
                             }
                         });
 
+                        if (visible) {
+                            textFilters.forEach(function (value, key) {
+                                if (!value || !visible) {
+                                    return;
+                                }
+
+                                const columnIndexAttr = filterColumns.get(key);
+                                if (typeof columnIndexAttr !== 'number') {
+                                    return;
+                                }
+
+                                const cells = row.getElementsByTagName('td');
+                                const cell = cells && cells.length > columnIndexAttr ? cells[columnIndexAttr] : null;
+                                const cellText = cell ? cell.textContent.toLowerCase() : '';
+
+                                if (cellText.indexOf(value) === -1) {
+                                    visible = false;
+                                }
+                            });
+                        }
+
                         row.style.display = visible ? '' : 'none';
                     });
                 };
 
                 filters.forEach(function (filter) {
                     const key = filter.getAttribute('data-filter-key');
+                    if (!key) {
+                        return;
+                    }
+
+                    const columnIndexAttr = filter.getAttribute('data-filter-column');
+                    const columnIndex = columnIndexAttr !== null ? parseInt(columnIndexAttr, 10) : NaN;
+                    if (!isNaN(columnIndex)) {
+                        filterColumns.set(key, columnIndex);
+                    }
+
                     const checkboxes = filter.querySelectorAll('input[type="checkbox"]');
                     const selectAllButton = filter.querySelector('[data-filter-select-all]');
                     const clearButton = filter.querySelector('[data-filter-clear]');
+                    const textInput = filter.querySelector('[data-filter-text]');
 
                     const updateFilterState = function () {
                         const selectedValues = Array.from(checkboxes)
@@ -333,9 +416,24 @@ if (!empty($logs)) {
                         applyFilters();
                     };
 
+                    const updateTextFilter = function () {
+                        if (!textInput) {
+                            return;
+                        }
+
+                        const value = textInput.value ? textInput.value.trim().toLowerCase() : '';
+                        textFilters.set(key, value);
+                        applyFilters();
+                    };
+
                     checkboxes.forEach(function (checkbox) {
                         checkbox.addEventListener('change', updateFilterState);
                     });
+
+                    if (textInput) {
+                        textInput.addEventListener('input', updateTextFilter);
+                        textInput.addEventListener('change', updateTextFilter);
+                    }
 
                     if (selectAllButton) {
                         selectAllButton.addEventListener('click', function (event) {
@@ -358,6 +456,7 @@ if (!empty($logs)) {
                     }
 
                     updateFilterState();
+                    updateTextFilter();
                 });
             });
         </script>
