@@ -26,6 +26,7 @@
             $table.DataTable({
                 dom: '<"bokun-history-toolbar"Bfrtip>',
                 order: [[0, 'desc']],
+                pageLength: 40,
                 buttons: [
                     {
                         extend: 'csvHtml5',
@@ -41,6 +42,49 @@
                 language: language,
                 initComplete: function () {
                     $table.attr('aria-live', 'polite');
+
+                    var api = this.api();
+                    var $thead = $table.find('thead');
+                    var $headerCells = $thead.find('tr').first().find('th');
+                    var $existingFilterRow = $thead.find('.bokun-booking-history-filters');
+
+                    if ($existingFilterRow.length) {
+                        $existingFilterRow.remove();
+                    }
+
+                    var $filterRow = $('<tr class="bokun-booking-history-filters" role="row"></tr>');
+
+                    api.columns().every(function () {
+                        var column = this;
+                        var columnIndex = column.index();
+                        var $cell = $('<th scope="col"></th>');
+
+                        if (columnIndex === 1) {
+                            $cell.addClass('bokun-booking-history-filter-disabled');
+                            $filterRow.append($cell);
+                            return;
+                        }
+
+                        var columnTitle = $headerCells.eq(columnIndex).text();
+                        var placeholderBase = (texts && texts.filterPlaceholder) || (texts && texts.filterLabel) || '';
+                        var placeholder = placeholderBase ? placeholderBase.replace('%s', columnTitle) : 'Filter ' + columnTitle;
+                        var $input = $('<input>', {
+                            type: 'text',
+                            class: 'bokun-booking-history-filter',
+                            'aria-label': 'Filter ' + columnTitle,
+                            placeholder: placeholder
+                        });
+
+                        $input.on('input change', function () {
+                            var value = this.value;
+                            column.search(value, false, true).draw();
+                        });
+
+                        $cell.append($input);
+                        $filterRow.append($cell);
+                    });
+
+                    $thead.append($filterRow);
                 }
             });
         });
