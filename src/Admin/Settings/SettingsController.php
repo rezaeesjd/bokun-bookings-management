@@ -1,12 +1,10 @@
 <?php
+
 namespace Bokun\Bookings\Admin\Settings;
 
+use Bokun\Bookings\Application\Synchronization\BookingSyncService;
 use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
 use Bokun\Bookings\Infrastructure\Validation\RequestSanitizer;
-
-if (! defined('ABSPATH')) {
-    exit;
-}
 
 class SettingsController
 {
@@ -20,10 +18,16 @@ class SettingsController
      */
     private $request;
 
-    public function __construct(SettingsRepository $settings, RequestSanitizer $request)
+    /**
+     * @var BookingSyncService
+     */
+    private $syncService;
+
+    public function __construct(SettingsRepository $settings, RequestSanitizer $request, BookingSyncService $syncService)
     {
         $this->settings = $settings;
         $this->request = $request;
+        $this->syncService = $syncService;
         add_action('wp_ajax_bokun_save_api_auth', [$this, 'savePrimaryCredentials'], 10);
         add_action('wp_ajax_nopriv_bokun_save_api_auth', [$this, 'savePrimaryCredentials'], 10);
 
@@ -35,6 +39,9 @@ class SettingsController
 
         add_action('wp_ajax_bokun_get_import_progress', [$this, 'getImportProgress'], 10);
         add_action('wp_ajax_nopriv_bokun_get_import_progress', [$this, 'getImportProgress'], 10);
+
+        add_action('wp_ajax_bokun_validate_credentials', [$this, 'validateCredentials'], 10);
+        add_action('wp_ajax_bokun_run_background_sync', [$this, 'runBackgroundSync'], 10);
     }
 
     public function handleBookingsManagerPage()
@@ -151,6 +158,18 @@ class SettingsController
                 $api_key_upgrade = $upgradeCredentials['api_key'];
                 $secret_key_upgrade = $upgradeCredentials['secret_key'];
 
+                $sync_status = $this->syncService->getDisplayStatus();
+                $credentials_overview = [
+                    'primary' => [
+                        'configured' => $this->isCredentialPairConfigured($primaryCredentials),
+                    ],
+                    'upgrade' => [
+                        'configured' => $this->isCredentialPairConfigured($upgradeCredentials),
+                    ],
+                ];
+
+                $onboarding_steps = $this->buildOnboardingSteps($credentials_overview, $sync_status);
+
                 include $view;
             }
         }
@@ -179,6 +198,129 @@ class SettingsController
     public function bokun_display_settings()
     {
         $this->displaySettingsPage();
+    }
+
+    public function limitValidationItems($perPage)
+    {
+        return 1;
+    }
+
+    public function validateCredentials()
+    {
+        if (! current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('You do not have permission to perform this action.', BOKUN_TEXT_DOMAIN)], 403);
+        }
+
+        if (! check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
+            wp_send_json_error(['message' => __('Invalid request. Please refresh the page and try again.', BOKUN_TEXT_DOMAIN)]);
+            wp_die();
+        }
+
+        $mode = $this->request->postEnum('mode', ['primary', 'upgrade'], 'primary');
+        $context = ('upgrade' === $mode) ? 'upgrade' : '';
+
+        $this->ensureLegacyIncludes();
+
+        add_filter('bokun_booking_items_per_page', [$this, 'limitValidationItems'], 99);
+        $bookings = '' !== $context ? bokun_fetch_bookings($context) : bokun_fetch_bookings();
+        remove_filter('bokun_booking_items_per_page', [$this, 'limitValidationItems'], 99);
+
+        if (is_string($bookings)) {
+            $message = trim($bookings);
+            $message = $message !== '' ? $message : __('The credentials could not be validated.', BOKUN_TEXT_DOMAIN);
+
+            wp_send_json_error([
+                'status'  => 'error',
+                'message' => $message,
+                'mode'    => $mode,
+            ]);
+            wp_die();
+        }
+
+        $count = is_array($bookings) ? count($bookings) : 0;
+
+        $message = $count > 0
+            ? sprintf(__('Connection successful. Retrieved %d bookings.', BOKUN_TEXT_DOMAIN), $count)
+            : __('Connection successful, but no bookings were returned for the selected credentials.', BOKUN_TEXT_DOMAIN);
+
+        wp_send_json_success([
+            'status'  => 'success',
+            'message' => $message,
+            'mode'    => $mode,
+            'count'   => $count,
+        ]);
+        wp_die();
+    }
+
+    public function runBackgroundSync()
+    {
+        if (! current_user_can('manage_options')) {
+            wp_send_json_error(['message' => __('You do not have permission to perform this action.', BOKUN_TEXT_DOMAIN)], 403);
+        }
+
+        if (! check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
+            wp_send_json_error(['message' => __('Invalid request. Please refresh the page and try again.', BOKUN_TEXT_DOMAIN)]);
+            wp_die();
+        }
+
+        $this->ensureLegacyIncludes();
+
+        $result = $this->syncService->run('manual');
+        $status = isset($result['status']) ? $result['status'] : 'error';
+
+        $payload = [
+            'status'      => $status,
+            'message'     => isset($result['message']) ? $result['message'] : '',
+            'summary'     => isset($result['summary']) ? $result['summary'] : [],
+            'sync_status' => $this->syncService->getDisplayStatus(),
+        ];
+
+        if ('error' === $status || 'locked' === $status) {
+            $payload['error'] = isset($result['error']) ? $result['error'] : '';
+            wp_send_json_error($payload);
+            wp_die();
+        }
+
+        wp_send_json_success($payload);
+        wp_die();
+    }
+
+    private function isCredentialPairConfigured(array $credentials)
+    {
+        return ! empty($credentials['api_key']) && ! empty($credentials['secret_key']);
+    }
+
+    private function buildOnboardingSteps(array $credentialsOverview, array $syncStatus)
+    {
+        $steps = [];
+
+        $steps[] = [
+            'label'     => __('Enter your primary Bokun API keys', BOKUN_TEXT_DOMAIN),
+            'completed' => ! empty($credentialsOverview['primary']['configured']),
+        ];
+
+        $steps[] = [
+            'label'     => __('Add upgrade credentials (optional)', BOKUN_TEXT_DOMAIN),
+            'completed' => ! empty($credentialsOverview['upgrade']['configured']),
+        ];
+
+        $lastStatus = isset($syncStatus['last_status']) ? $syncStatus['last_status'] : '';
+        $steps[] = [
+            'label'     => __('Confirm an automatic sync completes successfully', BOKUN_TEXT_DOMAIN),
+            'completed' => in_array($lastStatus, ['success', 'empty'], true),
+        ];
+
+        return $steps;
+    }
+
+    private function ensureLegacyIncludes(): void
+    {
+        if (defined('BOKUN_INCLUDES_DIR')) {
+            $managerFile = rtrim(BOKUN_INCLUDES_DIR, '/\\') . '/bokun-bookings-manager.php';
+            if (file_exists($managerFile)) {
+                include_once $managerFile;
+            }
+        }
     }
 }
 

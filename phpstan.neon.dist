@@ -1,0 +1,10 @@
+parameters:
+    level: 5
+    paths:
+        - src/Infrastructure
+        - src/Registration
+        - src/Plugin.php
+    tmpDir: var/phpstan
+    bootstrapFiles:
+        - stubs/phpstan-bootstrap.php
+    treatPhpDocTypesAsCertain: false

@@ -3,10 +3,12 @@
 namespace Bokun\Bookings\Infrastructure\ServiceProvider;
 
 use Bokun\Bookings\Admin\Assets\AdminAssets;
-use Bokun\Bookings\Admin\Localization\LocalizationLoader;
 use Bokun\Bookings\Admin\History\BookingHistoryPage;
+use Bokun\Bookings\Admin\Localization\LocalizationLoader;
 use Bokun\Bookings\Admin\Menu\AdminMenu;
 use Bokun\Bookings\Admin\PostType\BookingListEnhancer;
+use Bokun\Bookings\Admin\Settings\SettingsPage;
+use Bokun\Bookings\Application\Synchronization\BookingSyncService;
 use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
 use Bokun\Bookings\Infrastructure\Container;
 use Bokun\Bookings\Infrastructure\ServiceProviderInterface;
@@ -14,6 +16,9 @@ use Bokun\Bookings\Registration\PostTypeRegistrar;
 use Bokun\Bookings\Registration\TaxonomyRegistrar;
 use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
 use Bokun\Bookings\Infrastructure\Validation\RequestSanitizer;
+use Bokun\Bookings\Registration\Activator;
+use Bokun\Bookings\Registration\Database\BookingHistoryTableCreator;
+use Bokun\Bookings\Registration\Deactivator;
 
 class LegacyServiceProvider implements ServiceProviderInterface
 {
@@ -40,9 +45,37 @@ class LegacyServiceProvider implements ServiceProviderInterface
             });
         }
 
+        if (! $container->has('bokun.booking_history_table_creator')) {
+            $container->singleton('bokun.booking_history_table_creator', function () {
+                return new BookingHistoryTableCreator();
+            });
+        }
+
+        if (! $container->has('bokun.booking_sync_service')) {
+            $container->singleton('bokun.booking_sync_service', function () {
+                $service = new BookingSyncService();
+                $service->register();
+
+                return $service;
+            });
+        }
+
+        if (! $container->has('bokun.settings_page')) {
+            $container->singleton('bokun.settings_page', function (Container $container) {
+                return new SettingsPage(
+                    $container->get('bokun.settings'),
+                    'bokun_settings',
+                    __('Settings', BOKUN_TEXT_DOMAIN)
+                );
+            });
+        }
+
         if (! $container->has('bokun.admin_menu')) {
-            $container->singleton('bokun.admin_menu', function () {
-                return new AdminMenu();
+            $container->singleton('bokun.admin_menu', function (Container $container) {
+                return new AdminMenu([
+                    $container->get('bokun.settings_page'),
+                    $container->get('bokun.booking_history_page'),
+                ]);
             });
         }
 
@@ -76,7 +109,9 @@ class LegacyServiceProvider implements ServiceProviderInterface
         if (! $container->has('bokun.booking_history_page')) {
             $container->singleton('bokun.booking_history_page', function (Container $container) {
                 return new BookingHistoryPage(
-                    $container->get('bokun.data_sanitizer')
+                    $container->get('bokun.data_sanitizer'),
+                    'bokun_booking_history',
+                    __('Booking History', BOKUN_TEXT_DOMAIN)
                 );
             });
         }
@@ -108,7 +143,8 @@ class LegacyServiceProvider implements ServiceProviderInterface
             $container->singleton('bokun.settings', function (Container $container) {
                 return new \Bokun\Bookings\Admin\Settings\SettingsController(
                     $container->get('bokun.settings_repository'),
-                    $container->get('bokun.request_sanitizer')
+                    $container->get('bokun.request_sanitizer'),
+                    $container->get('bokun.booking_sync_service')
                 );
             });
         }
@@ -116,6 +152,24 @@ class LegacyServiceProvider implements ServiceProviderInterface
         if (! $container->has('bokun.shortcode')) {
             $container->singleton('bokun.shortcode', function () {
                 return new \Bokun\Bookings\Presentation\Shortcode\BookingShortcode();
+            });
+        }
+
+        if (! $container->has('bokun.activator')) {
+            $container->singleton('bokun.activator', function (Container $container) {
+                return new Activator(
+                    \BokunBookingManagement::VERSION,
+                    $container->get('bokun.booking_history_table_creator'),
+                    $container->get('bokun.booking_sync_service')
+                );
+            });
+        }
+
+        if (! $container->has('bokun.deactivator')) {
+            $container->singleton('bokun.deactivator', function (Container $container) {
+                return new Deactivator(
+                    $container->get('bokun.booking_sync_service')
+                );
             });
         }
     }

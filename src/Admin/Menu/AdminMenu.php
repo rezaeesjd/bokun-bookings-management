@@ -1,32 +1,37 @@
 <?php
+
 namespace Bokun\Bookings\Admin\Menu;
-
-use Bokun\Bookings\Plugin;
-
-if (! defined('ABSPATH')) {
-    exit;
-}
 
 class AdminMenu
 {
     /**
-     * @var string
+     * @var array<string, AdminPageInterface>
      */
-    private $settingsSlug;
+    private $pages = [];
 
     /**
      * @var string
      */
-    private $bookingHistorySlug;
+    private $mainSlug;
 
     /**
-     * @param string $settingsSlug
-     * @param string $bookingHistorySlug
+     * @param array<int, AdminPageInterface> $pages
+     * @param string                         $mainSlug
      */
-    public function __construct($settingsSlug = 'bokun_settings', $bookingHistorySlug = 'bokun_booking_history')
+    public function __construct(array $pages = [], $mainSlug = 'edit.php?post_type=bokun_booking')
     {
-        $this->settingsSlug = $settingsSlug;
-        $this->bookingHistorySlug = $bookingHistorySlug;
+        $this->mainSlug = $mainSlug;
+
+        foreach ($pages as $page) {
+            if ($page instanceof AdminPageInterface) {
+                $this->addPage($page);
+            }
+        }
+    }
+
+    public function addPage(AdminPageInterface $page): void
+    {
+        $this->pages[$page->getSlug()] = $page;
     }
 
     /**
@@ -42,16 +47,14 @@ class AdminMenu
      */
     public function registerMenu()
     {
-        $mainSlug = 'edit.php?post_type=bokun_booking';
-
-        foreach ($this->getSubmenuItems() as $submenu) {
+        foreach ($this->pages as $page) {
             add_submenu_page(
-                $mainSlug,
-                $submenu['name'],
-                $submenu['name'],
-                $submenu['cap'],
-                $submenu['slug'],
-                [$this, 'renderPage']
+                $this->mainSlug,
+                $page->getTitle(),
+                $page->getTitle(),
+                $page->getCapability(),
+                $page->getSlug(),
+                [$page, 'render']
             );
         }
     }
@@ -79,23 +82,10 @@ class AdminMenu
     {
         $page = isset($_REQUEST['page']) ? sanitize_key(wp_unslash($_REQUEST['page'])) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-        switch ($page) {
-            case $this->settingsSlug:
-                $settings = $this->resolveSettingsController();
+        $controller = $this->resolvePage($page);
 
-                if ($settings && method_exists($settings, 'displaySettingsPage')) {
-                    $settings->displaySettingsPage();
-                } elseif ($settings && method_exists($settings, 'bokun_display_settings')) {
-                    $settings->bokun_display_settings();
-                }
-                break;
-            case $this->bookingHistorySlug:
-                $view = trailingslashit(BOKUN_INCLUDES_DIR) . 'bokun_booking_history.view.php';
-
-                if (file_exists($view)) {
-                    include_once $view;
-                }
-                break;
+        if ($controller instanceof AdminPageInterface) {
+            $controller->render();
         }
     }
 
@@ -104,20 +94,19 @@ class AdminMenu
      *
      * @return array<int, array<string, string>>
      */
-    public function getSubmenuItems()
+    public function getSubmenuItems(): array
     {
-        return [
-            [
-                'name' => __('Settings', BOKUN_TEXT_DOMAIN),
-                'cap'  => 'manage_options',
-                'slug' => $this->settingsSlug,
-            ],
-            [
-                'name' => __('Booking History', BOKUN_TEXT_DOMAIN),
-                'cap'  => 'manage_options',
-                'slug' => $this->bookingHistorySlug,
-            ],
-        ];
+        $items = [];
+
+        foreach ($this->pages as $page) {
+            $items[] = [
+                'name' => $page->getTitle(),
+                'cap'  => $page->getCapability(),
+                'slug' => $page->getSlug(),
+            ];
+        }
+
+        return $items;
     }
 
     /**
@@ -125,9 +114,9 @@ class AdminMenu
      *
      * @return array<int, string>
      */
-    public function getPageSlugs()
+    public function getPageSlugs(): array
     {
-        return [$this->settingsSlug, $this->bookingHistorySlug];
+        return array_keys($this->pages);
     }
 
     /**
@@ -154,16 +143,10 @@ class AdminMenu
         return isset($messages[$key]) ? $messages[$key] : false;
     }
 
-    private function resolveSettingsController()
+    private function resolvePage($slug): ?AdminPageInterface
     {
-        $container = Plugin::getContainerInstance();
-
-        if ($container && $container->has('bokun.settings')) {
-            try {
-                return $container->get('bokun.settings');
-            } catch (\Throwable $exception) {
-                return null;
-            }
+        if (isset($this->pages[$slug])) {
+            return $this->pages[$slug];
         }
 
         return null;

@@ -1,9 +1,6 @@
 <?php
-namespace Bokun\Bookings\Admin\Localization;
 
-if (! defined('ABSPATH')) {
-    exit;
-}
+namespace Bokun\Bookings\Admin\Localization;
 
 class LocalizationLoader
 {

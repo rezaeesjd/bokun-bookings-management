@@ -1,11 +1,8 @@
 <?php
+
 namespace Bokun\Bookings\Admin\Assets;
 
 use Bokun\Bookings\Admin\Menu\AdminMenu;
-
-if (! defined('ABSPATH')) {
-    exit;
-}
 
 class AdminAssets
 {
@@ -65,6 +62,39 @@ class AdminAssets
             [
                 'nonce'    => wp_create_nonce('bokun_api_auth_nonce'),
                 'ajax_url' => admin_url('admin-ajax.php'),
+                'messages' => [
+                    'validating'     => __('Validating credentials…', BOKUN_TEXT_DOMAIN),
+                    'validationError'=> __('Unable to validate credentials. Please try again.', BOKUN_TEXT_DOMAIN),
+                    'syncing'        => __('Running background sync…', BOKUN_TEXT_DOMAIN),
+                    'syncError'      => __('The background sync could not be completed. Please check the logs for details.', BOKUN_TEXT_DOMAIN),
+                    'syncLocked'     => __('A sync is already running. Please wait and try again.', BOKUN_TEXT_DOMAIN),
+                    'ago'            => __('ago', BOKUN_TEXT_DOMAIN),
+                    'never'          => __('Never', BOKUN_TEXT_DOMAIN),
+                    'notScheduled'   => __('Not scheduled', BOKUN_TEXT_DOMAIN),
+                    'summaryCreated' => __('%d new', BOKUN_TEXT_DOMAIN),
+                    'summaryUpdated' => __('%d updated', BOKUN_TEXT_DOMAIN),
+                    'summarySkipped' => __('%d skipped', BOKUN_TEXT_DOMAIN),
+                    'importComplete' => __('Import complete', BOKUN_TEXT_DOMAIN),
+                    'importProgress' => __('Import progress', BOKUN_TEXT_DOMAIN),
+                    'importProgressWithTotals' => __('Import progress ({current}/{total})', BOKUN_TEXT_DOMAIN),
+                    'importingItem'  => __('Importing item {current}/{total}', BOKUN_TEXT_DOMAIN),
+                    'importedCount'  => __('Imported {current}/{total}', BOKUN_TEXT_DOMAIN),
+                    'startingImport' => __('Starting import…', BOKUN_TEXT_DOMAIN),
+                    'processing'     => __('Processing…', BOKUN_TEXT_DOMAIN),
+                    'progressApi1Start'    => __('Fetching items from API 1…', BOKUN_TEXT_DOMAIN),
+                    'progressApi1Complete' => __('Finished API 1', BOKUN_TEXT_DOMAIN),
+                    'progressApi2Start'    => __('Fetching items from API 2… ({current} processed so far)', BOKUN_TEXT_DOMAIN),
+                    'progressApi2Complete' => __('Finished API 2', BOKUN_TEXT_DOMAIN),
+                    'summaryApi1Label'     => __('Imported items from API 1', BOKUN_TEXT_DOMAIN),
+                    'summaryApi2Label'     => __('Imported items from API 2', BOKUN_TEXT_DOMAIN),
+                    'importInterrupted'    => __('Import interrupted', BOKUN_TEXT_DOMAIN),
+                    'importErrorDetails'   => __('Check the error message for details.', BOKUN_TEXT_DOMAIN),
+                    'genericError'         => __('An error occurred. Please try again.', BOKUN_TEXT_DOMAIN),
+                    'errorPrefix'          => __('Error:', BOKUN_TEXT_DOMAIN),
+                    'successPrefix'        => __('Success:', BOKUN_TEXT_DOMAIN),
+                    'alertErrorMessage'    => __('Error: {message}', BOKUN_TEXT_DOMAIN),
+                    'alertUnexpectedResponse' => __('Error: Received unexpected response code {status}. Response: {response}', BOKUN_TEXT_DOMAIN),
+                ],
             ]
         );
 

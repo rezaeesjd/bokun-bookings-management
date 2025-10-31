@@ -1,9 +1,11 @@
 <?php
+
 namespace Bokun\Bookings;
 
-use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
 use Bokun\Bookings\Infrastructure\Container;
 use Bokun\Bookings\Infrastructure\ServiceProvider\LegacyServiceProvider;
+use Bokun\Bookings\Registration\Activator;
+use Bokun\Bookings\Registration\Deactivator;
 
 class Plugin
 {
@@ -30,6 +32,14 @@ class Plugin
         $this->pluginFile = $pluginFile;
         $this->container = $container ?: new Container();
         self::$instance = $this;
+
+        $pluginFilePath = $this->pluginFile;
+
+        if (! $this->container->has('bokun.plugin_file')) {
+            $this->container->singleton('bokun.plugin_file', function () use ($pluginFilePath) {
+                return $pluginFilePath;
+            });
+        }
     }
 
     /**
@@ -39,6 +49,7 @@ class Plugin
     {
         $this->registerServices();
         $this->defineConstants();
+        $this->registerLifecycleHooks();
         $this->loadPlugin();
     }
 
@@ -66,21 +77,27 @@ class Plugin
         $this->container->register(new LegacyServiceProvider());
     }
 
+    private function registerLifecycleHooks()
+    {
+        if (function_exists('register_activation_hook') && $this->container->has('bokun.activator')) {
+            /** @var Activator $activator */
+            $activator = $this->container->get('bokun.activator');
+            $activator->register($this->pluginFile);
+        }
+
+        if (function_exists('register_deactivation_hook') && $this->container->has('bokun.deactivator')) {
+            /** @var Deactivator $deactivator */
+            $deactivator = $this->container->get('bokun.deactivator');
+            $deactivator->register($this->pluginFile);
+        }
+    }
+
     private function defineConstants()
     {
         $this->define('BOKUN_PLUGIN', '/bokun-bookings-management/');
         $this->define('BOKUN_PLUGIN_VERSION', \BokunBookingManagement::VERSION);
 
-        /** @var SettingsRepository $settings */
-        $settings = $this->container->get('bokun.settings_repository');
-        $primaryCredentials = $settings->getPrimaryCredentials();
-        $upgradeCredentials = $settings->getUpgradeCredentials();
-
         $this->define('BOKUN_API_BASE_URL', 'https://api.bokun.io');
-        $this->define('BOKUN_API_KEY', $primaryCredentials['api_key']);
-        $this->define('BOKUN_SECRET_KEY', $primaryCredentials['secret_key']);
-        $this->define('BOKUN_API_KEY_UPGRADE', $upgradeCredentials['api_key']);
-        $this->define('BOKUN_SECRET_KEY_UPGRADE', $upgradeCredentials['secret_key']);
         $this->define('BOKUN_API_BOOKING_API', '/booking.json/booking-search');
 
         $pluginDir = WP_PLUGIN_DIR . BOKUN_PLUGIN;
@@ -103,10 +120,7 @@ class Plugin
         $this->define('BOKUN_IMAGES_URL', $pluginUrl . 'images/');
         $this->define('BOKUN_CSS_URL', $pluginUrl . 'css/');
         $this->define('BOKUN_JS_URL', $pluginUrl . 'js/');
-        $this->define('BOKUN_AUTH_URL', '');
-
         $this->define('BOKUN_TEXT_DOMAIN', 'bokun-bookings-management');
-        $this->define('BOKUN_txt_domain', BOKUN_TEXT_DOMAIN);
     }
 
     private function loadPlugin()

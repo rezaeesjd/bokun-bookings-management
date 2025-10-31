@@ -1,0 +1,53 @@
+name: Build release package
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Package plugin
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-dev --prefer-dist --optimize-autoloader
+
+      - name: Prepare build directory
+        run: |
+          PACKAGE_DIR="build/bokun-bookings-management"
+          rm -rf "$PACKAGE_DIR"
+          mkdir -p "$PACKAGE_DIR"
+          rsync -av --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude 'build/' \
+            --exclude 'docs/' \
+            --exclude 'stubs/' \
+            --exclude '.DS_Store' \
+            ./ "$PACKAGE_DIR"/
+
+      - name: Create zip archive
+        run: |
+          cd build
+          zip -r "bokun-bookings-management-${GITHUB_REF_NAME}.zip" bokun-bookings-management
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bokun-bookings-management-${{ github.ref_name }}
+          path: build/bokun-bookings-management-${{ github.ref_name }}.zip
+          if-no-files-found: error

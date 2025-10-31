@@ -4,10 +4,6 @@ namespace Bokun\Bookings\Infrastructure\Config;
 
 use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
 
-if (! defined('ABSPATH')) {
-    exit;
-}
-
 /**
  * Repository for retrieving and persisting plugin configuration options.
  */

@@ -1,9 +1,6 @@
 <?php
-namespace Bokun\Bookings\Presentation\Shortcode;
 
-if (! defined('ABSPATH')) {
-    exit;
-}
+namespace Bokun\Bookings\Presentation\Shortcode;
 
 class BookingShortcode
 {

@@ -1,12 +1,11 @@
 <?php
+
 namespace Bokun\Bookings\Admin\History;
 
 use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
+use DateTimeImmutable;
+use DateTimeZone;
 use WP_List_Table;
-
-if (! defined('ABSPATH')) {
-    exit;
-}
 
 if (! class_exists('WP_List_Table')) {
     require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
@@ -77,13 +76,9 @@ class BookingHistoryTable extends WP_List_Table
      */
     public function prepare_items()
     {
-        global $wpdb;
+        $context = $this->buildQueryContext();
 
-        $tableName = $wpdb->prefix . 'bokun_booking_history';
-        $likeName  = $wpdb->esc_like($tableName);
-        $tableExists = ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $likeName)) === $tableName);
-
-        if (! $tableExists) {
+        if (! $context['exists']) {
             $this->items = [];
             $this->_column_headers = [$this->get_columns(), [], $this->get_sortable_columns()];
             return;
@@ -93,89 +88,10 @@ class BookingHistoryTable extends WP_List_Table
         $currentPage = max(1, (int) $this->get_pagenum());
         $offset = ($currentPage - 1) * $perPage;
 
-        $where   = [];
-        $params  = [];
+        list($orderBy, $order) = $this->resolveRequestedOrder();
 
-        $filters = $this->filters;
-
-        if (! empty($filters['action']) && isset($this->filterOptions['action'][$filters['action']])) {
-            $action = $this->filterOptions['action'][$filters['action']];
-            $where[] = 'action_type = %s';
-            $params[] = $action['query']['action_type'];
-        }
-
-        if (! empty($filters['status']) && isset($this->filterOptions['status'][$filters['status']])) {
-            $status = $this->filterOptions['status'][$filters['status']];
-            $where[] = 'is_checked = %d';
-            $params[] = (int) $status['query']['is_checked'];
-        }
-
-        if (! empty($filters['source']) && isset($this->filterOptions['source'][$filters['source']])) {
-            $source = $this->filterOptions['source'][$filters['source']];
-            $where[] = 'actor_source = %s';
-            $params[] = $source['query']['actor_source'];
-        }
-
-        if (! empty($filters['actor']) && isset($this->filterOptions['actor'][$filters['actor']])) {
-            $actor = $this->filterOptions['actor'][$filters['actor']];
-            if (! empty($actor['query']['user_name'])) {
-                $where[] = 'user_name = %s';
-                $params[] = $actor['query']['user_name'];
-            } elseif (! empty($actor['query']['user_id'])) {
-                $where[] = 'user_id = %d';
-                $params[] = (int) $actor['query']['user_id'];
-            } else {
-                $where[] = '(user_name IS NULL OR user_name = \'\')';
-            }
-        }
-
-        $search = isset($_REQUEST['s']) ? $this->sanitizer->text(wp_unslash($_REQUEST['s']), '') : '';
-        if ('' !== $search) {
-            $like = '%' . $wpdb->esc_like($search) . '%';
-            $where[] = '(booking_id LIKE %s OR user_name LIKE %s OR action_type LIKE %s)';
-            $params[] = $like;
-            $params[] = $like;
-            $params[] = $like;
-        }
-
-        $whereSql = '';
-        if (! empty($where)) {
-            $whereSql = 'WHERE ' . implode(' AND ', $where);
-        }
-
-        $orderBy = isset($_REQUEST['orderby']) ? $this->sanitizer->key(wp_unslash($_REQUEST['orderby']), 'created_at') : 'created_at';
-        $allowedOrderBys = [
-            'created_at' => 'created_at',
-            'booking_id' => 'booking_id',
-            'action_type' => 'action_type',
-            'is_checked' => 'is_checked',
-            'user_name' => 'user_name',
-        ];
-
-        if (! isset($allowedOrderBys[$orderBy])) {
-            $orderBy = 'created_at';
-        }
-
-        $order = isset($_REQUEST['order']) ? strtoupper($this->sanitizer->key(wp_unslash($_REQUEST['order']), 'DESC')) : 'DESC';
-        $order = in_array($order, ['ASC', 'DESC'], true) ? $order : 'DESC';
-
-        $countQuery = "SELECT COUNT(*) FROM {$tableName} {$whereSql}";
-        if (! empty($params)) {
-            $countQuery = $wpdb->prepare($countQuery, $params);
-        }
-        $totalItems = $wpdb->get_var($countQuery);
-
-        $dataQuery = "SELECT id, post_id, booking_id, action_type, is_checked, user_id, user_name, actor_source, created_at
-            FROM {$tableName}
-            {$whereSql}
-            ORDER BY {$allowedOrderBys[$orderBy]} {$order}
-            LIMIT %d OFFSET %d";
-
-        $queryParams = $params;
-        $queryParams[] = (int) $perPage;
-        $queryParams[] = (int) $offset;
-
-        $rawItems = $wpdb->get_results($wpdb->prepare($dataQuery, $queryParams), ARRAY_A);
+        $totalItems = $this->countItems($context['table'], $context['where'], $context['params']);
+        $rawItems = $this->fetchRows($context['table'], $context['where'], $context['params'], $orderBy, $order, $perPage, $offset);
 
         $items = [];
         foreach ((array) $rawItems as $row) {
@@ -191,6 +107,72 @@ class BookingHistoryTable extends WP_List_Table
             'per_page'    => (int) $perPage,
             'total_pages' => $perPage > 0 ? (int) ceil($totalItems / $perPage) : 0,
         ]);
+    }
+
+    public function exportToCsv($filename, $batchSize = 500)
+    {
+        $context = $this->buildQueryContext();
+
+        if (! $context['exists']) {
+            wp_die(esc_html__('The booking history table is not available for export.', BOKUN_TEXT_DOMAIN));
+        }
+
+        if (! is_numeric($batchSize) || $batchSize <= 0) {
+            $batchSize = 500;
+        }
+
+        $batchSize = (int) apply_filters('bokun_booking_history_export_batch_size', $batchSize);
+
+        if ($batchSize <= 0) {
+            $batchSize = 500;
+        }
+
+        list($orderBy, $order) = $this->resolveRequestedOrder();
+
+        nocache_headers();
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . sanitize_file_name($filename) . '"');
+
+        $output = fopen('php://output', 'w');
+        if (! $output) {
+            wp_die(esc_html__('Unable to open output stream for export.', BOKUN_TEXT_DOMAIN));
+        }
+
+        // Output UTF-8 BOM for compatibility with Excel.
+        fwrite($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+        $columns = $this->get_columns();
+        fputcsv($output, array_values($columns));
+
+        $offset = 0;
+
+        do {
+            $rows = $this->fetchRows($context['table'], $context['where'], $context['params'], $orderBy, $order, (int) $batchSize, $offset);
+
+            if (empty($rows)) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                $item = $this->transformRow($row);
+                $line = [];
+                foreach (array_keys($columns) as $columnKey) {
+                    $value = isset($item[$columnKey]) ? $item[$columnKey] : '';
+
+                    if ('booking_id' === $columnKey && isset($row['booking_id'])) {
+                        $value = $row['booking_id'];
+                    }
+
+                    $line[] = is_scalar($value) ? $value : '';
+                }
+                fputcsv($output, $line);
+            }
+
+            $offset += count($rows);
+        } while (count($rows) === (int) $batchSize);
+
+        fclose($output);
+        exit;
     }
 
     /**
@@ -359,10 +341,27 @@ class BookingHistoryTable extends WP_List_Table
             echo '</select>';
         }
 
+        echo '</div>';
+
+        $dateStart = isset($this->filters['date_start']) ? $this->filters['date_start'] : '';
+        $dateEnd   = isset($this->filters['date_end']) ? $this->filters['date_end'] : '';
+
+        echo '<div class="alignleft actions">';
+        echo '<label for="bokun_history_date_start" class="screen-reader-text">' . esc_html__('Filter from date', BOKUN_TEXT_DOMAIN) . '</label>';
+        echo '<input type="date" id="bokun_history_date_start" name="bokun_history_date_start" value="' . esc_attr($dateStart) . '" />';
+        echo '</div>';
+
+        echo '<div class="alignleft actions">';
+        echo '<label for="bokun_history_date_end" class="screen-reader-text">' . esc_html__('Filter to date', BOKUN_TEXT_DOMAIN) . '</label>';
+        echo '<input type="date" id="bokun_history_date_end" name="bokun_history_date_end" value="' . esc_attr($dateEnd) . '" />';
+        echo '</div>';
+
+        echo '<div class="alignleft actions">';
         submit_button(__('Filter'), '', 'filter_action', false);
+        echo ' <button type="submit" class="button action" name="bokun_history_export" value="csv">' . esc_html__('Export CSV', BOKUN_TEXT_DOMAIN) . '</button>';
 
         $resetUrl = $this->pageSlug ? remove_query_arg(
-            ['bokun_history_action', 'bokun_history_status', 'bokun_history_actor', 'bokun_history_source', 's', 'orderby', 'order', 'paged'],
+            ['bokun_history_action', 'bokun_history_status', 'bokun_history_actor', 'bokun_history_source', 'bokun_history_date_start', 'bokun_history_date_end', 's', 'orderby', 'order', 'paged'],
             add_query_arg('page', $this->pageSlug, admin_url('admin.php'))
         ) : '';
 
@@ -371,5 +370,183 @@ class BookingHistoryTable extends WP_List_Table
         }
 
         echo '</div>';
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildQueryContext()
+    {
+        global $wpdb;
+
+        $tableName = $wpdb->prefix . 'bokun_booking_history';
+        $likeName  = $wpdb->esc_like($tableName);
+        $tableExists = ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $likeName)) === $tableName);
+
+        $context = [
+            'table'  => $tableName,
+            'exists' => $tableExists,
+            'where'  => '',
+            'params' => [],
+        ];
+
+        if (! $tableExists) {
+            return $context;
+        }
+
+        $where   = [];
+        $params  = [];
+
+        $filters = $this->filters;
+
+        if (! empty($filters['action']) && isset($this->filterOptions['action'][$filters['action']])) {
+            $action = $this->filterOptions['action'][$filters['action']];
+            $where[] = 'action_type = %s';
+            $params[] = $action['query']['action_type'];
+        }
+
+        if (! empty($filters['status']) && isset($this->filterOptions['status'][$filters['status']])) {
+            $status = $this->filterOptions['status'][$filters['status']];
+            $where[] = 'is_checked = %d';
+            $params[] = (int) $status['query']['is_checked'];
+        }
+
+        if (! empty($filters['source']) && isset($this->filterOptions['source'][$filters['source']])) {
+            $source = $this->filterOptions['source'][$filters['source']];
+            $where[] = 'actor_source = %s';
+            $params[] = $source['query']['actor_source'];
+        }
+
+        if (! empty($filters['actor']) && isset($this->filterOptions['actor'][$filters['actor']])) {
+            $actor = $this->filterOptions['actor'][$filters['actor']];
+            if (! empty($actor['query']['user_name'])) {
+                $where[] = 'user_name = %s';
+                $params[] = $actor['query']['user_name'];
+            } elseif (! empty($actor['query']['user_id'])) {
+                $where[] = 'user_id = %d';
+                $params[] = (int) $actor['query']['user_id'];
+            } else {
+                $where[] = '(user_name IS NULL OR user_name = \'\')';
+            }
+        }
+
+        if (! empty($filters['date_start'])) {
+            $date = $this->normalizeDateBoundary($filters['date_start'], false);
+            if ($date) {
+                $where[] = 'created_at >= %s';
+                $params[] = $date;
+            }
+        }
+
+        if (! empty($filters['date_end'])) {
+            $date = $this->normalizeDateBoundary($filters['date_end'], true);
+            if ($date) {
+                $where[] = 'created_at <= %s';
+                $params[] = $date;
+            }
+        }
+
+        $search = isset($_REQUEST['s']) ? $this->sanitizer->text(wp_unslash($_REQUEST['s']), '') : '';
+        if ('' !== $search) {
+            $like = '%' . $wpdb->esc_like($search) . '%';
+            $where[] = '(booking_id LIKE %s OR user_name LIKE %s OR action_type LIKE %s)';
+            $params[] = $like;
+            $params[] = $like;
+            $params[] = $like;
+        }
+
+        if (! empty($where)) {
+            $context['where'] = 'WHERE ' . implode(' AND ', $where);
+        }
+
+        $context['params'] = $params;
+
+        return $context;
+    }
+
+    private function countItems($tableName, $whereSql, array $params)
+    {
+        global $wpdb;
+
+        $query = "SELECT COUNT(*) FROM {$tableName} {$whereSql}";
+
+        if (! empty($params)) {
+            $query = $wpdb->prepare($query, $params);
+        }
+
+        return (int) $wpdb->get_var($query);
+    }
+
+    private function fetchRows($tableName, $whereSql, array $params, $orderBy, $order, $limit, $offset)
+    {
+        global $wpdb;
+
+        $orderBy = $this->normalizeOrderBy($orderBy);
+        $order = in_array($order, ['ASC', 'DESC'], true) ? $order : 'DESC';
+
+        $query = "SELECT id, post_id, booking_id, action_type, is_checked, user_id, user_name, actor_source, created_at
+            FROM {$tableName}
+            {$whereSql}
+            ORDER BY {$orderBy} {$order}
+            LIMIT %d OFFSET %d";
+
+        $queryParams = $params;
+        $queryParams[] = (int) $limit;
+        $queryParams[] = (int) $offset;
+
+        return (array) $wpdb->get_results($wpdb->prepare($query, $queryParams), ARRAY_A);
+    }
+
+    private function normalizeOrderBy($orderBy)
+    {
+        $allowedOrderBys = [
+            'created_at' => 'created_at',
+            'booking_id' => 'booking_id',
+            'action_type' => 'action_type',
+            'is_checked' => 'is_checked',
+            'user_name' => 'user_name',
+        ];
+
+        return isset($allowedOrderBys[$orderBy]) ? $allowedOrderBys[$orderBy] : $allowedOrderBys['created_at'];
+    }
+
+    private function resolveRequestedOrder()
+    {
+        $orderByRequest = isset($_REQUEST['orderby']) ? $this->sanitizer->key(wp_unslash($_REQUEST['orderby']), 'created_at') : 'created_at';
+        $orderRequest = isset($_REQUEST['order']) ? strtoupper($this->sanitizer->key(wp_unslash($_REQUEST['order']), 'DESC')) : 'DESC';
+
+        if (! in_array($orderRequest, ['ASC', 'DESC'], true)) {
+            $orderRequest = 'DESC';
+        }
+
+        $orderBy = $this->normalizeOrderBy($orderByRequest);
+
+        return [$orderBy, $orderRequest];
+    }
+
+    private function normalizeDateBoundary($value, $isUpper)
+    {
+        $value = $this->sanitizer->text($value, '');
+
+        if ('' === $value) {
+            return '';
+        }
+
+        $timezone = function_exists('wp_timezone') ? wp_timezone() : new DateTimeZone('UTC');
+        $date = DateTimeImmutable::createFromFormat('Y-m-d', $value, $timezone);
+
+        if (! $date) {
+            return '';
+        }
+
+        if ($isUpper) {
+            $date = $date->setTime(23, 59, 59);
+        } else {
+            $date = $date->setTime(0, 0, 0);
+        }
+
+        $utcDate = $date->setTimezone(new DateTimeZone('UTC'));
+
+        return $utcDate->format('Y-m-d H:i:s');
     }
 }
