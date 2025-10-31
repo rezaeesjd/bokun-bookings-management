@@ -2,6 +2,8 @@
 
 namespace Bokun\Bookings\Infrastructure\Config;
 
+use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
+
 if (! defined('ABSPATH')) {
     exit;
 }
@@ -9,6 +11,7 @@ if (! defined('ABSPATH')) {
 /**
  * Repository for retrieving and persisting plugin configuration options.
  */
+
 class SettingsRepository
 {
     private const OPTION_API_KEY = 'bokun_api_key';
@@ -20,6 +23,16 @@ class SettingsRepository
      * @var array<string, string>
      */
     private $cache = [];
+
+    /**
+     * @var DataSanitizer
+     */
+    private $sanitizer;
+
+    public function __construct(?DataSanitizer $sanitizer = null)
+    {
+        $this->sanitizer = $sanitizer ?: new DataSanitizer();
+    }
 
     /**
      * Retrieve the primary API access key.
@@ -145,15 +158,7 @@ class SettingsRepository
 
         $value = get_option($option, $default);
 
-        if (! is_string($value)) {
-            if (is_scalar($value)) {
-                $value = (string) $value;
-            } else {
-                $value = $default;
-            }
-        }
-
-        $value = sanitize_text_field($value);
+        $value = $this->sanitizer->text($value, $default);
         $this->cache[$option] = $value;
 
         return $value;
@@ -167,7 +172,7 @@ class SettingsRepository
      */
     private function setOption($option, $value)
     {
-        $sanitized = sanitize_text_field($value);
+        $sanitized = $this->sanitizer->text($value);
         update_option($option, $sanitized);
         $this->cache[$option] = $sanitized;
     }

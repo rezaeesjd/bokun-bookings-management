@@ -2,6 +2,7 @@
 namespace Bokun\Bookings\Admin\Settings;
 
 use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
+use Bokun\Bookings\Infrastructure\Validation\RequestSanitizer;
 
 if (! defined('ABSPATH')) {
     exit;
@@ -14,9 +15,15 @@ class SettingsController
      */
     private $settings;
 
-    public function __construct(SettingsRepository $settings)
+    /**
+     * @var RequestSanitizer
+     */
+    private $request;
+
+    public function __construct(SettingsRepository $settings, RequestSanitizer $request)
     {
         $this->settings = $settings;
+        $this->request = $request;
         add_action('wp_ajax_bokun_save_api_auth', [$this, 'savePrimaryCredentials'], 10);
         add_action('wp_ajax_nopriv_bokun_save_api_auth', [$this, 'savePrimaryCredentials'], 10);
 
@@ -37,8 +44,8 @@ class SettingsController
             wp_die();
         }
 
-        $mode = isset($_POST['mode']) ? sanitize_key(wp_unslash($_POST['mode'])) : '';
-        $progress_context = ($mode === 'upgrade') ? 'upgrade' : 'fetch';
+        $mode = $this->request->postEnum('mode', ['upgrade'], 'fetch');
+        $progress_context = ('upgrade' === $mode) ? 'upgrade' : 'fetch';
 
         $bookings = ($mode === 'upgrade') ? bokun_fetch_bookings('upgrade') : bokun_fetch_bookings();
 
@@ -89,7 +96,7 @@ class SettingsController
             wp_die();
         }
 
-        $mode = isset($_POST['mode']) ? sanitize_key(wp_unslash($_POST['mode'])) : '';
+        $mode = $this->request->postEnum('mode', ['fetch', 'upgrade'], 'fetch');
         $progress = bokun_get_import_progress_state($mode);
 
         if (! is_array($progress)) {
@@ -107,10 +114,9 @@ class SettingsController
             wp_die();
         }
 
-        $api_key = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
-        $secret_key = isset($_POST['secret_key']) ? sanitize_text_field(wp_unslash($_POST['secret_key'])) : '';
+        $credentials = $this->request->postCredentials('api_key', 'secret_key');
 
-        $this->settings->savePrimaryCredentials($api_key, $secret_key);
+        $this->settings->savePrimaryCredentials($credentials['api_key'], $credentials['secret_key']);
 
         wp_send_json_success(['msg' => 'API keys saved successfully.', 'status' => false]);
         wp_die();
@@ -123,10 +129,9 @@ class SettingsController
             wp_die();
         }
 
-        $api_key = isset($_POST['api_key_upgrade']) ? sanitize_text_field(wp_unslash($_POST['api_key_upgrade'])) : '';
-        $secret_key = isset($_POST['secret_key_upgrade']) ? sanitize_text_field(wp_unslash($_POST['secret_key_upgrade'])) : '';
+        $credentials = $this->request->postCredentials('api_key_upgrade', 'secret_key_upgrade');
 
-        $this->settings->saveUpgradeCredentials($api_key, $secret_key);
+        $this->settings->saveUpgradeCredentials($credentials['api_key'], $credentials['secret_key']);
 
         wp_send_json_success(['msg' => 'API keys saved successfully.', 'status' => false]);
         wp_die();

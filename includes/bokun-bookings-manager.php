@@ -18,10 +18,54 @@ if (!function_exists('bokun_get_settings_repository')) {
         static $repository = null;
 
         if (! $repository instanceof \Bokun\Bookings\Infrastructure\Config\SettingsRepository) {
-            $repository = new \Bokun\Bookings\Infrastructure\Config\SettingsRepository();
+            $repository = new \Bokun\Bookings\Infrastructure\Config\SettingsRepository(
+                bokun_get_data_sanitizer()
+            );
         }
 
         return $repository;
+    }
+}
+
+if (!function_exists('bokun_get_data_sanitizer')) {
+    function bokun_get_data_sanitizer() {
+        if (isset($GLOBALS['bokun_container']) && $GLOBALS['bokun_container'] instanceof \Bokun\Bookings\Infrastructure\Container) {
+            try {
+                return $GLOBALS['bokun_container']->get('bokun.data_sanitizer');
+            } catch (\Throwable $exception) {
+                // Continue to fallback instance below.
+            }
+        }
+
+        static $sanitizer = null;
+
+        if (! $sanitizer instanceof \Bokun\Bookings\Infrastructure\Validation\DataSanitizer) {
+            $sanitizer = new \Bokun\Bookings\Infrastructure\Validation\DataSanitizer();
+        }
+
+        return $sanitizer;
+    }
+}
+
+if (!function_exists('bokun_get_request_sanitizer')) {
+    function bokun_get_request_sanitizer() {
+        if (isset($GLOBALS['bokun_container']) && $GLOBALS['bokun_container'] instanceof \Bokun\Bookings\Infrastructure\Container) {
+            try {
+                return $GLOBALS['bokun_container']->get('bokun.request_sanitizer');
+            } catch (\Throwable $exception) {
+                // Continue to fallback instance below.
+            }
+        }
+
+        static $requestSanitizer = null;
+
+        if (! $requestSanitizer instanceof \Bokun\Bookings\Infrastructure\Validation\RequestSanitizer) {
+            $requestSanitizer = new \Bokun\Bookings\Infrastructure\Validation\RequestSanitizer(
+                bokun_get_data_sanitizer()
+            );
+        }
+
+        return $requestSanitizer;
     }
 }
 
@@ -695,6 +739,7 @@ function bokun_check_for_changes($post_id, $booking) {
 
 // Function to save specific fields of the booking
 function bokun_save_specific_fields($post_id, $booking) {
+    $sanitizer = bokun_get_data_sanitizer();
     // Extract nested values
     $customer = $booking['customer'] ?? [];
     $productBooking = $booking['productBookings'][0] ?? [];
@@ -702,22 +747,22 @@ function bokun_save_specific_fields($post_id, $booking) {
     $phoneParsed = parse_phone_number($customer['phoneNumber'] ?? '');
 
     // Save necessary fields, with proper sanitization for text and numeric values
-    update_post_meta($post_id, '_confirmation_code', sanitize_text_field($booking['confirmationCode'] ?? 'N/A'));
-    update_post_meta($post_id, '_first_name', sanitize_text_field($customer['firstName'] ?? 'N/A'));
-    update_post_meta($post_id, '_last_name', sanitize_text_field($customer['lastName'] ?? 'N/A'));
-    update_post_meta($post_id, '_email', sanitize_email($customer['email'] ?? 'N/A'));
-    update_post_meta($post_id, '_phone_prefix', sanitize_text_field($phoneParsed[0] ?? 'N/A'));
-    update_post_meta($post_id, '_phone_number', sanitize_text_field($phoneParsed[1] ?? 'N/A'));
-    update_post_meta($post_id, '_external_booking_reference', sanitize_text_field($booking['externalBookingReference'] ?? 'N/A'));
-    update_post_meta($post_id, '_product_title', sanitize_text_field($productBooking['product']['title'] ?? 'N/A'));
-    update_post_meta($post_id, '_product_id', intval($productBooking['product']['id'] ?? 0));
-    update_post_meta($post_id, '_booking_status_origin', sanitize_text_field($productBooking['status'] ?? 'N/A'));
+    update_post_meta($post_id, '_confirmation_code', $sanitizer->text($booking['confirmationCode'] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_first_name', $sanitizer->text($customer['firstName'] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_last_name', $sanitizer->text($customer['lastName'] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_email', $sanitizer->email($customer['email'] ?? ''));
+    update_post_meta($post_id, '_phone_prefix', $sanitizer->text($phoneParsed[0] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_phone_number', $sanitizer->text($phoneParsed[1] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_external_booking_reference', $sanitizer->text($booking['externalBookingReference'] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_product_title', $sanitizer->text($productBooking['product']['title'] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_product_id', $sanitizer->integer($productBooking['product']['id'] ?? 0));
+    update_post_meta($post_id, '_booking_status_origin', $sanitizer->text($productBooking['status'] ?? 'N/A', 'N/A'));
 
     // Handle timestamps properly for date fields
     $booking_creation_date = $booking['creationDate'] ?? '';
 
     if ('' !== $booking_creation_date) {
-        $sanitized_creation_date = sanitize_text_field($booking_creation_date);
+        $sanitized_creation_date = $sanitizer->text($booking_creation_date);
 
         $original_creation_date = get_post_meta($post_id, '_original_creation_date', true);
         if ($original_creation_date !== $sanitized_creation_date) {
@@ -727,7 +772,7 @@ function bokun_save_specific_fields($post_id, $booking) {
         $formatted_creation_date = bokun_format_booking_datetime($sanitized_creation_date);
 
         if ('' !== $formatted_creation_date) {
-            update_post_meta($post_id, 'bookingcreationdate', sanitize_text_field($formatted_creation_date));
+            update_post_meta($post_id, 'bookingcreationdate', $sanitizer->text($formatted_creation_date));
         } else {
             delete_post_meta($post_id, 'bookingcreationdate');
         }
@@ -737,11 +782,11 @@ function bokun_save_specific_fields($post_id, $booking) {
 
     $original_start_date = get_post_meta($post_id, '_original_start_date', true);
     if ($original_start_date !== $productBooking['startDate']) {
-        update_post_meta($post_id, '_original_start_date', sanitize_text_field($productBooking['startDate']));
+        update_post_meta($post_id, '_original_start_date', $sanitizer->text($productBooking['startDate']));
     }
 
     // Handle product tags (product_id and product_title)
-    $product_title = sanitize_text_field($productBooking['product']['title'] ?? '');
+    $product_title = $sanitizer->text($productBooking['product']['title'] ?? '');
 
     // Assign product title tag to the post
     if (!empty($product_title)) {
@@ -749,7 +794,7 @@ function bokun_save_specific_fields($post_id, $booking) {
     }
 
     // Handle booking status
-    $booking_status = sanitize_text_field($productBooking['status'] ?? '');
+    $booking_status = $sanitizer->text($productBooking['status'] ?? '');
 
     if (!empty($booking_status)) {
         bokun_assign_tag_to_post($post_id, $booking_status, 'booking_status');
@@ -788,8 +833,15 @@ function bokun_assign_not_made_if_not_made_exists($post_id) {
 // Function to parse phone number (example implementation)
 function parse_phone_number($phoneNumber) {
     $phoneRegex = '/^(\+\d+|\w+\+\d+)?\s*(.*)$/';
-    preg_match($phoneRegex, $phoneNumber, $matches);
-    return [($matches[1] ?? ''), ($matches[2] ?? '')];
+    $subject = is_string($phoneNumber) ? wp_unslash($phoneNumber) : '';
+    preg_match($phoneRegex, $subject, $matches);
+
+    $sanitizer = bokun_get_data_sanitizer();
+
+    return [
+        $sanitizer->text($matches[1] ?? ''),
+        $sanitizer->text($matches[2] ?? ''),
+    ];
 }
 
 // Function to assign product tags to the post
@@ -2006,9 +2058,10 @@ function bokun_booking_history_table_exists() {
 }
 
 function bokun_get_team_member_name_from_cookies() {
+    $sanitizer = bokun_get_data_sanitizer();
     foreach ($_COOKIE as $cookie_name => $value) {
         if (0 === strpos($cookie_name, 'bokunTeamMemberAuthorized_')) {
-            $team_member_name = sanitize_text_field(wp_unslash($value));
+            $team_member_name = $sanitizer->text($value);
 
             if (!empty($team_member_name)) {
                 return $team_member_name;
@@ -2030,9 +2083,11 @@ function bokun_get_booking_history_actor_details() {
             $user_name = $user->display_name ? $user->display_name : $user->user_login;
         }
 
+        $sanitizer = bokun_get_data_sanitizer();
+
         return [
             'user_id'      => $user_id,
-            'user_name'    => sanitize_text_field($user_name),
+            'user_name'    => $sanitizer->text($user_name),
             'actor_source' => 'wp_user',
         ];
     }
@@ -2094,18 +2149,18 @@ function bokun_record_booking_history($post_id, $booking_id, $action_type, $chec
 function update_booking_status() {
     check_ajax_referer('update_booking_nonce', 'security');
 
-    $booking_id = isset($_POST['booking_id']) ? sanitize_text_field(wp_unslash($_POST['booking_id'])) : '';
-    $checked    = isset($_POST['checked']) ? filter_var(wp_unslash($_POST['checked']), FILTER_VALIDATE_BOOLEAN) : false;
-    $type       = isset($_POST['type']) ? strtolower(sanitize_text_field(wp_unslash($_POST['type']))) : '';
+    $request = bokun_get_request_sanitizer();
+    $booking_id = $request->postText('booking_id');
+    $checked    = $request->postBoolean('checked', false);
+    $allowed_types = ['full', 'partial', 'not-available', 'refund-partner'];
+    $type       = $request->postEnum('type', $allowed_types, '');
 
     if (empty($booking_id)) {
         wp_send_json_error(['message' => 'Invalid booking ID provided.']);
         wp_die();
     }
 
-    $allowed_types = ['full', 'partial', 'not-available', 'refund-partner'];
-
-    if (!in_array($type, $allowed_types, true)) {
+    if ('' === $type) {
         wp_send_json_error(['message' => 'Invalid booking status type provided.']);
         wp_die();
     }
@@ -2186,8 +2241,8 @@ add_action('wp_ajax_nopriv_update_booking_status', 'update_booking_status');
 function bokun_handle_add_team_member() {
     check_ajax_referer('add_team_member_nonce', 'security');
 
-    $team_member_name = isset($_POST['team_member_name']) ? sanitize_text_field(wp_unslash($_POST['team_member_name'])) : '';
-    $team_member_name = trim($team_member_name);
+    $request = bokun_get_request_sanitizer();
+    $team_member_name = trim($request->postText('team_member_name'));
 
     if ('' === $team_member_name) {
         wp_send_json_error([
@@ -2223,6 +2278,7 @@ add_action('wp_ajax_nopriv_add_team_member', 'bokun_handle_add_team_member');
 
 // Function to process price categories and save to fixed fields
 function process_price_categories_and_save($post_id, $booking_data) {
+    $sanitizer = bokun_get_data_sanitizer();
     $category_counts = [];
 
     // Check if 'productBookings' exists and has at least one entry
@@ -2232,8 +2288,8 @@ function process_price_categories_and_save($post_id, $booking_data) {
         // Loop through each price category booking
         foreach ($price_category_bookings as $price_category_booking) {
             if (isset($price_category_booking['pricingCategory']['fullTitle']) && isset($price_category_booking['quantity'])) {
-                $category_name = $price_category_booking['pricingCategory']['fullTitle'];
-                $quantity = intval($price_category_booking['quantity']);
+                $category_name = $sanitizer->text($price_category_booking['pricingCategory']['fullTitle'] ?? '');
+                $quantity = $sanitizer->integer($price_category_booking['quantity'] ?? 0, 0, 0);
 
                 // Increment the count for each category name
                 $category_counts[$category_name] = ($category_counts[$category_name] ?? 0) + $quantity;
@@ -2252,7 +2308,7 @@ function process_price_categories_and_save($post_id, $booking_data) {
         if ($index < 5) {
             $field_name = $pricecategory_fields[$index];
             $value_to_save = $count . ' ' . $category_name;
-            update_post_meta($post_id, $field_name, sanitize_text_field($value_to_save));
+            update_post_meta($post_id, $field_name, $sanitizer->text($value_to_save));
         }
         $index++;
     }
@@ -3194,12 +3250,14 @@ function edit_product_tag_custom_fields($term, $taxonomy) {
 add_action('created_product_tags', 'save_product_tag_custom_fields', 10, 2);
 add_action('edited_product_tags', 'save_product_tag_custom_fields', 10, 2);
 function save_product_tag_custom_fields($term_id) {
-    if (isset($_POST['term_meta'])) {
-        $term_meta = $_POST['term_meta'];
+    $request = bokun_get_request_sanitizer();
+    $sanitizer = $request->getDataSanitizer();
+    $term_meta = $request->postArray('term_meta', function ($value) use ($sanitizer) {
+        return $sanitizer->text($value);
+    });
 
-        foreach ($term_meta as $key => $value) {
-            update_term_meta($term_id, $key, sanitize_text_field($value));
-        }
+    foreach ($term_meta as $key => $value) {
+        update_term_meta($term_id, $key, $value);
     }
 }
 
@@ -3273,8 +3331,12 @@ function edit_partnerpageid_field($term, $taxonomy) {
 add_action('created_product_tags', 'save_partnerpageid_field', 10, 2);
 add_action('edited_product_tags', 'save_partnerpageid_field', 10, 2);
 function save_partnerpageid_field($term_id) {
-    if (isset($_POST['term_meta']['partnerpageid'])) {
-        update_term_meta($term_id, 'partnerpageid', sanitize_text_field($_POST['term_meta']['partnerpageid']));
+    $request = bokun_get_request_sanitizer();
+    $sanitizer = $request->getDataSanitizer();
+    $term_meta = $request->postArray('term_meta');
+
+    if (isset($term_meta['partnerpageid'])) {
+        update_term_meta($term_id, 'partnerpageid', $sanitizer->text($term_meta['partnerpageid']));
     }
 }
 

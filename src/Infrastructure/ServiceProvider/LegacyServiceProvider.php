@@ -10,6 +10,8 @@ use Bokun\Bookings\Infrastructure\Container;
 use Bokun\Bookings\Infrastructure\ServiceProviderInterface;
 use Bokun\Bookings\Registration\PostTypeRegistrar;
 use Bokun\Bookings\Registration\TaxonomyRegistrar;
+use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
+use Bokun\Bookings\Infrastructure\Validation\RequestSanitizer;
 
 class LegacyServiceProvider implements ServiceProviderInterface
 {
@@ -18,9 +20,21 @@ class LegacyServiceProvider implements ServiceProviderInterface
      */
     public function register(Container $container)
     {
+        if (! $container->has('bokun.data_sanitizer')) {
+            $container->singleton('bokun.data_sanitizer', function () {
+                return new DataSanitizer();
+            });
+        }
+
+        if (! $container->has('bokun.request_sanitizer')) {
+            $container->singleton('bokun.request_sanitizer', function (Container $container) {
+                return new RequestSanitizer($container->get('bokun.data_sanitizer'));
+            });
+        }
+
         if (! $container->has('bokun.settings_repository')) {
-            $container->singleton('bokun.settings_repository', function () {
-                return new SettingsRepository();
+            $container->singleton('bokun.settings_repository', function (Container $container) {
+                return new SettingsRepository($container->get('bokun.data_sanitizer'));
             });
         }
 
@@ -69,7 +83,8 @@ class LegacyServiceProvider implements ServiceProviderInterface
         if (! $container->has('bokun.settings')) {
             $container->singleton('bokun.settings', function (Container $container) {
                 $settings = new \Bokun\Bookings\Admin\Settings\SettingsController(
-                    $container->get('bokun.settings_repository')
+                    $container->get('bokun.settings_repository'),
+                    $container->get('bokun.request_sanitizer')
                 );
                 $this->setGlobal('bokun_settings', $settings);
 
