@@ -2,8 +2,13 @@
 
 namespace Bokun\Bookings\Infrastructure\ServiceProvider;
 
+use Bokun\Bookings\Admin\Assets\AdminAssets;
+use Bokun\Bookings\Admin\Localization\LocalizationLoader;
+use Bokun\Bookings\Admin\Menu\AdminMenu;
 use Bokun\Bookings\Infrastructure\Container;
 use Bokun\Bookings\Infrastructure\ServiceProviderInterface;
+use Bokun\Bookings\Registration\PostTypeRegistrar;
+use Bokun\Bookings\Registration\TaxonomyRegistrar;
 
 class LegacyServiceProvider implements ServiceProviderInterface
 {
@@ -12,9 +17,45 @@ class LegacyServiceProvider implements ServiceProviderInterface
      */
     public function register(Container $container)
     {
+        if (! $container->has('bokun.admin_menu')) {
+            $container->singleton('bokun.admin_menu', function () {
+                return new AdminMenu();
+            });
+        }
+
+        if (! $container->has('bokun.assets')) {
+            $container->singleton('bokun.assets', function (Container $container) {
+                return new AdminAssets($container->get('bokun.admin_menu'));
+            });
+        }
+
+        if (! $container->has('bokun.post_type_registrar')) {
+            $container->singleton('bokun.post_type_registrar', function () {
+                return new PostTypeRegistrar();
+            });
+        }
+
+        if (! $container->has('bokun.taxonomy_registrar')) {
+            $container->singleton('bokun.taxonomy_registrar', function () {
+                return new TaxonomyRegistrar();
+            });
+        }
+
+        if (! $container->has('bokun.localization_loader')) {
+            $container->singleton('bokun.localization_loader', function () {
+                return new LocalizationLoader();
+            });
+        }
+
         if (! $container->has('bokun.manager')) {
-            $container->singleton('bokun.manager', function () {
-                return new \BokunBookingManagement();
+            $container->singleton('bokun.manager', function (Container $container) {
+                return new \BokunBookingManagement(
+                    $container->get('bokun.admin_menu'),
+                    $container->get('bokun.assets'),
+                    $container->get('bokun.post_type_registrar'),
+                    $container->get('bokun.taxonomy_registrar'),
+                    $container->get('bokun.localization_loader')
+                );
             });
         }
 
