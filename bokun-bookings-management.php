@@ -12,29 +12,11 @@ Text Domain: bokun-bookings-management
 
 $autoloader = __DIR__ . '/vendor/autoload.php';
 
-if (file_exists($autoloader)) {
-    require_once $autoloader;
-} else {
-    require_once __DIR__ . '/src/Infrastructure/Exception/ContainerException.php';
-    require_once __DIR__ . '/src/Infrastructure/Exception/NotFoundException.php';
-    require_once __DIR__ . '/src/Infrastructure/ServiceProviderInterface.php';
-    require_once __DIR__ . '/src/Infrastructure/Container.php';
-    require_once __DIR__ . '/src/Infrastructure/Config/SettingsRepository.php';
-    require_once __DIR__ . '/src/Infrastructure/Validation/DataSanitizer.php';
-    require_once __DIR__ . '/src/Infrastructure/Validation/RequestSanitizer.php';
-    require_once __DIR__ . '/src/Infrastructure/ServiceProvider/LegacyServiceProvider.php';
-    require_once __DIR__ . '/src/Admin/Assets/AdminAssets.php';
-    require_once __DIR__ . '/src/Admin/Localization/LocalizationLoader.php';
-    require_once __DIR__ . '/src/Admin/Menu/AdminMenu.php';
-    require_once __DIR__ . '/src/Admin/Settings/SettingsController.php';
-    require_once __DIR__ . '/src/Admin/History/BookingHistoryPage.php';
-    require_once __DIR__ . '/src/Admin/History/BookingHistoryTable.php';
-    require_once __DIR__ . '/src/Admin/PostType/BookingListEnhancer.php';
-    require_once __DIR__ . '/src/Presentation/Shortcode/BookingShortcode.php';
-    require_once __DIR__ . '/src/Registration/PostTypeRegistrar.php';
-    require_once __DIR__ . '/src/Registration/TaxonomyRegistrar.php';
-    require_once __DIR__ . '/src/Plugin.php';
+if (! file_exists($autoloader)) {
+    return;
 }
+
+require_once $autoloader;
 
 use Bokun\Bookings\Admin\Assets\AdminAssets;
 use Bokun\Bookings\Admin\Localization\LocalizationLoader;
@@ -82,50 +64,11 @@ class BokunBookingManagement {
         $this->taxonomyRegistrar = $taxonomyRegistrar ?: new TaxonomyRegistrar();
         $this->localizationLoader = $localizationLoader ?: new LocalizationLoader();
 
-        register_activation_hook(__FILE__, [self::class, 'activate']);
-        register_deactivation_hook(__FILE__, [self::class, 'deactivate']);
-
         $this->adminMenu->register();
         $this->assets->register();
         $this->postTypeRegistrar->register();
         $this->taxonomyRegistrar->register();
         $this->localizationLoader->register();
-    }
-
-    public static function activate()
-    {
-        global $wpdb;
-
-        $charset_collate = $wpdb->get_charset_collate();
-
-        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-
-        update_option('bokun_plugin', true);
-        update_option('bokun_version', self::VERSION);
-
-        $table_name = $wpdb->prefix . 'bokun_booking_history';
-
-        $sql = "CREATE TABLE $table_name (
-            id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-            post_id BIGINT(20) UNSIGNED NULL,
-            booking_id VARCHAR(191) NOT NULL,
-            action_type VARCHAR(50) NOT NULL,
-            is_checked TINYINT(1) NOT NULL DEFAULT 0,
-            user_id BIGINT(20) UNSIGNED NULL,
-            user_name VARCHAR(191) NULL,
-            actor_source VARCHAR(50) NULL,
-            created_at DATETIME NOT NULL,
-            PRIMARY KEY  (id),
-            KEY booking_id (booking_id),
-            KEY created_at (created_at)
-        ) $charset_collate;";
-
-        dbDelta($sql);
-    }
-
-    public static function deactivate()
-    {
-        // deactivation process here
     }
 
     public static function bokun_install()
@@ -136,6 +79,24 @@ class BokunBookingManagement {
     public static function bokun_deactivation()
     {
         self::deactivate();
+    }
+
+    public static function activate()
+    {
+        $container = \Bokun\Bookings\Plugin::getContainerInstance();
+
+        if ($container && $container->has('bokun.activator')) {
+            $container->get('bokun.activator')->activate();
+        }
+    }
+
+    public static function deactivate()
+    {
+        $container = \Bokun\Bookings\Plugin::getContainerInstance();
+
+        if ($container && $container->has('bokun.deactivator')) {
+            $container->get('bokun.deactivator')->deactivate();
+        }
     }
 
     public function getSubmenuItems()

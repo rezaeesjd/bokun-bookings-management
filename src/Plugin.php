@@ -4,6 +4,8 @@ namespace Bokun\Bookings;
 use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
 use Bokun\Bookings\Infrastructure\Container;
 use Bokun\Bookings\Infrastructure\ServiceProvider\LegacyServiceProvider;
+use Bokun\Bookings\Registration\Activator;
+use Bokun\Bookings\Registration\Deactivator;
 
 class Plugin
 {
@@ -30,6 +32,14 @@ class Plugin
         $this->pluginFile = $pluginFile;
         $this->container = $container ?: new Container();
         self::$instance = $this;
+
+        $pluginFilePath = $this->pluginFile;
+
+        if (! $this->container->has('bokun.plugin_file')) {
+            $this->container->singleton('bokun.plugin_file', function () use ($pluginFilePath) {
+                return $pluginFilePath;
+            });
+        }
     }
 
     /**
@@ -39,6 +49,7 @@ class Plugin
     {
         $this->registerServices();
         $this->defineConstants();
+        $this->registerLifecycleHooks();
         $this->loadPlugin();
     }
 
@@ -64,6 +75,21 @@ class Plugin
     private function registerServices()
     {
         $this->container->register(new LegacyServiceProvider());
+    }
+
+    private function registerLifecycleHooks()
+    {
+        if (function_exists('register_activation_hook') && $this->container->has('bokun.activator')) {
+            /** @var Activator $activator */
+            $activator = $this->container->get('bokun.activator');
+            $activator->register($this->pluginFile);
+        }
+
+        if (function_exists('register_deactivation_hook') && $this->container->has('bokun.deactivator')) {
+            /** @var Deactivator $deactivator */
+            $deactivator = $this->container->get('bokun.deactivator');
+            $deactivator->register($this->pluginFile);
+        }
     }
 
     private function defineConstants()

@@ -1,13 +1,14 @@
 <?php
 namespace Bokun\Bookings\Admin\History;
 
+use Bokun\Bookings\Admin\Menu\AdminPageInterface;
 use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
 
 if (! defined('ABSPATH')) {
     exit;
 }
 
-class BookingHistoryPage
+class BookingHistoryPage implements AdminPageInterface
 {
     /**
      * @var DataSanitizer
@@ -19,15 +20,27 @@ class BookingHistoryPage
      */
     private $pageSlug;
 
-    public function __construct(DataSanitizer $sanitizer, $pageSlug = 'bokun_booking_history')
+    /**
+     * @var string
+     */
+    private $title;
+
+    /**
+     * @var string
+     */
+    private $capability;
+
+    public function __construct(DataSanitizer $sanitizer, $pageSlug = 'bokun_booking_history', $title = '', $capability = 'manage_options')
     {
         $this->sanitizer = $sanitizer;
         $this->pageSlug  = (string) $pageSlug;
+        $this->title     = $title !== '' ? $title : __('Booking History', BOKUN_TEXT_DOMAIN);
+        $this->capability = $capability !== '' ? $capability : 'manage_options';
     }
 
     public function render()
     {
-        if (! current_user_can('manage_options')) {
+        if (! current_user_can($this->capability)) {
             wp_die(esc_html__('You do not have permission to access this page.', BOKUN_TEXT_DOMAIN));
         }
 
@@ -40,10 +53,8 @@ class BookingHistoryPage
 
         $table->prepare_items();
 
-        $title = __('Booking History', BOKUN_TEXT_DOMAIN);
-
         echo '<div class="wrap">';
-        echo '<h1>' . esc_html($title) . '</h1>';
+        echo '<h1>' . esc_html($this->getTitle()) . '</h1>';
 
         echo '<form method="get">';
         echo '<input type="hidden" name="page" value="' . esc_attr($this->pageSlug) . '" />';
@@ -53,6 +64,21 @@ class BookingHistoryPage
 
         echo '</form>';
         echo '</div>';
+    }
+
+    public function getSlug(): string
+    {
+        return $this->pageSlug;
+    }
+
+    public function getTitle(): string
+    {
+        return $this->title;
+    }
+
+    public function getCapability(): string
+    {
+        return $this->capability;
     }
 
     /**
