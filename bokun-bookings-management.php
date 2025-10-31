@@ -10,45 +10,20 @@ Domain Path: /languages
 Text Domain: BOKUN_text_domain
 */
 
+$autoloader = __DIR__ . '/vendor/autoload.php';
 
-// plugin definitions
-define( 'BOKUN_PLUGIN', '/bokun-bookings-management/');
-
-$api_key = get_option('bokun_api_key', '');
-$secret_key = get_option('bokun_secret_key', '');
-$api_key_upgrade = get_option('bokun_api_key_upgrade', '');
-$secret_key_upgrade = get_option('bokun_secret_key_upgrade', '');
-// Define Bokun API constants
-define('BOKUN_API_BASE_URL', 'https://api.bokun.io');
-define('BOKUN_API_KEY', $api_key); 
-define('BOKUN_SECRET_KEY', $secret_key); 
-define('BOKUN_API_KEY_UPGRADE', $api_key_upgrade); 
-define('BOKUN_SECRET_KEY_UPGRADE', $secret_key_upgrade); 
-define('BOKUN_API_BOOKING_API', '/booking.json/booking-search');
-
-// directory define
-define( 'BOKUN_PLUGIN_DIR', WP_PLUGIN_DIR.BOKUN_PLUGIN);
-define( 'BOKUN_INCLUDES_DIR', BOKUN_PLUGIN_DIR.'includes/' );
-define( 'BOKUN_UPLOAD_URL', BOKUN_PLUGIN_DIR.'upload/');
-$upload = wp_upload_dir();
-
-define( 'BOKUN_ASSETS_DIR', BOKUN_PLUGIN_DIR.'assets/' );
-define( 'BOKUN_CSS_DIR', BOKUN_ASSETS_DIR.'css/' );
-define( 'BOKUN_JS_DIR', BOKUN_ASSETS_DIR.'js/' );
-define( 'BOKUN_IMAGES_DIR', BOKUN_ASSETS_DIR.'images/' );
-
-// URL define
-define( 'BOKUN_PLUGIN_URL', WP_PLUGIN_URL.BOKUN_PLUGIN);
-
-define( 'BOKUN_ASSETS_URL', BOKUN_PLUGIN_URL.'assets/');
-define( 'BOKUN_IMAGES_URL', BOKUN_ASSETS_URL.'images/');
-define( 'BOKUN_CSS_URL', BOKUN_ASSETS_URL.'css/');
-define( 'BOKUN_JS_URL', BOKUN_ASSETS_URL.'js/');
-define( 'BOKUN_AUTH_URL', '');
-
-// define text domain
-define( 'BOKUN_txt_domain', 'BOKUN_text_domain' );
-
+if (file_exists($autoloader)) {
+    require_once $autoloader;
+} else {
+    require_once __DIR__ . '/src/Infrastructure/Exception/ContainerException.php';
+    require_once __DIR__ . '/src/Infrastructure/Exception/NotFoundException.php';
+    require_once __DIR__ . '/src/Infrastructure/ServiceProviderInterface.php';
+    require_once __DIR__ . '/src/Infrastructure/Container.php';
+    require_once __DIR__ . '/src/Infrastructure/ServiceProvider/LegacyServiceProvider.php';
+    require_once __DIR__ . '/src/Admin/Settings/SettingsController.php';
+    require_once __DIR__ . '/src/Presentation/Shortcode/BookingShortcode.php';
+    require_once __DIR__ . '/src/Plugin.php';
+}
 global $bokun_version;
 $bokun_version = '1.0.0';
 
@@ -416,18 +391,6 @@ class BokunBookingManagement {
     }
     
 }
-
-
-// begin!
-global $rb;
-$rb = new BokunBookingManagement();
-
-if( $rb->bokun_is_activate() && file_exists( BOKUN_INCLUDES_DIR . "bokun_settings.class.php" ) ) {
-    include_once( BOKUN_INCLUDES_DIR . "bokun_settings.class.php" );
-}
-if( $rb->bokun_is_activate() && file_exists( BOKUN_INCLUDES_DIR . "bokun-bookings-manager.php" ) ) {
-    include_once( BOKUN_INCLUDES_DIR . "bokun-bookings-manager.php" );
-}
-if( $rb->bokun_is_activate() && file_exists( BOKUN_INCLUDES_DIR . "bokun_shortcode.class.php" ) ) {
-    include_once( BOKUN_INCLUDES_DIR . "bokun_shortcode.class.php" );
-}
+$bokunContainer = new \Bokun\Bookings\Infrastructure\Container();
+$plugin = new \Bokun\Bookings\Plugin(__FILE__, $bokunContainer);
+$plugin->boot();
