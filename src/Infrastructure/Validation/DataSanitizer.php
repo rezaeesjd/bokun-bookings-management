@@ -2,10 +2,6 @@
 
 namespace Bokun\Bookings\Infrastructure\Validation;
 
-if (! defined('ABSPATH')) {
-    exit;
-}
-
 class DataSanitizer
 {
     /**

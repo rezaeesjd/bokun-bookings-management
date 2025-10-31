@@ -1,9 +1,6 @@
 <?php
-namespace Bokun\Bookings\Registration;
 
-if (! defined('ABSPATH')) {
-    exit;
-}
+namespace Bokun\Bookings\Registration;
 
 class PostTypeRegistrar
 {

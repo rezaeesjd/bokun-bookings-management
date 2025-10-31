@@ -1,12 +1,9 @@
 <?php
+
 namespace Bokun\Bookings\Admin\Settings;
 
 use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
 use Bokun\Bookings\Infrastructure\Validation\RequestSanitizer;
-
-if (! defined('ABSPATH')) {
-    exit;
-}
 
 class SettingsController
 {

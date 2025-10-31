@@ -4,10 +4,6 @@ namespace Bokun\Bookings\Registration;
 
 use Bokun\Bookings\Registration\Database\BookingHistoryTableCreator;
 
-if (! defined('ABSPATH')) {
-    exit;
-}
-
 class Activator
 {
     /**

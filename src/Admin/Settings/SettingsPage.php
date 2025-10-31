@@ -4,10 +4,6 @@ namespace Bokun\Bookings\Admin\Settings;
 
 use Bokun\Bookings\Admin\Menu\AdminPageInterface;
 
-if (! defined('ABSPATH')) {
-    exit;
-}
-
 class SettingsPage implements AdminPageInterface
 {
     /**

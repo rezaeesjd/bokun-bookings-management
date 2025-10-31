@@ -2,10 +2,6 @@
 
 namespace Bokun\Bookings\Registration\Database;
 
-if (! defined('ABSPATH')) {
-    exit;
-}
-
 class BookingHistoryTableCreator
 {
     public function create(): void

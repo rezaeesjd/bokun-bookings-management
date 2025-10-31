@@ -2,10 +2,6 @@
 
 namespace Bokun\Bookings\Registration;
 
-if (! defined('ABSPATH')) {
-    exit;
-}
-
 class Deactivator
 {
     public function register($pluginFile): void

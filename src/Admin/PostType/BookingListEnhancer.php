@@ -1,11 +1,8 @@
 <?php
+
 namespace Bokun\Bookings\Admin\PostType;
 
 use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
-
-if (! defined('ABSPATH')) {
-    exit;
-}
 
 class BookingListEnhancer
 {

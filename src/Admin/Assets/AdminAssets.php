@@ -1,11 +1,8 @@
 <?php
+
 namespace Bokun\Bookings\Admin\Assets;
 
 use Bokun\Bookings\Admin\Menu\AdminMenu;
-
-if (! defined('ABSPATH')) {
-    exit;
-}
 
 class AdminAssets
 {

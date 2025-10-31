@@ -1,12 +1,9 @@
 <?php
+
 namespace Bokun\Bookings\Admin\History;
 
 use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
 use WP_List_Table;
-
-if (! defined('ABSPATH')) {
-    exit;
-}
 
 if (! class_exists('WP_List_Table')) {
     require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';

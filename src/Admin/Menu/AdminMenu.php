@@ -1,9 +1,6 @@
 <?php
-namespace Bokun\Bookings\Admin\Menu;
 
-if (! defined('ABSPATH')) {
-    exit;
-}
+namespace Bokun\Bookings\Admin\Menu;
 
 class AdminMenu
 {

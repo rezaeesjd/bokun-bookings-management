@@ -1,12 +1,9 @@
 <?php
+
 namespace Bokun\Bookings\Admin\History;
 
 use Bokun\Bookings\Admin\Menu\AdminPageInterface;
 use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
-
-if (! defined('ABSPATH')) {
-    exit;
-}
 
 class BookingHistoryPage implements AdminPageInterface
 {
