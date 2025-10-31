@@ -143,6 +143,13 @@ class BokunBookingManagement {
         $this->adminMenu->registerMenu();
     }
 
+    public function registerBookingPostType()
+    {
+        if ($this->postTypeRegistrar instanceof PostTypeRegistrar) {
+            $this->postTypeRegistrar->registerPostType();
+        }
+    }
+
     public function isActivated()
     {
         return (bool) get_option('bokun_plugin');
@@ -200,6 +207,11 @@ class BokunBookingManagement {
     public function bokun_add_menu()
     {
         $this->registerMenu();
+    }
+
+    public function bokun_register_custom_post_type()
+    {
+        $this->registerBookingPostType();
     }
 
     public function bokun_is_activate()

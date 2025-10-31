@@ -12,9 +12,38 @@ class TaxonomyRegistrar
      */
     public function register()
     {
+        add_action('init', [$this, 'registerAlarmStatusTaxonomy']);
         add_action('init', [$this, 'registerBookingStatusTaxonomy']);
         add_action('init', [$this, 'registerProductTaxonomy']);
         add_action('init', [$this, 'registerTeamMemberTaxonomy']);
+    }
+
+    public function registerAlarmStatusTaxonomy()
+    {
+        register_taxonomy(
+            'alarm_status',
+            'bokun_booking',
+            [
+                'labels'            => [
+                    'name'          => __('Alarm Status', BOKUN_TEXT_DOMAIN),
+                    'singular_name' => __('Alarm Status', BOKUN_TEXT_DOMAIN),
+                ],
+                'public'           => true,
+                'rewrite'          => ['slug' => 'alarm-status'],
+                'hierarchical'     => false,
+                'show_in_nav_menus' => true,
+                'show_in_menu'     => true,
+                'show_in_rest'     => true,
+                'show_ui'          => true,
+                'show_admin_column' => true,
+            ]
+        );
+
+        foreach (['Ok', 'Attention', 'Alarm'] as $term) {
+            if (! term_exists($term, 'alarm_status')) {
+                wp_insert_term($term, 'alarm_status');
+            }
+        }
     }
 
     public function registerBookingStatusTaxonomy()

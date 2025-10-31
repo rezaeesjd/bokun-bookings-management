@@ -9,6 +9,7 @@ use Bokun\Bookings\Infrastructure\Container;
 use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
 use Bokun\Bookings\Infrastructure\Validation\RequestSanitizer;
 use Bokun\Bookings\Plugin;
+use Bokun\Bookings\Registration\PostTypeRegistrar;
 
 if (!function_exists('bokun_get_container')) {
     function bokun_get_container() {
@@ -508,14 +509,37 @@ function bokun_ensure_booking_post_type_registered() {
         return false;
     }
 
-    global $rb;
+    $container = bokun_get_container();
 
-    if (isset($rb) && is_object($rb) && method_exists($rb, 'bokun_register_custom_post_type')) {
-        $rb->bokun_register_custom_post_type();
+    if ($container) {
+        try {
+            if ($container->has('bokun.post_type_registrar')) {
+                $container->get('bokun.post_type_registrar')->registerPostType();
+            } elseif ($container->has('bokun.manager')) {
+                $manager = $container->get('bokun.manager');
 
-        if (post_type_exists('bokun_booking')) {
-            remove_action('init', array($rb, 'bokun_register_custom_post_type'));
-            return true;
+                if (is_object($manager)) {
+                    if (method_exists($manager, 'registerBookingPostType')) {
+                        $manager->registerBookingPostType();
+                    } elseif (method_exists($manager, 'bokun_register_custom_post_type')) {
+                        $manager->bokun_register_custom_post_type();
+                    }
+                }
+            }
+        } catch (\Throwable $exception) {
+            // Fallback to direct registration below if container resolution fails.
+        }
+    }
+
+    if (post_type_exists('bokun_booking')) {
+        return true;
+    }
+
+    if (class_exists(PostTypeRegistrar::class)) {
+        try {
+            (new PostTypeRegistrar())->registerPostType();
+        } catch (\Throwable $exception) {
+            // Ignore and fall through to the final existence check.
         }
     }
 
@@ -2037,33 +2061,6 @@ function bokun_get_api_credentials_for_context($context = 'default') {
 
     return [$credentials['api_key'], $credentials['secret_key']];
 }
-
-// Register Alarm Status taxonomy and create default terms
-function bokun_register_alarm_status_taxonomy() {
-    register_taxonomy('alarm_status', 'bokun_booking', [
-        'labels' => [
-            'name' => __('Alarm Status', BOKUN_TEXT_DOMAIN),
-            'singular_name' => __('Alarm Status', BOKUN_TEXT_DOMAIN),
-        ],
-        'public' => true,
-        'rewrite' => ['slug' => 'alarm-status'],
-        'hierarchical' => false,
-        'show_in_nav_menus' => true,
-        'show_in_menu' => true,
-        'show_in_rest' => true, // Important for Elementor
-        'show_ui' => true,
-        'show_admin_column' => true, // This adds the taxonomy in post lists
-    ]);
-
-    // Check if the terms 'Ok', 'Attention', and 'Alarm' exist, if not, create them
-    $terms = ['Ok', 'Attention', 'Alarm'];
-    foreach ($terms as $term) {
-        if (!term_exists($term, 'alarm_status')) {
-            wp_insert_term($term, 'alarm_status');
-        }
-    }
-}
-add_action('init', 'bokun_register_alarm_status_taxonomy');
 
 function bokun_booking_history_table_exists() {
     static $table_exists = null;
