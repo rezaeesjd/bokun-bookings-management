@@ -21,6 +21,42 @@ function bokun_format_date() {
     return gmdate('Y-m-d H:i:s');
 }
 
+/**
+ * Format raw booking timestamps into a human readable datetime string.
+ *
+ * @param string|int|float|null $value Raw value returned by the API.
+ *
+ * @return string Formatted datetime in site timezone or the original value if it cannot be parsed.
+ */
+function bokun_format_booking_datetime($value) {
+    if (null === $value || '' === $value) {
+        return '';
+    }
+
+    $value = (string) $value;
+
+    if (is_numeric($value)) {
+        $numeric_value = (float) $value;
+
+        // Values from the API are sometimes milliseconds since epoch; convert to seconds.
+        if ($numeric_value > 9999999999) {
+            $numeric_value /= 1000;
+        }
+
+        if ($numeric_value > 0) {
+            return wp_date('Y-m-d H:i:s', (int) $numeric_value);
+        }
+    }
+
+    $timestamp = strtotime($value);
+
+    if (false !== $timestamp) {
+        return wp_date('Y-m-d H:i:s', $timestamp);
+    }
+
+    return $value;
+}
+
 // Function to generate Bokun HMAC signature
 function bokun_generate_signature($date, $apiKey, $method, $endpoint, $secretKey) {
     $stringToSign = $date . $apiKey . $method . $endpoint;
@@ -665,11 +701,17 @@ function bokun_save_specific_fields($post_id, $booking) {
         $sanitized_creation_date = sanitize_text_field($booking_creation_date);
 
         $original_creation_date = get_post_meta($post_id, '_original_creation_date', true);
-        if ($original_creation_date !== $booking_creation_date) {
+        if ($original_creation_date !== $sanitized_creation_date) {
             update_post_meta($post_id, '_original_creation_date', $sanitized_creation_date);
         }
 
-        update_post_meta($post_id, 'bookingcreationdate', $sanitized_creation_date);
+        $formatted_creation_date = bokun_format_booking_datetime($sanitized_creation_date);
+
+        if ('' !== $formatted_creation_date) {
+            update_post_meta($post_id, 'bookingcreationdate', sanitize_text_field($formatted_creation_date));
+        } else {
+            delete_post_meta($post_id, 'bookingcreationdate');
+        }
     } else {
         delete_post_meta($post_id, 'bookingcreationdate');
     }
