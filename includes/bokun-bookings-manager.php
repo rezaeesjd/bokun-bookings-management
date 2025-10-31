@@ -659,9 +659,19 @@ function bokun_save_specific_fields($post_id, $booking) {
     update_post_meta($post_id, '_booking_status_origin', sanitize_text_field($productBooking['status'] ?? 'N/A'));
 
     // Handle timestamps properly for date fields
-    $original_creation_date = get_post_meta($post_id, '_original_creation_date', true);
-    if ($original_creation_date !== $booking['creationDate']) {
-        update_post_meta($post_id, '_original_creation_date', sanitize_text_field($booking['creationDate']));
+    $booking_creation_date = $booking['creationDate'] ?? '';
+
+    if ('' !== $booking_creation_date) {
+        $sanitized_creation_date = sanitize_text_field($booking_creation_date);
+
+        $original_creation_date = get_post_meta($post_id, '_original_creation_date', true);
+        if ($original_creation_date !== $booking_creation_date) {
+            update_post_meta($post_id, '_original_creation_date', $sanitized_creation_date);
+        }
+
+        update_post_meta($post_id, 'bookingcreationdate', $sanitized_creation_date);
+    } else {
+        delete_post_meta($post_id, 'bookingcreationdate');
     }
 
     $original_start_date = get_post_meta($post_id, '_original_start_date', true);
