@@ -105,7 +105,8 @@ class Plugin
         $this->define('BOKUN_JS_URL', $pluginUrl . 'js/');
         $this->define('BOKUN_AUTH_URL', '');
 
-        $this->define('BOKUN_txt_domain', 'BOKUN_text_domain');
+        $this->define('BOKUN_TEXT_DOMAIN', 'bokun-bookings-management');
+        $this->define('BOKUN_txt_domain', BOKUN_TEXT_DOMAIN);
     }
 
     private function loadPlugin()

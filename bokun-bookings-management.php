@@ -7,7 +7,7 @@ Version: 1.0.0
 Author: Hitesh (HWT)
 Author URI: #
 Domain Path: /languages
-Text Domain: BOKUN_text_domain
+Text Domain: bokun-bookings-management
 */
 
 $autoloader = __DIR__ . '/vendor/autoload.php';

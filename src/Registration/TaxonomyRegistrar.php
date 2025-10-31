@@ -23,7 +23,7 @@ class TaxonomyRegistrar
             'booking_status',
             'bokun_booking',
             [
-                'label'        => __('Booking Status'),
+                'label'        => __('Booking Status', BOKUN_TEXT_DOMAIN),
                 'rewrite'      => ['slug' => 'booking-status'],
                 'hierarchical' => false,
                 'show_in_rest' => true,
@@ -37,7 +37,7 @@ class TaxonomyRegistrar
             'product_tags',
             'bokun_booking',
             [
-                'label'        => __('Product Tags'),
+                'label'        => __('Product Tags', BOKUN_TEXT_DOMAIN),
                 'rewrite'      => [
                     'slug'       => 'product-tags',
                     'with_front' => true,
@@ -57,7 +57,7 @@ class TaxonomyRegistrar
             'team_member',
             'bokun_booking',
             [
-                'label'             => __('Team Members'),
+                'label'             => __('Team Members', BOKUN_TEXT_DOMAIN),
                 'rewrite'           => ['slug' => 'team-member'],
                 'public'            => true,
                 'hierarchical'      => false,

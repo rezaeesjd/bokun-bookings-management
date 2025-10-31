@@ -44,7 +44,7 @@ if (!empty($logs)) {
         $timestamp      = strtotime($log['created_at']);
         $formatted_date = $timestamp ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $timestamp) : $log['created_at'];
         $action_label   = ucwords(str_replace('-', ' ', $log['action_type']));
-        $status_label   = $log['is_checked'] ? __('Checked', 'BOKUN_txt_domain') : __('Unchecked', 'BOKUN_txt_domain');
+        $status_label   = $log['is_checked'] ? __('Checked', BOKUN_TEXT_DOMAIN) : __('Unchecked', BOKUN_TEXT_DOMAIN);
         $actor_label    = $log['user_name'];
 
         if (empty($actor_label) && !empty($log['user_id'])) {
@@ -55,20 +55,20 @@ if (!empty($logs)) {
         }
 
         if (empty($actor_label)) {
-            $actor_label = __('Unknown', 'BOKUN_txt_domain');
+            $actor_label = __('Unknown', BOKUN_TEXT_DOMAIN);
         }
 
         $source_label = '';
 
         switch ($log['actor_source']) {
             case 'wp_user':
-                $source_label = __('WordPress User', 'BOKUN_txt_domain');
+                $source_label = __('WordPress User', BOKUN_TEXT_DOMAIN);
                 break;
             case 'team_member':
-                $source_label = __('Team Member', 'BOKUN_txt_domain');
+                $source_label = __('Team Member', BOKUN_TEXT_DOMAIN);
                 break;
             default:
-                $source_label = __('Guest', 'BOKUN_txt_domain');
+                $source_label = __('Guest', BOKUN_TEXT_DOMAIN);
                 break;
         }
 
@@ -123,16 +123,16 @@ if (!empty($logs)) {
 }
 ?>
 <div class="wrap">
-    <h1><?php esc_html_e('Booking History', 'BOKUN_txt_domain'); ?></h1>
+    <h1><?php esc_html_e('Booking History', BOKUN_TEXT_DOMAIN); ?></h1>
 
     <?php if (!$table_exists) : ?>
         <div class="notice notice-error">
-            <p><?php esc_html_e('The booking history table does not exist. Please reactivate the plugin to recreate it.', 'BOKUN_txt_domain'); ?></p>
+            <p><?php esc_html_e('The booking history table does not exist. Please reactivate the plugin to recreate it.', BOKUN_TEXT_DOMAIN); ?></p>
         </div>
     <?php elseif (empty($processed_logs)) : ?>
-        <p><?php esc_html_e('No booking activity has been recorded yet.', 'BOKUN_txt_domain'); ?></p>
+        <p><?php esc_html_e('No booking activity has been recorded yet.', BOKUN_TEXT_DOMAIN); ?></p>
     <?php else : ?>
-        <p><?php printf(esc_html__('Showing the latest %d booking history entries.', 'BOKUN_txt_domain'), absint(count($processed_logs))); ?></p>
+        <p><?php printf(esc_html__('Showing the latest %d booking history entries.', BOKUN_TEXT_DOMAIN), absint(count($processed_logs))); ?></p>
 
         <style>
             .bokun-history-filters {
@@ -248,22 +248,22 @@ if (!empty($logs)) {
 
         <?php
         $filter_labels = [
-            'action' => __('Action', 'BOKUN_txt_domain'),
-            'status' => __('Status', 'BOKUN_txt_domain'),
-            'actor'  => __('Actor', 'BOKUN_txt_domain'),
-            'source' => __('Source', 'BOKUN_txt_domain'),
+            'action' => __('Action', BOKUN_TEXT_DOMAIN),
+            'status' => __('Status', BOKUN_TEXT_DOMAIN),
+            'actor'  => __('Actor', BOKUN_TEXT_DOMAIN),
+            'source' => __('Source', BOKUN_TEXT_DOMAIN),
         ];
         ?>
 
         <?php $filter_index = 0; ?>
-        <div class="bokun-history-filters" data-target-table="bokun-booking-history-table" aria-label="<?php esc_attr_e('Booking history filters', 'BOKUN_txt_domain'); ?>">
+        <div class="bokun-history-filters" data-target-table="bokun-booking-history-table" aria-label="<?php esc_attr_e('Booking history filters', BOKUN_TEXT_DOMAIN); ?>">
             <?php foreach ($filter_options as $filter_key => $options) :
                 if (empty($options)) {
                     continue;
                 }
                 $filter_index++;
                 $search_id = sanitize_html_class('bokun-history-filter-' . $filter_key . '-search-' . $filter_index);
-                $search_label = sprintf(__('Search %s', 'BOKUN_txt_domain'), $filter_labels[$filter_key]);
+                $search_label = sprintf(__('Search %s', BOKUN_TEXT_DOMAIN), $filter_labels[$filter_key]);
             ?>
                 <div class="bokun-history-filter" data-filter-key="<?php echo esc_attr($filter_key); ?>" data-filter-column="<?php echo isset($filter_columns[$filter_key]) ? (int) $filter_columns[$filter_key] : 0; ?>">
                     <details>
@@ -273,8 +273,8 @@ if (!empty($logs)) {
                             <input type="text" id="<?php echo esc_attr($search_id); ?>" class="bokun-history-filter-text" data-filter-text placeholder="<?php echo esc_attr($search_label); ?>" />
                         </div>
                         <div class="bokun-history-filter-actions">
-                            <button type="button" class="button" data-filter-select-all><?php esc_html_e('Select All', 'BOKUN_txt_domain'); ?></button>
-                            <button type="button" class="button" data-filter-clear><?php esc_html_e('Clear', 'BOKUN_txt_domain'); ?></button>
+                            <button type="button" class="button" data-filter-select-all><?php esc_html_e('Select All', BOKUN_TEXT_DOMAIN); ?></button>
+                            <button type="button" class="button" data-filter-clear><?php esc_html_e('Clear', BOKUN_TEXT_DOMAIN); ?></button>
                         </div>
                         <div class="bokun-history-filter-options">
                             <ul>
@@ -305,12 +305,12 @@ if (!empty($logs)) {
         <table class="widefat fixed striped" id="bokun-booking-history-table">
             <thead>
                 <tr>
-                    <th scope="col"><?php esc_html_e('Date', 'BOKUN_txt_domain'); ?></th>
-                    <th scope="col"><?php esc_html_e('Booking ID', 'BOKUN_txt_domain'); ?></th>
-                    <th scope="col"><?php esc_html_e('Action', 'BOKUN_txt_domain'); ?></th>
-                    <th scope="col"><?php esc_html_e('Status', 'BOKUN_txt_domain'); ?></th>
-                    <th scope="col"><?php esc_html_e('Actor', 'BOKUN_txt_domain'); ?></th>
-                    <th scope="col"><?php esc_html_e('Source', 'BOKUN_txt_domain'); ?></th>
+                    <th scope="col"><?php esc_html_e('Date', BOKUN_TEXT_DOMAIN); ?></th>
+                    <th scope="col"><?php esc_html_e('Booking ID', BOKUN_TEXT_DOMAIN); ?></th>
+                    <th scope="col"><?php esc_html_e('Action', BOKUN_TEXT_DOMAIN); ?></th>
+                    <th scope="col"><?php esc_html_e('Status', BOKUN_TEXT_DOMAIN); ?></th>
+                    <th scope="col"><?php esc_html_e('Actor', BOKUN_TEXT_DOMAIN); ?></th>
+                    <th scope="col"><?php esc_html_e('Source', BOKUN_TEXT_DOMAIN); ?></th>
                 </tr>
             </thead>
             <tbody>

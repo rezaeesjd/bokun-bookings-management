@@ -28,7 +28,12 @@ class LocalizationLoader
             $relativePath = basename(dirname(__FILE__, 4)) . '/languages';
         }
 
-        load_plugin_textdomain(BOKUN_txt_domain, false, $relativePath);
+        load_plugin_textdomain(BOKUN_TEXT_DOMAIN, false, $relativePath);
+
+        /**
+         * @deprecated Backward compatibility hook.
+         */
         do_action('bokun_txt_domain');
+        do_action('bokun_text_domain_loaded', BOKUN_TEXT_DOMAIN);
     }
 }

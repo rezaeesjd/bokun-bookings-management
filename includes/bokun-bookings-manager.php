@@ -325,11 +325,11 @@ function bokun_get_import_progress_label($context) {
 
     switch ($context) {
         case 'upgrade':
-            return __('API 2 import', 'bokun-bookings-manager');
+            return __('API 2 import', BOKUN_TEXT_DOMAIN);
         case 'fetch':
-            return __('API 1 import', 'bokun-bookings-manager');
+            return __('API 1 import', BOKUN_TEXT_DOMAIN);
         default:
-            return __('Import', 'bokun-bookings-manager');
+            return __('Import', BOKUN_TEXT_DOMAIN);
     }
 }
 
@@ -341,16 +341,16 @@ function bokun_get_import_progress_message($context, $status) {
     switch ($status) {
         case 'running':
             /* translators: %s: API label. */
-            return sprintf(__('%s — importing product {current}/{total}', 'bokun-bookings-manager'), $label);
+            return sprintf(__('%s — importing product {current}/{total}', BOKUN_TEXT_DOMAIN), $label);
         case 'completed':
             /* translators: %s: API label. */
-            return sprintf(__('%s — import complete ({total}/{total})', 'bokun-bookings-manager'), $label);
+            return sprintf(__('%s — import complete ({total}/{total})', BOKUN_TEXT_DOMAIN), $label);
         case 'error':
             /* translators: %s: API label. */
-            return sprintf(__('%s — import interrupted', 'bokun-bookings-manager'), $label);
+            return sprintf(__('%s — import interrupted', BOKUN_TEXT_DOMAIN), $label);
         default:
             /* translators: %s: API label. */
-            return sprintf(__('%s — preparing import…', 'bokun-bookings-manager'), $label);
+            return sprintf(__('%s — preparing import…', BOKUN_TEXT_DOMAIN), $label);
     }
 }
 
@@ -537,7 +537,7 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
     if (!bokun_ensure_booking_post_type_registered()) {
         $stats['skipped'] = $stats['total'];
 
-        $error_message = __('The Bokun Booking post type is not registered. Import aborted to avoid capability errors.', 'bokun-bookings-manager');
+        $error_message = __('The Bokun Booking post type is not registered. Import aborted to avoid capability errors.', BOKUN_TEXT_DOMAIN);
 
         bokun_set_import_progress_state($context, array(
             'status'    => 'error',
@@ -2042,8 +2042,8 @@ function bokun_get_api_credentials_for_context($context = 'default') {
 function bokun_register_alarm_status_taxonomy() {
     register_taxonomy('alarm_status', 'bokun_booking', [
         'labels' => [
-            'name' => __('Alarm Status'),
-            'singular_name' => __('Alarm Status'),
+            'name' => __('Alarm Status', BOKUN_TEXT_DOMAIN),
+            'singular_name' => __('Alarm Status', BOKUN_TEXT_DOMAIN),
         ],
         'public' => true,
         'rewrite' => ['slug' => 'alarm-status'],
@@ -2270,7 +2270,7 @@ function bokun_handle_add_team_member() {
 
     if ('' === $team_member_name) {
         wp_send_json_error([
-            'message' => __('Please provide a team member name.', 'bokun-bookings-manager'),
+            'message' => __('Please provide a team member name.', BOKUN_TEXT_DOMAIN),
         ]);
     }
 
@@ -2278,7 +2278,7 @@ function bokun_handle_add_team_member() {
 
     if ($existing_term) {
         wp_send_json_success([
-            'message' => __('This team member already exists.', 'bokun-bookings-manager'),
+            'message' => __('This team member already exists.', BOKUN_TEXT_DOMAIN),
             'created' => false,
         ]);
     }
@@ -2292,7 +2292,7 @@ function bokun_handle_add_team_member() {
     }
 
     wp_send_json_success([
-        'message' => __('Team member added successfully.', 'bokun-bookings-manager'),
+        'message' => __('Team member added successfully.', BOKUN_TEXT_DOMAIN),
         'created' => true,
     ]);
 }
@@ -2374,7 +2374,7 @@ add_action('add_meta_boxes', 'bokun_add_custom_fields_metabox');
 function bokun_add_custom_fields_metabox() {
     add_meta_box(
         'bokun_custom_fields',
-        __('Booking Custom Fields'),
+        __('Booking Custom Fields', BOKUN_TEXT_DOMAIN),
         'bokun_display_custom_fields_metabox',
         'bokun_booking',
         'normal',
@@ -2698,12 +2698,12 @@ function bokun_team_member_submission_shortcode() {
     ?>
     <div id="<?php echo esc_attr($overlay_id); ?>" class="bokun-team-member-overlay" role="dialog" aria-modal="true" aria-hidden="true">
         <div class="bokun-team-member-overlay__dialog">
-            <h2 class="bokun-team-member-overlay__title"><?php esc_html_e('Team Member Verification', 'bokun-bookings-manager'); ?></h2>
-            <p class="bokun-team-member-overlay__description"><?php esc_html_e('Enter your name to access this page.', 'bokun-bookings-manager'); ?></p>
+            <h2 class="bokun-team-member-overlay__title"><?php esc_html_e('Team Member Verification', BOKUN_TEXT_DOMAIN); ?></h2>
+            <p class="bokun-team-member-overlay__description"><?php esc_html_e('Enter your name to access this page.', BOKUN_TEXT_DOMAIN); ?></p>
             <form class="bokun-team-member-form" data-overlay-id="<?php echo esc_attr($overlay_id); ?>" data-storage-key="<?php echo esc_attr($storage_key); ?>" data-legacy-storage-key="<?php echo esc_attr($legacy_storage_key); ?>" novalidate>
-                <label class="bokun-team-member-form__label" for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Team Member Name', 'bokun-bookings-manager'); ?></label>
+                <label class="bokun-team-member-form__label" for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Team Member Name', BOKUN_TEXT_DOMAIN); ?></label>
                 <input class="bokun-team-member-form__input" type="text" id="<?php echo esc_attr($input_id); ?>" name="team_member_name" autocomplete="off" required>
-                <button class="bokun-team-member-form__button" type="submit"><?php esc_html_e('Confirm Access', 'bokun-bookings-manager'); ?></button>
+                <button class="bokun-team-member-form__button" type="submit"><?php esc_html_e('Confirm Access', BOKUN_TEXT_DOMAIN); ?></button>
                 <span class="bokun-team-member-message" role="status" aria-live="polite"></span>
             </form>
         </div>
@@ -3026,7 +3026,7 @@ add_shortcode('team_member_field', 'bokun_team_member_submission_shortcode');
 function bokun_team_member_reset_button_shortcode($atts) {
     $atts = shortcode_atts(
         array(
-            'label' => __('Reset Team Member Session', 'bokun-bookings-manager'),
+            'label' => __('Reset Team Member Session', BOKUN_TEXT_DOMAIN),
         ),
         $atts,
         'team_member_reset_button'
@@ -3222,19 +3222,19 @@ add_action('product_tags_add_form_fields', 'add_product_tag_custom_fields', 10, 
 function add_product_tag_custom_fields($taxonomy) {
     ?>
     <div class="form-field">
-        <label for="term_meta[statusok]"><?php _e('Status OK', 'bokun-bookings-manager'); ?></label>
+        <label for="term_meta[statusok]"><?php _e('Status OK', BOKUN_TEXT_DOMAIN); ?></label>
         <input type="number" name="term_meta[statusok]" id="term_meta[statusok]" value="">
-        <p class="description"><?php _e('Enter the number of days for Status OK.', 'bokun-bookings-manager'); ?></p>
+        <p class="description"><?php _e('Enter the number of days for Status OK.', BOKUN_TEXT_DOMAIN); ?></p>
     </div>
     <div class="form-field">
-        <label for="term_meta[statusattention]"><?php _e('Status Attention', 'bokun-bookings-manager'); ?></label>
+        <label for="term_meta[statusattention]"><?php _e('Status Attention', BOKUN_TEXT_DOMAIN); ?></label>
         <input type="number" name="term_meta[statusattention]" id="term_meta[statusattention]" value="">
-        <p class="description"><?php _e('Enter the number of days for Status Attention.', 'bokun-bookings-manager'); ?></p>
+        <p class="description"><?php _e('Enter the number of days for Status Attention.', BOKUN_TEXT_DOMAIN); ?></p>
     </div>
     <div class="form-field">
-        <label for="term_meta[statusalarm]"><?php _e('Status Alarm', 'bokun-bookings-manager'); ?></label>
+        <label for="term_meta[statusalarm]"><?php _e('Status Alarm', BOKUN_TEXT_DOMAIN); ?></label>
         <input type="number" name="term_meta[statusalarm]" id="term_meta[statusalarm]" value="">
-        <p class="description"><?php _e('Enter the number of days for Status Alarm.', 'bokun-bookings-manager'); ?></p>
+        <p class="description"><?php _e('Enter the number of days for Status Alarm.', BOKUN_TEXT_DOMAIN); ?></p>
     </div>
     <?php
 }
@@ -3247,24 +3247,24 @@ function edit_product_tag_custom_fields($term, $taxonomy) {
     $statusalarm = get_term_meta($term->term_id, 'statusalarm', true);
     ?>
     <tr class="form-field">
-        <th scope="row" valign="top"><label for="term_meta[statusok]"><?php _e('Status OK', 'bokun-bookings-manager'); ?></label></th>
+        <th scope="row" valign="top"><label for="term_meta[statusok]"><?php _e('Status OK', BOKUN_TEXT_DOMAIN); ?></label></th>
         <td>
             <input type="number" name="term_meta[statusok]" id="term_meta[statusok]" value="<?php echo esc_attr($statusok) ? esc_attr($statusok) : ''; ?>">
-            <p class="description"><?php _e('Enter the number of days for Status OK.', 'bokun-bookings-manager'); ?></p>
+            <p class="description"><?php _e('Enter the number of days for Status OK.', BOKUN_TEXT_DOMAIN); ?></p>
         </td>
     </tr>
     <tr class="form-field">
-        <th scope="row" valign="top"><label for="term_meta[statusattention]"><?php _e('Status Attention', 'bokun-bookings-manager'); ?></label></th>
+        <th scope="row" valign="top"><label for="term_meta[statusattention]"><?php _e('Status Attention', BOKUN_TEXT_DOMAIN); ?></label></th>
         <td>
             <input type="number" name="term_meta[statusattention]" id="term_meta[statusattention]" value="<?php echo esc_attr($statusattention) ? esc_attr($statusattention) : ''; ?>">
-            <p class="description"><?php _e('Enter the number of days for Status Attention.', 'bokun-bookings-manager'); ?></p>
+            <p class="description"><?php _e('Enter the number of days for Status Attention.', BOKUN_TEXT_DOMAIN); ?></p>
         </td>
     </tr>
     <tr class="form-field">
-        <th scope="row" valign="top"><label for="term_meta[statusalarm]"><?php _e('Status Alarm', 'bokun-bookings-manager'); ?></label></th>
+        <th scope="row" valign="top"><label for="term_meta[statusalarm]"><?php _e('Status Alarm', BOKUN_TEXT_DOMAIN); ?></label></th>
         <td>
             <input type="number" name="term_meta[statusalarm]" id="term_meta[statusalarm]" value="<?php echo esc_attr($statusalarm) ? esc_attr($statusalarm) : ''; ?>">
-            <p class="description"><?php _e('Enter the number of days for Status Alarm.', 'bokun-bookings-manager'); ?></p>
+            <p class="description"><?php _e('Enter the number of days for Status Alarm.', BOKUN_TEXT_DOMAIN); ?></p>
         </td>
     </tr>
     <?php
@@ -3329,9 +3329,9 @@ add_action('product_tags_add_form_fields', 'add_partnerpageid_field', 10, 2);
 function add_partnerpageid_field($taxonomy) {
     ?>
     <div class="form-field">
-        <label for="term_meta[partnerpageid]"><?php _e('Partner Page ID', 'bokun-bookings-manager'); ?></label>
+        <label for="term_meta[partnerpageid]"><?php _e('Partner Page ID', BOKUN_TEXT_DOMAIN); ?></label>
         <input type="text" name="term_meta[partnerpageid]" id="term_meta[partnerpageid]" value="">
-        <p class="description"><?php _e('Enter the Partner Page ID.', 'bokun-bookings-manager'); ?></p>
+        <p class="description"><?php _e('Enter the Partner Page ID.', BOKUN_TEXT_DOMAIN); ?></p>
     </div>
     <?php
 }
@@ -3342,10 +3342,10 @@ function edit_partnerpageid_field($term, $taxonomy) {
     $partnerpageid = get_term_meta($term->term_id, 'partnerpageid', true);
     ?>
     <tr class="form-field">
-        <th scope="row" valign="top"><label for="term_meta[partnerpageid]"><?php _e('Partner Page ID', 'bokun-bookings-manager'); ?></label></th>
+        <th scope="row" valign="top"><label for="term_meta[partnerpageid]"><?php _e('Partner Page ID', BOKUN_TEXT_DOMAIN); ?></label></th>
         <td>
             <input type="text" name="term_meta[partnerpageid]" id="term_meta[partnerpageid]" value="<?php echo esc_attr($partnerpageid) ? esc_attr($partnerpageid) : ''; ?>">
-            <p class="description"><?php _e('Enter the Partner Page ID.', 'bokun-bookings-manager'); ?></p>
+            <p class="description"><?php _e('Enter the Partner Page ID.', BOKUN_TEXT_DOMAIN); ?></p>
         </td>
     </tr>
     <?php

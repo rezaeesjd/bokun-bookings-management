@@ -108,12 +108,12 @@ class AdminMenu
     {
         return [
             [
-                'name' => __('Settings', 'BOKUN_txt_domain'),
+                'name' => __('Settings', BOKUN_TEXT_DOMAIN),
                 'cap'  => 'manage_options',
                 'slug' => $this->settingsSlug,
             ],
             [
-                'name' => __('Booking History', 'BOKUN_txt_domain'),
+                'name' => __('Booking History', BOKUN_TEXT_DOMAIN),
                 'cap'  => 'manage_options',
                 'slug' => $this->bookingHistorySlug,
             ],
@@ -140,7 +140,7 @@ class AdminMenu
     public function getAdminMessage($key)
     {
         $messages = [
-            'no_tax' => __('No matching tax rates found.', 'BOKUN_txt_domain'),
+            'no_tax' => __('No matching tax rates found.', BOKUN_TEXT_DOMAIN),
         ];
 
         if ('script' === $key) {
