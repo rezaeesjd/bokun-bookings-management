@@ -9,11 +9,11 @@ class BookingShortcode
 {
     public function __construct()
     {
-        add_shortcode('bokun_fetch_button', [$this, 'function_bokun_fetch_button']);
-        add_shortcode('bokun_booking_history', [$this, 'render_booking_history_table']);
+        add_shortcode('bokun_fetch_button', [$this, 'renderFetchButton']);
+        add_shortcode('bokun_booking_history', [$this, 'renderBookingHistoryTable']);
     }
 
-    public function function_bokun_fetch_button()
+    public function renderFetchButton()
     {
         ob_start();
         ?>
@@ -36,7 +36,7 @@ class BookingShortcode
         return ob_get_clean();
     }
 
-    private function enqueue_booking_history_assets($export_title)
+    private function enqueueBookingHistoryAssets($export_title)
     {
         $script_version = '1.0.0';
         $script_path = BOKUN_JS_DIR . 'bokun-booking-history.js';
@@ -114,7 +114,7 @@ class BookingShortcode
         );
     }
 
-    public function render_booking_history_table($atts = [])
+    public function renderBookingHistoryTable($atts = [])
     {
         global $wpdb;
 
@@ -265,7 +265,7 @@ class BookingShortcode
             }
         }
 
-        $this->enqueue_booking_history_assets($export_title);
+        $this->enqueueBookingHistoryAssets($export_title);
 
         $table_id = sanitize_html_class('bokun-booking-history-table-' . uniqid('', true));
 
@@ -473,6 +473,16 @@ class BookingShortcode
         </div>
         <?php
         return ob_get_clean();
+    }
+
+    public function function_bokun_fetch_button()
+    {
+        return $this->renderFetchButton();
+    }
+
+    public function render_booking_history_table($atts = [])
+    {
+        return $this->renderBookingHistoryTable($atts);
     }
 }
 

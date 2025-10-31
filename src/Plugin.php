@@ -93,7 +93,7 @@ class Plugin
         $bokun_container = $this->container;
         $rb = $this->container->get('bokun.manager');
 
-        if (! $rb->bokun_is_activate()) {
+        if (! $rb->isActivated()) {
             return;
         }
 

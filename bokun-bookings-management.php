@@ -40,8 +40,15 @@ global $bokun_version;
 $bokun_version = '1.0.0';
 
 class BokunBookingManagement {
-    var $bokun_settings = '';
-    var $bokun_booking_history = 'bokun_booking_history';
+    /**
+     * @var string
+     */
+    private $settingsSlug = 'bokun_settings';
+
+    /**
+     * @var string
+     */
+    private $bookingHistorySlug = 'bokun_booking_history';
 
     /** @var AdminMenu */
     private $adminMenu;
@@ -58,25 +65,21 @@ class BokunBookingManagement {
     /** @var LocalizationLoader */
     private $localizationLoader;
 
-        public function __construct(
+    public function __construct(
         ?AdminMenu $adminMenu = null,
         ?AdminAssets $assets = null,
         ?PostTypeRegistrar $postTypeRegistrar = null,
         ?TaxonomyRegistrar $taxonomyRegistrar = null,
         ?LocalizationLoader $localizationLoader = null
     ) {
-        global $wpdb;
-
-        $this->bokun_settings = 'bokun_settings';
-
-        $this->adminMenu = $adminMenu ?: new AdminMenu($this->bokun_settings, $this->bokun_booking_history);
-        $this->assets = $assets ?: new AdminAssets($this->adminMenu);
+        $this->adminMenu         = $adminMenu ?: new AdminMenu($this->settingsSlug, $this->bookingHistorySlug);
+        $this->assets            = $assets ?: new AdminAssets($this->adminMenu);
         $this->postTypeRegistrar = $postTypeRegistrar ?: new PostTypeRegistrar();
         $this->taxonomyRegistrar = $taxonomyRegistrar ?: new TaxonomyRegistrar();
         $this->localizationLoader = $localizationLoader ?: new LocalizationLoader();
 
-        register_activation_hook(__FILE__, array($this, 'bokun_install'));
-        register_deactivation_hook(__FILE__, array($this, 'bokun_deactivation'));
+        register_activation_hook(__FILE__, [self::class, 'activate']);
+        register_deactivation_hook(__FILE__, [self::class, 'deactivate']);
 
         $this->adminMenu->register();
         $this->assets->register();
@@ -85,15 +88,16 @@ class BokunBookingManagement {
         $this->localizationLoader->register();
     }
 
-static function bokun_install() {
-
-                global $wpdb, $rb, $bokun_version;
+    public static function activate()
+    {
+        global $wpdb, $rb, $bokun_version;
 
         $charset_collate = $wpdb->get_charset_collate();
-        require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
 
-        update_option( "bokun_plugin", true );
-        update_option( "bokun_version", $bokun_version );
+        require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+        update_option('bokun_plugin', true);
+        update_option('bokun_version', $bokun_version);
 
         $table_name = $wpdb->prefix . 'bokun_booking_history';
 
@@ -113,64 +117,136 @@ static function bokun_install() {
         ) $charset_collate;";
 
         dbDelta($sql);
+    }
 
-        }
-
-    static function bokun_deactivation() {
+    public static function deactivate()
+    {
         // deactivation process here
     }
 
-        function bokun_get_sub_menu() {
+    public static function bokun_install()
+    {
+        self::activate();
+    }
+
+    public static function bokun_deactivation()
+    {
+        self::deactivate();
+    }
+
+    public function getSubmenuItems()
+    {
         return $this->adminMenu->getSubmenuItems();
-        }
+    }
 
-        function bokun_add_menu() {
-                $this->adminMenu->registerMenu();
-        }
+    public function registerMenu()
+    {
+        $this->adminMenu->registerMenu();
+    }
 
-	function bokun_is_activate(){
-		if(get_option("bokun_plugin")) {
-			return true;
-		} else {
-			return false;
-		}
-	}
+    public function isActivated()
+    {
+        return (bool) get_option('bokun_plugin');
+    }
 
-        function bokun_admin_slugs() {
-                return $this->adminMenu->getPageSlugs();
-        }
+    public function getAdminSlugs()
+    {
+        return $this->adminMenu->getPageSlugs();
+    }
 
-        function bokun_is_page() {
-                return $this->adminMenu->isPluginPage();
-        }
+    public function isPluginPage()
+    {
+        return $this->adminMenu->isPluginPage();
+    }
 
-    function bokun_admin_msg( $key ) {
+    public function getAdminMessage($key)
+    {
         return $this->adminMenu->getAdminMessage($key);
     }
 
-        function bokun_enqueue_scripts() {
+    public function enqueueAdminAssets()
+    {
         $this->assets->enqueueAdminAssets();
     }
 
-    function bokun_front_enqueue_scripts() {
+    public function enqueueFrontAssets()
+    {
         $this->assets->enqueueFrontAssets();
     }
 
-    function bokun_register_all_scripts() {
+    public function registerBookingScripts()
+    {
         $this->assets->registerBookingScripts();
     }
 
-        function bokun_route() {
-                $this->adminMenu->renderPage();
-        }
-
-    function bokun_write_log( $content = '', $file_name = 'bokun_log.txt' ) {
-        $file = __DIR__ . '/log/' . $file_name;    
-        $file_content = "=============== Write At => " . date( "y-m-d H:i:s" ) . " =============== \r\n";
-        $file_content .= $content . "\r\n\r\n";
-        file_put_contents( $file, $file_content, FILE_APPEND | LOCK_EX );
+    public function renderPage()
+    {
+        $this->adminMenu->renderPage();
     }
-    
+
+    public function writeLog($content = '', $fileName = 'bokun_log.txt')
+    {
+        $file        = __DIR__ . '/log/' . $fileName;
+        $fileContent = '=============== Write At => ' . date('y-m-d H:i:s') . " =============== \r\n";
+        $fileContent .= $content . "\r\n\r\n";
+
+        file_put_contents($file, $fileContent, FILE_APPEND | LOCK_EX);
+    }
+
+    public function bokun_get_sub_menu()
+    {
+        return $this->getSubmenuItems();
+    }
+
+    public function bokun_add_menu()
+    {
+        $this->registerMenu();
+    }
+
+    public function bokun_is_activate()
+    {
+        return $this->isActivated();
+    }
+
+    public function bokun_admin_slugs()
+    {
+        return $this->getAdminSlugs();
+    }
+
+    public function bokun_is_page()
+    {
+        return $this->isPluginPage();
+    }
+
+    public function bokun_admin_msg($key)
+    {
+        return $this->getAdminMessage($key);
+    }
+
+    public function bokun_enqueue_scripts()
+    {
+        $this->enqueueAdminAssets();
+    }
+
+    public function bokun_front_enqueue_scripts()
+    {
+        $this->enqueueFrontAssets();
+    }
+
+    public function bokun_register_all_scripts()
+    {
+        $this->registerBookingScripts();
+    }
+
+    public function bokun_route()
+    {
+        $this->renderPage();
+    }
+
+    public function bokun_write_log($content = '', $fileName = 'bokun_log.txt')
+    {
+        $this->writeLog($content, $fileName);
+    }
 }
 $bokunContainer = new \Bokun\Bookings\Infrastructure\Container();
 $plugin = new \Bokun\Bookings\Plugin(__FILE__, $bokunContainer);

@@ -17,20 +17,20 @@ class SettingsController
     public function __construct(SettingsRepository $settings)
     {
         $this->settings = $settings;
-        add_action('wp_ajax_bokun_save_api_auth', [$this, 'bokun_save_api_auth'], 10, 2);
-        add_action('wp_ajax_no_priv_bokun_save_api_auth', [$this, 'bokun_save_api_auth'], 10, 2);
+        add_action('wp_ajax_bokun_save_api_auth', [$this, 'savePrimaryCredentials'], 10);
+        add_action('wp_ajax_nopriv_bokun_save_api_auth', [$this, 'savePrimaryCredentials'], 10);
 
-        add_action('wp_ajax_bokun_save_api_auth_upgrade', [$this, 'bokun_save_api_auth_upgrade'], 10, 2);
-        add_action('wp_ajax_no_priv_bokun_save_api_auth_upgrade', [$this, 'bokun_save_api_auth_upgrade'], 10, 2);
+        add_action('wp_ajax_bokun_save_api_auth_upgrade', [$this, 'saveUpgradeCredentials'], 10);
+        add_action('wp_ajax_nopriv_bokun_save_api_auth_upgrade', [$this, 'saveUpgradeCredentials'], 10);
 
-        add_action('wp_ajax_bokun_bookings_manager_page', [$this, 'bokun_bookings_manager_page'], 10);
-        add_action('wp_ajax_nopriv_bokun_bookings_manager_page', [$this, 'bokun_bookings_manager_page'], 10);
+        add_action('wp_ajax_bokun_bookings_manager_page', [$this, 'handleBookingsManagerPage'], 10);
+        add_action('wp_ajax_nopriv_bokun_bookings_manager_page', [$this, 'handleBookingsManagerPage'], 10);
 
-        add_action('wp_ajax_bokun_get_import_progress', [$this, 'bokun_get_import_progress'], 10);
-        add_action('wp_ajax_nopriv_bokun_get_import_progress', [$this, 'bokun_get_import_progress'], 10);
+        add_action('wp_ajax_bokun_get_import_progress', [$this, 'getImportProgress'], 10);
+        add_action('wp_ajax_nopriv_bokun_get_import_progress', [$this, 'getImportProgress'], 10);
     }
 
-    public function bokun_bookings_manager_page()
+    public function handleBookingsManagerPage()
     {
         if (! check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
             wp_send_json_error(['msg' => 'Nonce verification failed.']);
@@ -82,7 +82,7 @@ class SettingsController
         wp_die();
     }
 
-    public function bokun_get_import_progress()
+    public function getImportProgress()
     {
         if (! check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
             wp_send_json_error(['msg' => 'Nonce verification failed.']);
@@ -100,7 +100,7 @@ class SettingsController
         wp_die();
     }
 
-    public function bokun_save_api_auth()
+    public function savePrimaryCredentials()
     {
         if (! check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
             wp_send_json_error(['msg' => 'Invalid nonce.']);
@@ -116,7 +116,7 @@ class SettingsController
         wp_die();
     }
 
-    public function bokun_save_api_auth_upgrade()
+    public function saveUpgradeCredentials()
     {
         if (! check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
             wp_send_json_error(['msg' => 'Invalid nonce.']);
@@ -132,7 +132,7 @@ class SettingsController
         wp_die();
     }
 
-    public function bokun_display_settings()
+    public function displaySettingsPage()
     {
         if (defined('BOKUN_INCLUDES_DIR')) {
             $view = rtrim(BOKUN_INCLUDES_DIR, '/\\') . '/bokun_settings.view.php';
@@ -149,6 +149,31 @@ class SettingsController
                 include $view;
             }
         }
+    }
+
+    public function bokun_bookings_manager_page()
+    {
+        $this->handleBookingsManagerPage();
+    }
+
+    public function bokun_get_import_progress()
+    {
+        $this->getImportProgress();
+    }
+
+    public function bokun_save_api_auth()
+    {
+        $this->savePrimaryCredentials();
+    }
+
+    public function bokun_save_api_auth_upgrade()
+    {
+        $this->saveUpgradeCredentials();
+    }
+
+    public function bokun_display_settings()
+    {
+        $this->displaySettingsPage();
     }
 }
 

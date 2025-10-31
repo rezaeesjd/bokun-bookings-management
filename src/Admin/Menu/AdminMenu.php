@@ -81,8 +81,12 @@ class AdminMenu
             case $this->settingsSlug:
                 global $bokun_settings;
 
-                if (isset($bokun_settings) && method_exists($bokun_settings, 'bokun_display_settings')) {
-                    $bokun_settings->bokun_display_settings();
+                if (isset($bokun_settings)) {
+                    if (method_exists($bokun_settings, 'displaySettingsPage')) {
+                        $bokun_settings->displaySettingsPage();
+                    } elseif (method_exists($bokun_settings, 'bokun_display_settings')) {
+                        $bokun_settings->bokun_display_settings();
+                    }
                 }
                 break;
             case $this->bookingHistorySlug:
