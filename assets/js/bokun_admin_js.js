@@ -166,19 +166,19 @@ jQuery(document).ready(function ($) {
 		var updated = typeof summary.updated === 'number' ? summary.updated : parseInt(summary.updated, 10);
 		var skipped = typeof summary.skipped === 'number' ? summary.skipped : parseInt(summary.skipped, 10);
 
-		if (!isNaN(created) && created > 0) {
-			breakdown.push(created + ' new');
-		}
+                if (!isNaN(created) && created > 0) {
+                        breakdown.push(formatCountMessage('summaryCreated', '%d new', created));
+                }
 
-		if (!isNaN(updated) && updated > 0) {
-			breakdown.push(updated + ' updated');
-		}
+                if (!isNaN(updated) && updated > 0) {
+                        breakdown.push(formatCountMessage('summaryUpdated', '%d updated', updated));
+                }
 
-		if (!isNaN(skipped) && skipped > 0) {
-			breakdown.push(skipped + ' skipped');
-		}
+                if (!isNaN(skipped) && skipped > 0) {
+                        breakdown.push(formatCountMessage('summarySkipped', '%d skipped', skipped));
+                }
 
-		var label = options.label || (options.isFinal ? 'Import complete' : 'Import progress');
+                var label = options.label || (options.isFinal ? getMessage('importComplete', 'Import complete') : getMessage('importProgress', 'Import progress'));
                 if (breakdown.length) {
                         label += ' — ' + breakdown.join(', ');
                 }
@@ -210,6 +210,36 @@ jQuery(document).ready(function ($) {
                 }
 
                 return fallback;
+        }
+
+        function formatCountMessage(key, fallback, count) {
+                var template = getMessage(key, fallback);
+
+                if (typeof template !== 'string') {
+                        template = fallback;
+                }
+
+                return template.replace(/%d/g, count);
+        }
+
+        function formatTemplateMessage(key, fallback, replacements) {
+                var template = getMessage(key, fallback);
+
+                if (typeof template !== 'string') {
+                        template = fallback;
+                }
+
+                if (!replacements || typeof replacements !== 'object') {
+                        return template;
+                }
+
+                Object.keys(replacements).forEach(function (replacementKey) {
+                        var value = replacements[replacementKey];
+                        var regex = new RegExp('\\{' + replacementKey + '\\}', 'g');
+                        template = template.replace(regex, value);
+                });
+
+                return template;
         }
 
         function showValidationMessage(message, type) {
@@ -337,18 +367,20 @@ jQuery(document).ready(function ($) {
 				
 				jQuery('.msg_success_apis, .msg_error_apis').hide();
 				
-				if (res.success) {
-					var msg_all = decodeHTMLEntities(res.data.msg);
-					jQuery('.msg_success_apis p').html(`<strong>Success:</strong> ${msg_all}`);
-					jQuery('.msg_success_apis').show();
-				} else {
-					jQuery('.msg_error_apis p').html(`<strong>Error:</strong> ${res.data.msg}`);
-					jQuery('.msg_error_apis').show(); // Show error notice
-				}
+                                if (res.success) {
+                                        var msg_all = decodeHTMLEntities(res.data.msg);
+                                        var successPrefix = getMessage('successPrefix', 'Success:');
+                                        jQuery('.msg_success_apis p').html('<strong>' + successPrefix + '</strong> ' + msg_all);
+                                        jQuery('.msg_success_apis').show();
+                                } else {
+                                        var errorPrefix = getMessage('errorPrefix', 'Error:');
+                                        jQuery('.msg_error_apis p').html('<strong>' + errorPrefix + '</strong> ' + res.data.msg);
+                                        jQuery('.msg_error_apis').show(); // Show error notice
+                                }
 			},
 			error: function (xhr, status, error) {
-				console.error('Error:', error);
-				alert('An error occurred. Please try again.');
+                                console.error('Error:', error);
+                                alert(getMessage('genericError', 'An error occurred. Please try again.'));
 			}
 		});
 	});
@@ -370,18 +402,20 @@ jQuery(document).ready(function ($) {
 				
 				jQuery('.msg_success_apis_upgrade, .msg_error_apis_upgrade').hide();
 				
-				if (res.success) {
-					var msg_all = decodeHTMLEntities(res.data.msg);
-					jQuery('.msg_success_apis_upgrade p').html(`<strong>Success:</strong> ${msg_all}`);
-					jQuery('.msg_success_apis_upgrade').show(); // Show success notice
-				} else {
-					jQuery('.msg_error_apis_upgrade p').html(`<strong>Error:</strong> ${res.data.msg}`);
-					jQuery('.msg_error_apis_upgrade').show(); // Show error notice
-				}
+                                if (res.success) {
+                                        var msg_all = decodeHTMLEntities(res.data.msg);
+                                        var successPrefix = getMessage('successPrefix', 'Success:');
+                                        jQuery('.msg_success_apis_upgrade p').html('<strong>' + successPrefix + '</strong> ' + msg_all);
+                                        jQuery('.msg_success_apis_upgrade').show(); // Show success notice
+                                } else {
+                                        var errorPrefix = getMessage('errorPrefix', 'Error:');
+                                        jQuery('.msg_error_apis_upgrade p').html('<strong>' + errorPrefix + '</strong> ' + res.data.msg);
+                                        jQuery('.msg_error_apis_upgrade').show(); // Show error notice
+                                }
 			},
 			error: function (xhr, status, error) {
-				console.error('Error:', error);
-				alert('An error occurred. Please try again.');
+                                console.error('Error:', error);
+                                alert(getMessage('genericError', 'An error occurred. Please try again.'));
 			}
 		});
 	});
@@ -412,7 +446,7 @@ jQuery(document).ready(function ($) {
                                         stopImportProgressPolling('fetch');
                                         if (res.data && res.data.import_summary) {
                                                 updateImportProgressFromSummary(res.data.import_summary, {
-                                                        label: 'Imported items from API 1',
+                                                        label: getMessage('summaryApi1Label', 'Imported items from API 1'),
                                                         isFinal: true,
                                                         context: 'fetch'
                                                 });
@@ -421,12 +455,14 @@ jQuery(document).ready(function ($) {
                                         }
                                         call_from_secound_api();
                                         var msg_all = decodeHTMLEntities(res.data.msg);
-                                        jQuery('.msg_success p').html(`<strong>Success:</strong> ${msg_all}`);
+                                        var successPrefix = getMessage('successPrefix', 'Success:');
+                                        jQuery('.msg_success p').html('<strong>' + successPrefix + '</strong> ' + msg_all);
                                         jQuery('.msg_success').show();
                                 } else {
                                         stopImportProgressPolling('fetch');
                                         setImportProgress('error');
-                                        jQuery('.msg_error p').html(`<strong>Error:</strong> ${res.data.msg}`);
+                                        var errorPrefix = getMessage('errorPrefix', 'Error:');
+                                        jQuery('.msg_error p').html('<strong>' + errorPrefix + '</strong> ' + res.data.msg);
                                         jQuery('.msg_error').show();
                                 }
                         },
@@ -437,13 +473,13 @@ jQuery(document).ready(function ($) {
                                 var responseText = xhr.responseText;
                                 try {
                                         var parsedResponse = JSON.parse(responseText);
-					var formattedMessage = `Error: ${parsedResponse.message}`;
-				} catch (e) {
-					// If parsing fails, use the raw response text
-					var formattedMessage = `Error: Received unexpected response code ${xhr.status}. Response: ${responseText}`;
-				}
+                                        var formattedMessage = formatTemplateMessage('alertErrorMessage', 'Error: {message}', { message: parsedResponse.message });
+                                } catch (e) {
+                                        // If parsing fails, use the raw response text
+                                        var formattedMessage = formatTemplateMessage('alertUnexpectedResponse', 'Error: Received unexpected response code {status}. Response: {response}', { status: xhr.status, response: responseText });
+                                }
 
-				alert(formattedMessage);
+                                alert(formattedMessage);
 				console.error('Error:', error);
 			}
 		});
@@ -475,7 +511,7 @@ jQuery(document).ready(function ($) {
                                         stopImportProgressPolling('upgrade');
                                         if (res.data && res.data.import_summary) {
                                                 updateImportProgressFromSummary(res.data.import_summary, {
-                                                        label: 'Imported items from API 2',
+                                                        label: getMessage('summaryApi2Label', 'Imported items from API 2'),
                                                         isFinal: true,
                                                         context: 'upgrade'
                                                 });
@@ -483,12 +519,14 @@ jQuery(document).ready(function ($) {
                                                 setImportProgress('api2Complete');
                                         }
                                         var msg_all = decodeHTMLEntities(res.data.msg);
-                                        jQuery('.msg_success_upgrade p').html(`<strong>Success:</strong> ${msg_all}`);
+                                        var successPrefix = getMessage('successPrefix', 'Success:');
+                                        jQuery('.msg_success_upgrade p').html('<strong>' + successPrefix + '</strong> ' + msg_all);
                                         jQuery('.msg_success_upgrade').show();
                                 } else {
                                         stopImportProgressPolling('upgrade');
                                         setImportProgress('error');
-                                        jQuery('.msg_error_upgrade p').html(`<strong>Error:</strong> ${res.data.msg}`);
+                                        var errorPrefix = getMessage('errorPrefix', 'Error:');
+                                        jQuery('.msg_error_upgrade p').html('<strong>' + errorPrefix + '</strong> ' + res.data.msg);
                                         jQuery('.msg_error_upgrade').show();
                                 }
                         },
@@ -498,10 +536,10 @@ jQuery(document).ready(function ($) {
                                 var responseText = xhr.responseText;
                                 try {
                                         var parsedResponse = JSON.parse(responseText);
-                                        var formattedMessage = `Error: ${parsedResponse.message}`;
+                                        var formattedMessage = formatTemplateMessage('alertErrorMessage', 'Error: {message}', { message: parsedResponse.message });
                                 } catch (e) {
                                         // If parsing fails, use the raw response text
-                                        var formattedMessage = `Error: Received unexpected response code ${xhr.status}. Response: ${responseText}`;
+                                        var formattedMessage = formatTemplateMessage('alertUnexpectedResponse', 'Error: Received unexpected response code {status}. Response: {response}', { status: xhr.status, response: responseText });
                                 }
 
                                 alert(formattedMessage);
@@ -597,21 +635,21 @@ jQuery(document).ready(function ($) {
 
                         if (total > 0) {
                                 if (isFinal) {
-                                        return 'Import complete (' + total + '/' + total + ')';
+                                        return getMessage('importComplete', 'Import complete') + ' (' + total + '/' + total + ')';
                                 }
 
                                 if (stage === 'start') {
-                                        return 'Importing item ' + Math.max(current, 1) + '/' + total;
+                                        return applyMessageTemplate(getMessage('importingItem', 'Importing item {current}/{total}'), Math.max(current, 1), total, isFinal);
                                 }
 
-                                return 'Imported ' + Math.min(current, total) + '/' + total;
+                                return applyMessageTemplate(getMessage('importedCount', 'Imported {current}/{total}'), Math.min(current, total), total, isFinal);
                         }
 
                         if (isFinal) {
-                                return 'Import complete';
+                                return getMessage('importComplete', 'Import complete');
                         }
 
-                        return stage === 'start' ? 'Starting import…' : 'Processing…';
+                        return stage === 'start' ? getMessage('startingImport', 'Starting import…') : getMessage('processing', 'Processing…');
                 }
 
                 function computeProgressValue(current, total, stage, explicitValue, fallbackTotal, fallbackCurrent) {
@@ -652,7 +690,7 @@ jQuery(document).ready(function ($) {
 
                 function renderProgress(message, progressValue, isFinal) {
                         var safeValue = clamp(progressValue);
-                        var safeMessage = message || 'Import progress';
+                        var safeMessage = message || getMessage('importProgress', 'Import progress');
 
                         $progress.removeClass('is-error').show();
                         $message.text(safeMessage);
@@ -715,7 +753,10 @@ jQuery(document).ready(function ($) {
                         progressState.fallbackTotal = 2;
                         progressState.contextMessages = {};
 
-                        var resetMessage = progressState.totalItems > 0 ? 'Import progress (0/' + progressState.totalItems + ')' : 'Import progress';
+                        var importProgressText = getMessage('importProgress', 'Import progress');
+                        var resetMessage = progressState.totalItems > 0
+                                ? formatTemplateMessage('importProgressWithTotals', 'Import progress ({current}/{total})', { current: 0, total: progressState.totalItems })
+                                : importProgressText;
                         $progress.removeClass('is-error').hide();
                         $message.text(resetMessage);
                         $value.text('0%');
@@ -731,8 +772,8 @@ jQuery(document).ready(function ($) {
                 if (step === 'error') {
                         progressState.contextMessages = {};
                         $progress.addClass('is-error').show();
-                        $message.text('Import interrupted');
-                        $value.text('Check the error message for details.');
+                        $message.text(getMessage('importInterrupted', 'Import interrupted'));
+                        $value.text(getMessage('importErrorDetails', 'Check the error message for details.'));
                         setSpinnerVisible(false);
 
                         if ($bar.length) {
@@ -836,7 +877,7 @@ jQuery(document).ready(function ($) {
                         if (options.message) {
                                 message = applyMessageTemplate(options.message, currentValue, totalImportItems, isFinal);
                         } else {
-                                var label = options.label || (isFinal ? 'Import complete' : 'Import progress');
+                                var label = options.label || (isFinal ? getMessage('importComplete', 'Import complete') : getMessage('importProgress', 'Import progress'));
 
                                 if (totalImportItems > 0) {
                                         message = label + ' (' + Math.min(currentValue, totalImportItems) + '/' + totalImportItems + ')';
@@ -864,10 +905,10 @@ jQuery(document).ready(function ($) {
                 }
 
         var stepMap = {
-                        startApi1: { context: 'fetch', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, message: 'Fetching items from API 1…' },
-                        api1Complete: { context: 'fetch', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, isFinal: true, message: 'Finished API 1' },
-                        startApi2: { context: 'upgrade', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, message: 'Fetching items from API 2… ({current} processed so far)' },
-                        api2Complete: { context: 'upgrade', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, isFinal: true, message: 'Finished API 2' }
+                        startApi1: { context: 'fetch', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, message: getMessage('progressApi1Start', 'Fetching items from API 1…') },
+                        api1Complete: { context: 'fetch', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, isFinal: true, message: getMessage('progressApi1Complete', 'Finished API 1') },
+                        startApi2: { context: 'upgrade', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, message: getMessage('progressApi2Start', 'Fetching items from API 2… ({current} processed so far)') },
+                        api2Complete: { context: 'upgrade', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, isFinal: true, message: getMessage('progressApi2Complete', 'Finished API 2') }
                 };
 
                 if (stepMap[step]) {

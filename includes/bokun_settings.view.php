@@ -11,25 +11,25 @@ $secret_key_upgrade = isset($secret_key_upgrade) ? (string) $secret_key_upgrade 
 
             <div class="col-4 text-center ">
                 <div class="card">
-                    <h2>Manage Bokun API Keys 1</h2>
+                    <h2><?php esc_html_e('Manage Bokun API Keys (Primary)', BOKUN_TEXT_DOMAIN); ?></h2>
                     <div class="notice notice-info is-dismissible msg_success_apis" style="display:none;">
                         <p>
-                            <strong>Success:</strong>
+                            <strong><?php esc_html_e('Success:', BOKUN_TEXT_DOMAIN); ?></strong>
                         </p>
                     </div>
                     <div class="notice notice-error is-dismissible msg_error_apis" style="display:none;">
                         <p>
-                            <strong>Error:</strong>
+                            <strong><?php esc_html_e('Error:', BOKUN_TEXT_DOMAIN); ?></strong>
                         </p>
                     </div>
                     <form method="post" action="javascript:;" id="bokun_api_auth_form" name="bokun_api_auth_form" enctype='multipart/form-data'>
                         <div class="bokun_cmrc-table">
-                            <div class="bokun_settings-fb-config">                                
-                                <label for="api_key">API Key:</label>
-                                <input type="text" name="api_key" value="<?= esc_attr($api_key) ?>" placeholder="Enter your API key" required><br>
-                                <label for="secret_key">Secret Key:</label>
-                                <input type="text" name="secret_key" value="<?= esc_attr($secret_key) ?>" placeholder="Enter your Secret key" required><br>
-                                <input type="submit" name="submit" class="button button-primary bokun_api_auth_save" value="Save Keys">
+                            <div class="bokun_settings-fb-config">
+                                <label for="api_key"><?php esc_html_e('API Key:', BOKUN_TEXT_DOMAIN); ?></label>
+                                <input type="text" name="api_key" value="<?= esc_attr($api_key) ?>" placeholder="<?php esc_attr_e('Enter your API key', BOKUN_TEXT_DOMAIN); ?>" required><br>
+                                <label for="secret_key"><?php esc_html_e('Secret Key:', BOKUN_TEXT_DOMAIN); ?></label>
+                                <input type="text" name="secret_key" value="<?= esc_attr($secret_key) ?>" placeholder="<?php esc_attr_e('Enter your secret key', BOKUN_TEXT_DOMAIN); ?>" required><br>
+                                <input type="submit" name="submit" class="button button-primary bokun_api_auth_save" value="<?php esc_attr_e('Save Keys', BOKUN_TEXT_DOMAIN); ?>">
                             </div>
                         </div>
                     </form>
@@ -38,25 +38,25 @@ $secret_key_upgrade = isset($secret_key_upgrade) ? (string) $secret_key_upgrade 
 
             <div class="col-4 text-center ">
                 <div class="card">
-                    <h2>Manage Bokun API Keys 2</h2>
+                    <h2><?php esc_html_e('Manage Bokun API Keys (Upgrade)', BOKUN_TEXT_DOMAIN); ?></h2>
                     <div class="notice notice-info is-dismissible msg_success_apis_upgrade" style="display:none;">
                         <p>
-                            <strong>Success:</strong>
+                            <strong><?php esc_html_e('Success:', BOKUN_TEXT_DOMAIN); ?></strong>
                         </p>
                     </div>
                     <div class="notice notice-error is-dismissible msg_error_apis_upgrade" style="display:none;">
                         <p>
-                            <strong>Error:</strong>
+                            <strong><?php esc_html_e('Error:', BOKUN_TEXT_DOMAIN); ?></strong>
                         </p>
                     </div>
                     <form method="post" action="javascript:;" id="bokun_api_auth_form_upgrade" name="bokun_api_auth_form_upgrade" enctype='multipart/form-data'>
                         <div class="bokun_cmrc-table">
-                            <div class="bokun_settings-fb-config">                                
-                                <label for="api_key_upgrade">API Key:</label>
-                                <input type="text" name="api_key_upgrade" value="<?= esc_attr($api_key_upgrade) ?>" placeholder="Enter your API key" required><br>
-                                <label for="secret_key">Secret Key:</label>
-                                <input type="text" name="secret_key_upgrade" value="<?= esc_attr($secret_key_upgrade) ?>" placeholder="Enter your Secret key" required><br>
-                                <input type="submit" name="submit" class="button button-primary bokun_api_auth_save_upgrade" value="Save Keys">
+                            <div class="bokun_settings-fb-config">
+                                <label for="api_key_upgrade"><?php esc_html_e('API Key:', BOKUN_TEXT_DOMAIN); ?></label>
+                                <input type="text" name="api_key_upgrade" value="<?= esc_attr($api_key_upgrade) ?>" placeholder="<?php esc_attr_e('Enter your API key', BOKUN_TEXT_DOMAIN); ?>" required><br>
+                                <label for="secret_key_upgrade"><?php esc_html_e('Secret Key:', BOKUN_TEXT_DOMAIN); ?></label>
+                                <input type="text" name="secret_key_upgrade" value="<?= esc_attr($secret_key_upgrade) ?>" placeholder="<?php esc_attr_e('Enter your secret key', BOKUN_TEXT_DOMAIN); ?>" required><br>
+                                <input type="submit" name="submit" class="button button-primary bokun_api_auth_save_upgrade" value="<?php esc_attr_e('Save Keys', BOKUN_TEXT_DOMAIN); ?>">
                             </div>
                         </div>
                     </form>
@@ -65,42 +65,42 @@ $secret_key_upgrade = isset($secret_key_upgrade) ? (string) $secret_key_upgrade 
 
             <div class="col-4 text-center ">
                 <div class="card">
-                    <h2>Fetch Booking</h2>
-                    <p class="for_api_1 msg_success msg_sec" style="display:none;">For API 1</p>
+                    <h2><?php esc_html_e('Fetch Booking', BOKUN_TEXT_DOMAIN); ?></h2>
+                    <p class="for_api_1 msg_success msg_sec" style="display:none;"><?php esc_html_e('For API 1', BOKUN_TEXT_DOMAIN); ?></p>
                     <div class="notice notice-info is-dismissible msg_success msg_sec" style="display:none;">
                         <p>
-                            <strong>Success:</strong>
+                            <strong><?php esc_html_e('Success:', BOKUN_TEXT_DOMAIN); ?></strong>
                         </p>
                     </div>
                     <div class="notice notice-error is-dismissible msg_error msg_sec" style="display:none;">
                         <p>
-                            <strong>Error:</strong>
+                            <strong><?php esc_html_e('Error:', BOKUN_TEXT_DOMAIN); ?></strong>
                         </p>
                     </div>
-                    <p class="for_api_2 msg_success_upgrade msg_sec" style="display:none;">For API 2</p>
+                    <p class="for_api_2 msg_success_upgrade msg_sec" style="display:none;"><?php esc_html_e('For API 2', BOKUN_TEXT_DOMAIN); ?></p>
                     <div class="notice notice-info is-dismissible msg_success_upgrade msg_sec"  style="display:none;">
                         <p>
-                            <strong>Success:</strong>
+                            <strong><?php esc_html_e('Success:', BOKUN_TEXT_DOMAIN); ?></strong>
                         </p>
                     </div>
                     <div class="notice notice-error is-dismissible msg_error_upgrade msg_sec" style="display:none;">
                         <p>
-                            <strong>Error:</strong>
+                            <strong><?php esc_html_e('Error:', BOKUN_TEXT_DOMAIN); ?></strong>
                         </p>
                     </div>
                     <form method="post" action="javascript:;" id="bokun_fetch_booking_data" name="bokun_fetch_booking_data" enctype='multipart/form-data'>
                         <div class="bokun_cmrc-table">
                             <div class="bokun_settings-fb-config">
-                                <input type="submit" name="submit" class="button button-primary bokun_fetch_booking_data" value="Fetch Now">
+                                <input type="submit" name="submit" class="button button-primary bokun_fetch_booking_data" value="<?php esc_attr_e('Fetch Now', BOKUN_TEXT_DOMAIN); ?>">
                             </div>
                         </div>
                     </form>
                     <div id="bokun_progress" class="bokun-progress" style="display: none;" role="status" aria-live="polite">
                         <div class="bokun-progress__header">
-                            <span id="bokun_progress_message" class="bokun-progress__message">Import progress</span>
+                            <span id="bokun_progress_message" class="bokun-progress__message"><?php esc_html_e('Import progress', BOKUN_TEXT_DOMAIN); ?></span>
                             <span class="bokun-progress__status">
                                 <span id="bokun_progress_value" class="bokun-progress__value">0%</span>
-                                <img id="bokun_progress_spinner" class="bokun-progress__spinner" src="<?= BOKUN_IMAGES_URL.'ajax-loading.gif'; ?>" alt="Loading" width="18" height="18">
+                                <img id="bokun_progress_spinner" class="bokun-progress__spinner" src="<?= BOKUN_IMAGES_URL.'ajax-loading.gif'; ?>" alt="<?php esc_attr_e('Loading', BOKUN_TEXT_DOMAIN); ?>" width="18" height="18">
                             </span>
                         </div>
                         <div class="bokun-progress__track" aria-hidden="true">
