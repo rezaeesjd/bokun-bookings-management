@@ -123,6 +123,8 @@ class Plugin
 
         $this->container->get('bokun.settings');
         $this->includeIfExists(BOKUN_INCLUDES_DIR . 'bokun-bookings-manager.php');
+        $this->includeIfExists(BOKUN_INCLUDES_DIR . 'bokun_settings.class.php');
+        $this->includeIfExists(BOKUN_INCLUDES_DIR . 'bokun_shortcode.class.php');
         $this->container->get('bokun.shortcode');
         $this->container->get('bokun.booking_list_enhancer');
     }

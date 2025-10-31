@@ -20,11 +20,16 @@ if (file_exists($autoloader)) {
     require_once __DIR__ . '/src/Infrastructure/ServiceProviderInterface.php';
     require_once __DIR__ . '/src/Infrastructure/Container.php';
     require_once __DIR__ . '/src/Infrastructure/Config/SettingsRepository.php';
+    require_once __DIR__ . '/src/Infrastructure/Validation/DataSanitizer.php';
+    require_once __DIR__ . '/src/Infrastructure/Validation/RequestSanitizer.php';
     require_once __DIR__ . '/src/Infrastructure/ServiceProvider/LegacyServiceProvider.php';
     require_once __DIR__ . '/src/Admin/Assets/AdminAssets.php';
     require_once __DIR__ . '/src/Admin/Localization/LocalizationLoader.php';
     require_once __DIR__ . '/src/Admin/Menu/AdminMenu.php';
     require_once __DIR__ . '/src/Admin/Settings/SettingsController.php';
+    require_once __DIR__ . '/src/Admin/History/BookingHistoryPage.php';
+    require_once __DIR__ . '/src/Admin/History/BookingHistoryTable.php';
+    require_once __DIR__ . '/src/Admin/PostType/BookingListEnhancer.php';
     require_once __DIR__ . '/src/Presentation/Shortcode/BookingShortcode.php';
     require_once __DIR__ . '/src/Registration/PostTypeRegistrar.php';
     require_once __DIR__ . '/src/Registration/TaxonomyRegistrar.php';
