@@ -8,6 +8,11 @@ use Bokun\Bookings\Infrastructure\ServiceProvider\LegacyServiceProvider;
 class Plugin
 {
     /**
+     * @var Plugin|null
+     */
+    private static $instance;
+
+    /**
      * @var string
      */
     private $pluginFile;
@@ -24,6 +29,7 @@ class Plugin
     {
         $this->pluginFile = $pluginFile;
         $this->container = $container ?: new Container();
+        self::$instance = $this;
     }
 
     /**
@@ -36,6 +42,25 @@ class Plugin
         $this->loadPlugin();
     }
 
+    public static function getInstance()
+    {
+        return self::$instance;
+    }
+
+    public static function getContainerInstance()
+    {
+        if (self::$instance instanceof self) {
+            return self::$instance->container;
+        }
+
+        return null;
+    }
+
+    public function getContainer()
+    {
+        return $this->container;
+    }
+
     private function registerServices()
     {
         $this->container->register(new LegacyServiceProvider());
@@ -44,6 +69,7 @@ class Plugin
     private function defineConstants()
     {
         $this->define('BOKUN_PLUGIN', '/bokun-bookings-management/');
+        $this->define('BOKUN_PLUGIN_VERSION', \BokunBookingManagement::VERSION);
 
         /** @var SettingsRepository $settings */
         $settings = $this->container->get('bokun.settings_repository');
@@ -88,12 +114,9 @@ class Plugin
             return;
         }
 
-        global $rb, $bokun_container;
+        $manager = $this->container->get('bokun.manager');
 
-        $bokun_container = $this->container;
-        $rb = $this->container->get('bokun.manager');
-
-        if (! $rb->isActivated()) {
+        if (! $manager->isActivated()) {
             return;
         }
 

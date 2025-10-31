@@ -4,12 +4,32 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
+use Bokun\Bookings\Infrastructure\Container;
+use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
+use Bokun\Bookings\Infrastructure\Validation\RequestSanitizer;
+use Bokun\Bookings\Plugin;
+
+if (!function_exists('bokun_get_container')) {
+    function bokun_get_container() {
+        $container = Plugin::getContainerInstance();
+
+        if ($container instanceof Container) {
+            return $container;
+        }
+
+        return null;
+    }
+}
+
 // Retrieve the shared settings repository instance.
 if (!function_exists('bokun_get_settings_repository')) {
     function bokun_get_settings_repository() {
-        if (isset($GLOBALS['bokun_container']) && $GLOBALS['bokun_container'] instanceof \Bokun\Bookings\Infrastructure\Container) {
+        $container = bokun_get_container();
+
+        if ($container) {
             try {
-                return $GLOBALS['bokun_container']->get('bokun.settings_repository');
+                return $container->get('bokun.settings_repository');
             } catch (\Throwable $exception) {
                 // Fallback to a direct instance if the container cannot provide it.
             }
@@ -17,8 +37,8 @@ if (!function_exists('bokun_get_settings_repository')) {
 
         static $repository = null;
 
-        if (! $repository instanceof \Bokun\Bookings\Infrastructure\Config\SettingsRepository) {
-            $repository = new \Bokun\Bookings\Infrastructure\Config\SettingsRepository(
+        if (! $repository instanceof SettingsRepository) {
+            $repository = new SettingsRepository(
                 bokun_get_data_sanitizer()
             );
         }
@@ -29,9 +49,11 @@ if (!function_exists('bokun_get_settings_repository')) {
 
 if (!function_exists('bokun_get_data_sanitizer')) {
     function bokun_get_data_sanitizer() {
-        if (isset($GLOBALS['bokun_container']) && $GLOBALS['bokun_container'] instanceof \Bokun\Bookings\Infrastructure\Container) {
+        $container = bokun_get_container();
+
+        if ($container) {
             try {
-                return $GLOBALS['bokun_container']->get('bokun.data_sanitizer');
+                return $container->get('bokun.data_sanitizer');
             } catch (\Throwable $exception) {
                 // Continue to fallback instance below.
             }
@@ -39,8 +61,8 @@ if (!function_exists('bokun_get_data_sanitizer')) {
 
         static $sanitizer = null;
 
-        if (! $sanitizer instanceof \Bokun\Bookings\Infrastructure\Validation\DataSanitizer) {
-            $sanitizer = new \Bokun\Bookings\Infrastructure\Validation\DataSanitizer();
+        if (! $sanitizer instanceof DataSanitizer) {
+            $sanitizer = new DataSanitizer();
         }
 
         return $sanitizer;
@@ -49,9 +71,11 @@ if (!function_exists('bokun_get_data_sanitizer')) {
 
 if (!function_exists('bokun_get_request_sanitizer')) {
     function bokun_get_request_sanitizer() {
-        if (isset($GLOBALS['bokun_container']) && $GLOBALS['bokun_container'] instanceof \Bokun\Bookings\Infrastructure\Container) {
+        $container = bokun_get_container();
+
+        if ($container) {
             try {
-                return $GLOBALS['bokun_container']->get('bokun.request_sanitizer');
+                return $container->get('bokun.request_sanitizer');
             } catch (\Throwable $exception) {
                 // Continue to fallback instance below.
             }
@@ -59,8 +83,8 @@ if (!function_exists('bokun_get_request_sanitizer')) {
 
         static $requestSanitizer = null;
 
-        if (! $requestSanitizer instanceof \Bokun\Bookings\Infrastructure\Validation\RequestSanitizer) {
-            $requestSanitizer = new \Bokun\Bookings\Infrastructure\Validation\RequestSanitizer(
+        if (! $requestSanitizer instanceof RequestSanitizer) {
+            $requestSanitizer = new RequestSanitizer(
                 bokun_get_data_sanitizer()
             );
         }

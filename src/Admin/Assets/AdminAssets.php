@@ -15,11 +15,18 @@ class AdminAssets
     private $menu;
 
     /**
-     * @param AdminMenu $menu
+     * @var string
      */
-    public function __construct(AdminMenu $menu)
+    private $version;
+
+    /**
+     * @param AdminMenu $menu
+     * @param string    $version
+     */
+    public function __construct(AdminMenu $menu, $version)
     {
         $this->menu = $menu;
+        $this->version = $this->normalizeVersion($version);
     }
 
     /**
@@ -40,14 +47,13 @@ class AdminAssets
         if (! $this->menu->isPluginPage()) {
             return;
         }
-
-        global $bokun_version;
+        $version = $this->version;
 
         wp_register_script(
             'bokun_admin_js',
             BOKUN_JS_URL . 'bokun_admin_js.js?rand=' . rand(1, 999),
             ['jquery'],
-            $bokun_version,
+            $version,
             true
         );
 
@@ -66,7 +72,7 @@ class AdminAssets
             'bokun_admin_css',
             BOKUN_CSS_URL . 'bokun_admin_style.css?rand=' . rand(1, 999),
             [],
-            $bokun_version
+            $version
         );
 
         wp_enqueue_style('bokun_admin_css');
@@ -77,13 +83,13 @@ class AdminAssets
      */
     public function enqueueFrontAssets()
     {
-        global $bokun_version;
+        $version = $this->version;
 
         wp_register_style(
             'bokun_front_css',
             BOKUN_CSS_URL . 'bokun_front.css?rand=' . rand(1, 999),
             [],
-            $bokun_version
+            $version
         );
 
         wp_enqueue_style('bokun_front_css');
@@ -92,7 +98,7 @@ class AdminAssets
             'bokun_front_js',
             BOKUN_JS_URL . 'bokun_front.js?rand=' . rand(1, 999),
             ['jquery'],
-            $bokun_version,
+            $version,
             true
         );
 
@@ -113,13 +119,13 @@ class AdminAssets
      */
     public function registerBookingScripts()
     {
-        global $bokun_version;
+        $version = $this->version;
 
         wp_register_script(
             'bokun_bokun_booking_scripts',
             BOKUN_JS_URL . 'bokun-booking-scripts.js?rand=' . rand(1, 999),
             ['jquery'],
-            $bokun_version,
+            $version,
             true
         );
 
@@ -134,5 +140,18 @@ class AdminAssets
                 'team_member_nonce' => wp_create_nonce('add_team_member_nonce'),
             ]
         );
+    }
+
+    private function normalizeVersion($version)
+    {
+        if (is_string($version) && $version !== '') {
+            return $version;
+        }
+
+        if (defined('BOKUN_PLUGIN_VERSION')) {
+            return (string) BOKUN_PLUGIN_VERSION;
+        }
+
+        return '1.0.0';
     }
 }

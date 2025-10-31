@@ -36,10 +36,9 @@ use Bokun\Bookings\Admin\Localization\LocalizationLoader;
 use Bokun\Bookings\Admin\Menu\AdminMenu;
 use Bokun\Bookings\Registration\PostTypeRegistrar;
 use Bokun\Bookings\Registration\TaxonomyRegistrar;
-global $bokun_version;
-$bokun_version = '1.0.0';
 
 class BokunBookingManagement {
+    public const VERSION = '1.0.0';
     /**
      * @var string
      */
@@ -73,7 +72,7 @@ class BokunBookingManagement {
         ?LocalizationLoader $localizationLoader = null
     ) {
         $this->adminMenu         = $adminMenu ?: new AdminMenu($this->settingsSlug, $this->bookingHistorySlug);
-        $this->assets            = $assets ?: new AdminAssets($this->adminMenu);
+        $this->assets            = $assets ?: new AdminAssets($this->adminMenu, self::VERSION);
         $this->postTypeRegistrar = $postTypeRegistrar ?: new PostTypeRegistrar();
         $this->taxonomyRegistrar = $taxonomyRegistrar ?: new TaxonomyRegistrar();
         $this->localizationLoader = $localizationLoader ?: new LocalizationLoader();
@@ -90,14 +89,14 @@ class BokunBookingManagement {
 
     public static function activate()
     {
-        global $wpdb, $rb, $bokun_version;
+        global $wpdb;
 
         $charset_collate = $wpdb->get_charset_collate();
 
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
         update_option('bokun_plugin', true);
-        update_option('bokun_version', $bokun_version);
+        update_option('bokun_version', self::VERSION);
 
         $table_name = $wpdb->prefix . 'bokun_booking_history';
 

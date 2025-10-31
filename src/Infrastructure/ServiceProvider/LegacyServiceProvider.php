@@ -46,7 +46,10 @@ class LegacyServiceProvider implements ServiceProviderInterface
 
         if (! $container->has('bokun.assets')) {
             $container->singleton('bokun.assets', function (Container $container) {
-                return new AdminAssets($container->get('bokun.admin_menu'));
+                return new AdminAssets(
+                    $container->get('bokun.admin_menu'),
+                    \BokunBookingManagement::VERSION
+                );
             });
         }
 
@@ -82,28 +85,17 @@ class LegacyServiceProvider implements ServiceProviderInterface
 
         if (! $container->has('bokun.settings')) {
             $container->singleton('bokun.settings', function (Container $container) {
-                $settings = new \Bokun\Bookings\Admin\Settings\SettingsController(
+                return new \Bokun\Bookings\Admin\Settings\SettingsController(
                     $container->get('bokun.settings_repository'),
                     $container->get('bokun.request_sanitizer')
                 );
-                $this->setGlobal('bokun_settings', $settings);
-
-                return $settings;
             });
         }
 
         if (! $container->has('bokun.shortcode')) {
             $container->singleton('bokun.shortcode', function () {
-                $shortcode = new \Bokun\Bookings\Presentation\Shortcode\BookingShortcode();
-                $this->setGlobal('bokun_shortcode', $shortcode);
-
-                return $shortcode;
+                return new \Bokun\Bookings\Presentation\Shortcode\BookingShortcode();
             });
         }
-    }
-
-    private function setGlobal($key, $value)
-    {
-        $GLOBALS[$key] = $value;
     }
 }

@@ -1,6 +1,8 @@
 <?php
 namespace Bokun\Bookings\Admin\Menu;
 
+use Bokun\Bookings\Plugin;
+
 if (! defined('ABSPATH')) {
     exit;
 }
@@ -79,14 +81,12 @@ class AdminMenu
 
         switch ($page) {
             case $this->settingsSlug:
-                global $bokun_settings;
+                $settings = $this->resolveSettingsController();
 
-                if (isset($bokun_settings)) {
-                    if (method_exists($bokun_settings, 'displaySettingsPage')) {
-                        $bokun_settings->displaySettingsPage();
-                    } elseif (method_exists($bokun_settings, 'bokun_display_settings')) {
-                        $bokun_settings->bokun_display_settings();
-                    }
+                if ($settings && method_exists($settings, 'displaySettingsPage')) {
+                    $settings->displaySettingsPage();
+                } elseif ($settings && method_exists($settings, 'bokun_display_settings')) {
+                    $settings->bokun_display_settings();
                 }
                 break;
             case $this->bookingHistorySlug:
@@ -152,5 +152,20 @@ class AdminMenu
         }
 
         return isset($messages[$key]) ? $messages[$key] : false;
+    }
+
+    private function resolveSettingsController()
+    {
+        $container = Plugin::getContainerInstance();
+
+        if ($container && $container->has('bokun.settings')) {
+            try {
+                return $container->get('bokun.settings');
+            } catch (\Throwable $exception) {
+                return null;
+            }
+        }
+
+        return null;
     }
 }
