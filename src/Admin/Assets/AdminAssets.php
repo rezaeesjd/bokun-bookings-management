@@ -62,6 +62,16 @@ class AdminAssets
             [
                 'nonce'    => wp_create_nonce('bokun_api_auth_nonce'),
                 'ajax_url' => admin_url('admin-ajax.php'),
+                'messages' => [
+                    'validating'     => __('Validating credentials…', BOKUN_TEXT_DOMAIN),
+                    'validationError'=> __('Unable to validate credentials. Please try again.', BOKUN_TEXT_DOMAIN),
+                    'syncing'        => __('Running background sync…', BOKUN_TEXT_DOMAIN),
+                    'syncError'      => __('The background sync could not be completed. Please check the logs for details.', BOKUN_TEXT_DOMAIN),
+                    'syncLocked'     => __('A sync is already running. Please wait and try again.', BOKUN_TEXT_DOMAIN),
+                    'ago'            => __('ago', BOKUN_TEXT_DOMAIN),
+                    'never'          => __('Never', BOKUN_TEXT_DOMAIN),
+                    'notScheduled'   => __('Not scheduled', BOKUN_TEXT_DOMAIN),
+                ],
             ]
         );
 

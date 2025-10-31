@@ -48,12 +48,18 @@ class BookingHistoryPage implements AdminPageInterface
         $table->setActiveFilters($filters);
         $table->setFilterOptions($this->getFilterOptions());
 
+        if ($this->isExportRequest()) {
+            $this->maybeExportCsv($table);
+            return;
+        }
+
         $table->prepare_items();
 
         echo '<div class="wrap">';
         echo '<h1>' . esc_html($this->getTitle()) . '</h1>';
 
         echo '<form method="get">';
+        wp_nonce_field('bokun_history_export', 'bokun_history_export_nonce', true, true);
         echo '<input type="hidden" name="page" value="' . esc_attr($this->pageSlug) . '" />';
 
         $table->search_box(__('Search history', BOKUN_TEXT_DOMAIN), 'bokun-booking-history');
@@ -83,16 +89,52 @@ class BookingHistoryPage implements AdminPageInterface
      */
     private function getActiveFilters()
     {
-        $filters = ['action' => '', 'status' => '', 'actor' => '', 'source' => ''];
+        $filters = [
+            'action'     => '',
+            'status'     => '',
+            'actor'      => '',
+            'source'     => '',
+            'date_start' => '',
+            'date_end'   => '',
+        ];
 
         foreach ($filters as $key => $default) {
             $requestKey = sprintf('bokun_history_%s', $key);
             if (isset($_GET[$requestKey])) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-                $filters[$key] = $this->sanitizer->key(wp_unslash($_GET[$requestKey]), $default); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+                if (in_array($key, ['date_start', 'date_end'], true)) {
+                    $filters[$key] = $this->sanitizer->text(wp_unslash($_GET[$requestKey]), $default); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+                } else {
+                    $filters[$key] = $this->sanitizer->key(wp_unslash($_GET[$requestKey]), $default); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+                }
             }
         }
 
         return $filters;
+    }
+
+    private function isExportRequest(): bool
+    {
+        if (! isset($_GET['bokun_history_export'])) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            return false;
+        }
+
+        return 'csv' === $this->sanitizer->key(wp_unslash($_GET['bokun_history_export']), ''); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+    }
+
+    private function maybeExportCsv(BookingHistoryTable $table): void
+    {
+        if (! isset($_GET['bokun_history_export_nonce'])) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            return;
+        }
+
+        $nonce = $this->sanitizer->text(wp_unslash($_GET['bokun_history_export_nonce']), ''); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+        if (! wp_verify_nonce($nonce, 'bokun_history_export')) {
+            wp_die(esc_html__('Unable to export booking history because the request could not be verified.', BOKUN_TEXT_DOMAIN));
+        }
+
+        $filename = sprintf('bokun-booking-history-%s.csv', gmdate('Y-m-d-His'));
+        $table->exportToCsv($filename);
     }
 
     /**

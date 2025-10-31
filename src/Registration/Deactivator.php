@@ -2,8 +2,20 @@
 
 namespace Bokun\Bookings\Registration;
 
+use Bokun\Bookings\Application\Synchronization\BookingSyncService;
+
 class Deactivator
 {
+    /**
+     * @var BookingSyncService
+     */
+    private $syncService;
+
+    public function __construct(BookingSyncService $syncService)
+    {
+        $this->syncService = $syncService;
+    }
+
     public function register($pluginFile): void
     {
         register_deactivation_hook($pluginFile, [$this, 'deactivate']);
@@ -11,6 +23,6 @@ class Deactivator
 
     public function deactivate(): void
     {
-        // Reserved for future cleanup logic.
+        $this->syncService->clearOnDeactivation();
     }
 }

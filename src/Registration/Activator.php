@@ -2,6 +2,7 @@
 
 namespace Bokun\Bookings\Registration;
 
+use Bokun\Bookings\Application\Synchronization\BookingSyncService;
 use Bokun\Bookings\Registration\Database\BookingHistoryTableCreator;
 
 class Activator
@@ -16,10 +17,16 @@ class Activator
      */
     private $tableCreator;
 
-    public function __construct($version, BookingHistoryTableCreator $tableCreator)
+    /**
+     * @var BookingSyncService
+     */
+    private $syncService;
+
+    public function __construct($version, BookingHistoryTableCreator $tableCreator, BookingSyncService $syncService)
     {
         $this->version = (string) $version;
         $this->tableCreator = $tableCreator;
+        $this->syncService = $syncService;
     }
 
     public function register($pluginFile): void
@@ -33,5 +40,6 @@ class Activator
         update_option('bokun_version', $this->version);
 
         $this->tableCreator->create();
+        $this->syncService->scheduleOnActivation();
     }
 }

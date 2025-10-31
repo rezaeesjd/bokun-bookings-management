@@ -155,10 +155,10 @@ jQuery(document).ready(function ($) {
                 state.contextMessages = {};
         }
 
-	function updateImportProgressFromSummary(summary, options) {
-		if (!summary || typeof summary !== 'object') {
-			return;
-		}
+        function updateImportProgressFromSummary(summary, options) {
+                if (!summary || typeof summary !== 'object') {
+                        return;
+                }
 
 		options = options || {};
 		var breakdown = [];
@@ -190,6 +190,134 @@ jQuery(document).ready(function ($) {
                         useAbsolute: true,
                         context: options.context
                 });
+        }
+
+        function getAjaxUrl() {
+                if (typeof bokun_api_auth_vars !== 'undefined' && bokun_api_auth_vars.ajax_url) {
+                        return bokun_api_auth_vars.ajax_url;
+                }
+
+                if (typeof ajaxurl !== 'undefined') {
+                        return ajaxurl;
+                }
+
+                return '';
+        }
+
+        function getMessage(key, fallback) {
+                if (typeof bokun_api_auth_vars !== 'undefined' && bokun_api_auth_vars.messages && bokun_api_auth_vars.messages[key]) {
+                        return bokun_api_auth_vars.messages[key];
+                }
+
+                return fallback;
+        }
+
+        function showValidationMessage(message, type) {
+                var notice = jQuery('.bokun-validate-message');
+
+                if (!notice.length) {
+                        return;
+                }
+
+                var validTypes = ['success', 'error', 'info'];
+                var cssClass = 'notice-info';
+
+                if (validTypes.indexOf(type) !== -1) {
+                        cssClass = 'notice-' + type;
+                }
+
+                notice.removeClass('notice-success notice-error notice-info').addClass(cssClass);
+                notice.html('<p>' + message + '</p>').show();
+        }
+
+        function renderSyncStatus(status) {
+                if (!status || typeof status !== 'object') {
+                        return;
+                }
+
+                var statusMessage = jQuery('.bokun-sync-status-message');
+                if (statusMessage.length) {
+                        var message = status.last_message || '';
+
+                        if (!message && status.last_status) {
+                                var normalized = String(status.last_status).charAt(0).toUpperCase() + String(status.last_status).slice(1);
+                                message = normalized;
+                        }
+
+                        if (!message) {
+                                message = getMessage('syncing', '');
+                        }
+
+                        if (!message) {
+                                message = statusMessage.data('defaultMessage') || '';
+                        }
+
+                        if (!message) {
+                                message = getMessage('never', '');
+                        }
+
+                        statusMessage.text(message);
+                }
+
+                var lastRun = jQuery('.bokun-sync-last-run');
+                if (lastRun.length) {
+                        var lastRunText = status.last_run_display || getMessage('never', 'Never');
+                        lastRun.text(lastRunText);
+                        if (status.last_run) {
+                                lastRun.attr('data-timestamp', status.last_run);
+                        } else {
+                                lastRun.attr('data-timestamp', '');
+                        }
+                }
+
+                var lastRunRelative = jQuery('.bokun-sync-last-run-relative');
+                if (lastRunRelative.length) {
+                        if (status.last_run_relative) {
+                                lastRunRelative.text('(' + status.last_run_relative + ' ' + getMessage('ago', 'ago') + ')').show();
+                        } else {
+                                lastRunRelative.text('').hide();
+                        }
+                }
+
+                var nextRun = jQuery('.bokun-sync-next-run');
+                if (nextRun.length) {
+                        var nextRunText = status.next_run_display || getMessage('notScheduled', 'Not scheduled');
+                        nextRun.text(nextRunText);
+                        if (status.next_run) {
+                                nextRun.attr('data-timestamp', status.next_run);
+                        } else {
+                                nextRun.attr('data-timestamp', '');
+                        }
+                }
+
+                var nextRunRelative = jQuery('.bokun-sync-next-run-relative');
+                if (nextRunRelative.length) {
+                        if (status.next_run_relative) {
+                                nextRunRelative.text('(' + status.next_run_relative + ')').show();
+                        } else {
+                                nextRunRelative.text('').hide();
+                        }
+                }
+        }
+
+        function showSyncResponse(message, type, status) {
+                var notice = jQuery('.bokun-sync-response');
+
+                if (notice.length) {
+                        var validTypes = ['success', 'error', 'info'];
+                        var cssClass = 'notice-info';
+
+                        if (validTypes.indexOf(type) !== -1) {
+                                cssClass = 'notice-' + type;
+                        }
+
+                        notice.removeClass('notice-success notice-error notice-info').addClass(cssClass);
+                        notice.html('<p>' + message + '</p>').show();
+                }
+
+                if (status) {
+                        renderSyncStatus(status);
+                }
         }
 
 	jQuery(document).on('click', '.bokun_api_auth_save', function () {
@@ -735,7 +863,7 @@ jQuery(document).ready(function ($) {
                         return;
                 }
 
-                var stepMap = {
+        var stepMap = {
                         startApi1: { context: 'fetch', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, message: 'Fetching items from API 1…' },
                         api1Complete: { context: 'fetch', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, isFinal: true, message: 'Finished API 1' },
                         startApi2: { context: 'upgrade', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, message: 'Fetching items from API 2… ({current} processed so far)' },
@@ -778,6 +906,81 @@ jQuery(document).ready(function ($) {
                         setSpinnerVisible(shouldShowSpinnerForStep);
                 }
         }
+
+        jQuery(document).on('click', '.bokun-validate-credentials', function (event) {
+                event.preventDefault();
+
+                var mode = jQuery(this).data('mode') || 'primary';
+                var url = getAjaxUrl();
+
+                if (!url) {
+                        return;
+                }
+
+                showValidationMessage(getMessage('validating', 'Validating credentials…'), 'info');
+
+                jQuery.ajax({
+                        type: 'POST',
+                        url: url,
+                        data: {
+                                action: 'bokun_validate_credentials',
+                                security: bokun_api_auth_vars.nonce,
+                                mode: mode
+                        },
+                        dataType: 'json'
+                }).done(function (response) {
+                        if (response && response.success && response.data) {
+                                showValidationMessage(response.data.message, 'success');
+                        } else if (response && response.data && response.data.message) {
+                                var type = response.data.status === 'error' ? 'error' : 'info';
+                                showValidationMessage(response.data.message, type);
+                        } else {
+                                showValidationMessage(getMessage('validationError', 'Unable to validate credentials. Please try again.'), 'error');
+                        }
+                }).fail(function () {
+                        showValidationMessage(getMessage('validationError', 'Unable to validate credentials. Please try again.'), 'error');
+                });
+        });
+
+        jQuery(document).on('click', '.bokun-run-background-sync', function (event) {
+                event.preventDefault();
+
+                var url = getAjaxUrl();
+
+                if (!url) {
+                        return;
+                }
+
+                showSyncResponse(getMessage('syncing', 'Running background sync…'), 'info');
+
+                jQuery.ajax({
+                        type: 'POST',
+                        url: url,
+                        data: {
+                                action: 'bokun_run_background_sync',
+                                security: bokun_api_auth_vars.nonce
+                        },
+                        dataType: 'json'
+                }).done(function (response) {
+                        if (response && response.success && response.data) {
+                                var status = response.data.status || 'success';
+                                var responseType = status === 'empty' ? 'info' : 'success';
+                                showSyncResponse(response.data.message, responseType, response.data.sync_status || null);
+                                return;
+                        }
+
+                        if (response && response.data) {
+                                var payload = response.data;
+                                var type = payload.status === 'locked' ? 'info' : 'error';
+                                var message = payload.message || getMessage('syncError', 'The background sync could not be completed. Please check the logs for details.');
+                                showSyncResponse(message, type, payload.sync_status || null);
+                        } else {
+                                showSyncResponse(getMessage('syncError', 'The background sync could not be completed. Please check the logs for details.'), 'error');
+                        }
+                }).fail(function () {
+                        showSyncResponse(getMessage('syncError', 'The background sync could not be completed. Please check the logs for details.'), 'error');
+                });
+        });
 
 
 });

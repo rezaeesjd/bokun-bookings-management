@@ -6,9 +6,9 @@ $secret_key_upgrade = isset($secret_key_upgrade) ? (string) $secret_key_upgrade 
 ?>
 <div id="booking">
     <div class="container-fluid">
-        
+
         <div class="row">
-            
+
             <div class="col-4 text-center ">
                 <div class="card">
                     <h2>Manage Bokun API Keys 1</h2>
@@ -106,10 +106,157 @@ $secret_key_upgrade = isset($secret_key_upgrade) ? (string) $secret_key_upgrade 
                         <div class="bokun-progress__track" aria-hidden="true">
                             <div id="bokun_progress_bar" class="bokun-progress__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
                         </div>
-                    </div>
+        </div>
 
+        <div class="row">
+
+            <div class="col-4 text-center ">
+                <div class="card">
+                    <h2><?php esc_html_e('Getting Started', BOKUN_TEXT_DOMAIN); ?></h2>
+                    <p><?php esc_html_e('Follow these steps to prepare the plugin before going live.', BOKUN_TEXT_DOMAIN); ?></p>
+                    <ol class="bokun-onboarding-steps">
+                        <?php if (! empty($onboarding_steps) && is_array($onboarding_steps)) : ?>
+                            <?php foreach ($onboarding_steps as $step) :
+                                $completed = ! empty($step['completed']);
+                                $status_attr = $completed ? 'complete' : 'incomplete';
+                                ?>
+                                <li data-status="<?php echo esc_attr($status_attr); ?>">
+                                    <?php echo esc_html($step['label']); ?>
+                                </li>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </ol>
                 </div>
             </div>
+
+            <div class="col-4 text-center ">
+                <div class="card">
+                    <h2><?php esc_html_e('Validate Credentials', BOKUN_TEXT_DOMAIN); ?></h2>
+                    <p><?php esc_html_e('Make sure the saved keys can communicate with the Bokun API.', BOKUN_TEXT_DOMAIN); ?></p>
+                    <div class="notice notice-info bokun-validate-message" style="display:none;"></div>
+                    <p>
+                        <button type="button" class="button button-secondary bokun-validate-credentials" data-mode="primary">
+                            <?php esc_html_e('Validate Primary Keys', BOKUN_TEXT_DOMAIN); ?>
+                        </button>
+                    </p>
+                    <p>
+                        <button type="button" class="button button-secondary bokun-validate-credentials" data-mode="upgrade">
+                            <?php esc_html_e('Validate Upgrade Keys', BOKUN_TEXT_DOMAIN); ?>
+                        </button>
+                    </p>
+                    <p class="description">
+                        <?php esc_html_e('Validation fetches a single page of bookings without saving changes.', BOKUN_TEXT_DOMAIN); ?>
+                    </p>
+                </div>
+            </div>
+
+            <div class="col-4 text-center ">
+                <div class="card">
+                    <h2><?php esc_html_e('Background Sync', BOKUN_TEXT_DOMAIN); ?></h2>
+                    <p class="bokun-sync-status-message" data-default-message="<?php esc_attr_e('No background sync has run yet.', BOKUN_TEXT_DOMAIN); ?>">
+                        <?php
+                        $last_status = isset($sync_status['last_status']) ? $sync_status['last_status'] : '';
+                        $last_message = isset($sync_status['last_message']) ? $sync_status['last_message'] : '';
+                        if ($last_message) {
+                            echo esc_html($last_message);
+                        } elseif ($last_status) {
+                            echo esc_html(ucfirst($last_status));
+                        } else {
+                            esc_html_e('No background sync has run yet.', BOKUN_TEXT_DOMAIN);
+                        }
+                        ?>
+                    </p>
+                    <ul class="bokun-sync-meta">
+                        <li>
+                            <strong><?php esc_html_e('Last run:', BOKUN_TEXT_DOMAIN); ?></strong>
+                            <span class="bokun-sync-last-run" data-timestamp="<?php echo isset($sync_status['last_run']) ? esc_attr((string) $sync_status['last_run']) : ''; ?>">
+                                <?php
+                                if (! empty($sync_status['last_run_display'])) {
+                                    echo esc_html($sync_status['last_run_display']);
+                                } else {
+                                    esc_html_e('Never', BOKUN_TEXT_DOMAIN);
+                                }
+                                ?>
+                            </span>
+                            <?php if (! empty($sync_status['last_run_relative'])) : ?>
+                                <span class="bokun-sync-last-run-relative">(<?php echo esc_html($sync_status['last_run_relative']); ?> <?php esc_html_e('ago', BOKUN_TEXT_DOMAIN); ?>)</span>
+                            <?php endif; ?>
+                        </li>
+                        <li>
+                            <strong><?php esc_html_e('Next run:', BOKUN_TEXT_DOMAIN); ?></strong>
+                            <span class="bokun-sync-next-run" data-timestamp="<?php echo isset($sync_status['next_run']) ? esc_attr((string) $sync_status['next_run']) : ''; ?>">
+                                <?php
+                                if (! empty($sync_status['next_run_display'])) {
+                                    echo esc_html($sync_status['next_run_display']);
+                                } else {
+                                    esc_html_e('Not scheduled', BOKUN_TEXT_DOMAIN);
+                                }
+                                ?>
+                            </span>
+                            <?php if (! empty($sync_status['next_run_relative'])) : ?>
+                                <span class="bokun-sync-next-run-relative">(<?php echo esc_html($sync_status['next_run_relative']); ?>)</span>
+                            <?php endif; ?>
+                        </li>
+                    </ul>
+                    <div class="notice notice-info bokun-sync-response" style="display:none;"></div>
+                    <p>
+                        <button type="button" class="button button-primary bokun-run-background-sync">
+                            <?php esc_html_e('Run Sync Now', BOKUN_TEXT_DOMAIN); ?>
+                        </button>
+                    </p>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+<style>
+    .bokun-onboarding-steps {
+        list-style: none;
+        margin: 16px 0 0;
+        padding: 0;
+        text-align: left;
+    }
+
+    .bokun-onboarding-steps li {
+        margin: 0 0 8px;
+        padding-left: 28px;
+        position: relative;
+        font-weight: 600;
+    }
+
+    .bokun-onboarding-steps li::before {
+        content: '\2713';
+        position: absolute;
+        left: 0;
+        top: 0;
+        font-size: 16px;
+        color: #46b450;
+    }
+
+    .bokun-onboarding-steps li[data-status="incomplete"]::before {
+        content: '\25CB';
+        color: #d63638;
+    }
+
+    .bokun-sync-meta {
+        list-style: none;
+        margin: 16px 0;
+        padding: 0;
+        text-align: left;
+        display: inline-block;
+    }
+
+    .bokun-sync-meta li {
+        margin: 0 0 6px;
+    }
+
+    .bokun-sync-status-message {
+        min-height: 36px;
+    }
+</style>
 
         </div>
     </div>
