@@ -12,11 +12,25 @@ Text Domain: bokun-bookings-management
 
 $autoloader = __DIR__ . '/vendor/autoload.php';
 
-if (! file_exists($autoloader)) {
-    return;
-}
+if (file_exists($autoloader)) {
+    require_once $autoloader;
+} elseif (function_exists('spl_autoload_register')) {
+    spl_autoload_register(static function ($class) {
+        $prefix = 'Bokun\\Bookings\\';
+        $prefixLength = strlen($prefix);
 
-require_once $autoloader;
+        if (strncmp($prefix, $class, $prefixLength) !== 0) {
+            return;
+        }
+
+        $relativeClass = substr($class, $prefixLength);
+        $file = __DIR__ . '/src/' . str_replace('\\', '/', $relativeClass) . '.php';
+
+        if (file_exists($file)) {
+            require_once $file;
+        }
+    });
+}
 
 use Bokun\Bookings\Admin\Assets\AdminAssets;
 use Bokun\Bookings\Admin\Localization\LocalizationLoader;
