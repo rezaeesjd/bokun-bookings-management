@@ -1,14 +1,22 @@
 <?php
 namespace Bokun\Bookings\Admin\Settings;
 
+use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
+
 if (! defined('ABSPATH')) {
     exit;
 }
 
 class SettingsController
 {
-    public function __construct()
+    /**
+     * @var SettingsRepository
+     */
+    private $settings;
+
+    public function __construct(SettingsRepository $settings)
     {
+        $this->settings = $settings;
         add_action('wp_ajax_bokun_save_api_auth', [$this, 'bokun_save_api_auth'], 10, 2);
         add_action('wp_ajax_no_priv_bokun_save_api_auth', [$this, 'bokun_save_api_auth'], 10, 2);
 
@@ -102,8 +110,7 @@ class SettingsController
         $api_key = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
         $secret_key = isset($_POST['secret_key']) ? sanitize_text_field(wp_unslash($_POST['secret_key'])) : '';
 
-        update_option('bokun_api_key', $api_key);
-        update_option('bokun_secret_key', $secret_key);
+        $this->settings->savePrimaryCredentials($api_key, $secret_key);
 
         wp_send_json_success(['msg' => 'API keys saved successfully.', 'status' => false]);
         wp_die();
@@ -119,8 +126,7 @@ class SettingsController
         $api_key = isset($_POST['api_key_upgrade']) ? sanitize_text_field(wp_unslash($_POST['api_key_upgrade'])) : '';
         $secret_key = isset($_POST['secret_key_upgrade']) ? sanitize_text_field(wp_unslash($_POST['secret_key_upgrade'])) : '';
 
-        update_option('bokun_api_key_upgrade', $api_key);
-        update_option('bokun_secret_key_upgrade', $secret_key);
+        $this->settings->saveUpgradeCredentials($api_key, $secret_key);
 
         wp_send_json_success(['msg' => 'API keys saved successfully.', 'status' => false]);
         wp_die();
@@ -132,7 +138,15 @@ class SettingsController
             $view = rtrim(BOKUN_INCLUDES_DIR, '/\\') . '/bokun_settings.view.php';
 
             if (file_exists($view)) {
-                include_once $view;
+                $primaryCredentials = $this->settings->getPrimaryCredentials();
+                $upgradeCredentials = $this->settings->getUpgradeCredentials();
+
+                $api_key = $primaryCredentials['api_key'];
+                $secret_key = $primaryCredentials['secret_key'];
+                $api_key_upgrade = $upgradeCredentials['api_key'];
+                $secret_key_upgrade = $upgradeCredentials['secret_key'];
+
+                include $view;
             }
         }
     }

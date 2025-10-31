@@ -5,6 +5,7 @@ namespace Bokun\Bookings\Infrastructure\ServiceProvider;
 use Bokun\Bookings\Admin\Assets\AdminAssets;
 use Bokun\Bookings\Admin\Localization\LocalizationLoader;
 use Bokun\Bookings\Admin\Menu\AdminMenu;
+use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
 use Bokun\Bookings\Infrastructure\Container;
 use Bokun\Bookings\Infrastructure\ServiceProviderInterface;
 use Bokun\Bookings\Registration\PostTypeRegistrar;
@@ -17,6 +18,12 @@ class LegacyServiceProvider implements ServiceProviderInterface
      */
     public function register(Container $container)
     {
+        if (! $container->has('bokun.settings_repository')) {
+            $container->singleton('bokun.settings_repository', function () {
+                return new SettingsRepository();
+            });
+        }
+
         if (! $container->has('bokun.admin_menu')) {
             $container->singleton('bokun.admin_menu', function () {
                 return new AdminMenu();
@@ -60,8 +67,10 @@ class LegacyServiceProvider implements ServiceProviderInterface
         }
 
         if (! $container->has('bokun.settings')) {
-            $container->singleton('bokun.settings', function () {
-                $settings = new \Bokun\Bookings\Admin\Settings\SettingsController();
+            $container->singleton('bokun.settings', function (Container $container) {
+                $settings = new \Bokun\Bookings\Admin\Settings\SettingsController(
+                    $container->get('bokun.settings_repository')
+                );
                 $this->setGlobal('bokun_settings', $settings);
 
                 return $settings;

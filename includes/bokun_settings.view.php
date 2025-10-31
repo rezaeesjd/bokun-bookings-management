@@ -1,8 +1,8 @@
 <?php
-$api_key = get_option('bokun_api_key', '');
-$secret_key = get_option('bokun_secret_key', '');
-$api_key_upgrade = get_option('bokun_api_key_upgrade', '');
-$secret_key_upgrade = get_option('bokun_secret_key_upgrade', '');
+$api_key = isset($api_key) ? (string) $api_key : '';
+$secret_key = isset($secret_key) ? (string) $secret_key : '';
+$api_key_upgrade = isset($api_key_upgrade) ? (string) $api_key_upgrade : '';
+$secret_key_upgrade = isset($secret_key_upgrade) ? (string) $secret_key_upgrade : '';
 ?>
 <div id="booking">
     <div class="container-fluid">
@@ -26,9 +26,9 @@ $secret_key_upgrade = get_option('bokun_secret_key_upgrade', '');
                         <div class="bokun_cmrc-table">
                             <div class="bokun_settings-fb-config">                                
                                 <label for="api_key">API Key:</label>
-                                <input type="text" name="api_key" value="<?= $api_key ?>" placeholder="Enter your API key" required><br>
+                                <input type="text" name="api_key" value="<?= esc_attr($api_key) ?>" placeholder="Enter your API key" required><br>
                                 <label for="secret_key">Secret Key:</label>
-                                <input type="text" name="secret_key" value="<?= $secret_key ?>" placeholder="Enter your Secret key" required><br>
+                                <input type="text" name="secret_key" value="<?= esc_attr($secret_key) ?>" placeholder="Enter your Secret key" required><br>
                                 <input type="submit" name="submit" class="button button-primary bokun_api_auth_save" value="Save Keys">
                             </div>
                         </div>
@@ -53,9 +53,9 @@ $secret_key_upgrade = get_option('bokun_secret_key_upgrade', '');
                         <div class="bokun_cmrc-table">
                             <div class="bokun_settings-fb-config">                                
                                 <label for="api_key_upgrade">API Key:</label>
-                                <input type="text" name="api_key_upgrade" value="<?= $api_key_upgrade ?>" placeholder="Enter your API key" required><br>
+                                <input type="text" name="api_key_upgrade" value="<?= esc_attr($api_key_upgrade) ?>" placeholder="Enter your API key" required><br>
                                 <label for="secret_key">Secret Key:</label>
-                                <input type="text" name="secret_key_upgrade" value="<?= $secret_key_upgrade ?>" placeholder="Enter your Secret key" required><br>
+                                <input type="text" name="secret_key_upgrade" value="<?= esc_attr($secret_key_upgrade) ?>" placeholder="Enter your Secret key" required><br>
                                 <input type="submit" name="submit" class="button button-primary bokun_api_auth_save_upgrade" value="Save Keys">
                             </div>
                         </div>

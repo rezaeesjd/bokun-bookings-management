@@ -19,6 +19,7 @@ if (file_exists($autoloader)) {
     require_once __DIR__ . '/src/Infrastructure/Exception/NotFoundException.php';
     require_once __DIR__ . '/src/Infrastructure/ServiceProviderInterface.php';
     require_once __DIR__ . '/src/Infrastructure/Container.php';
+    require_once __DIR__ . '/src/Infrastructure/Config/SettingsRepository.php';
     require_once __DIR__ . '/src/Infrastructure/ServiceProvider/LegacyServiceProvider.php';
     require_once __DIR__ . '/src/Admin/Assets/AdminAssets.php';
     require_once __DIR__ . '/src/Admin/Localization/LocalizationLoader.php';

@@ -4,6 +4,27 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Retrieve the shared settings repository instance.
+if (!function_exists('bokun_get_settings_repository')) {
+    function bokun_get_settings_repository() {
+        if (isset($GLOBALS['bokun_container']) && $GLOBALS['bokun_container'] instanceof \Bokun\Bookings\Infrastructure\Container) {
+            try {
+                return $GLOBALS['bokun_container']->get('bokun.settings_repository');
+            } catch (\Throwable $exception) {
+                // Fallback to a direct instance if the container cannot provide it.
+            }
+        }
+
+        static $repository = null;
+
+        if (! $repository instanceof \Bokun\Bookings\Infrastructure\Config\SettingsRepository) {
+            $repository = new \Bokun\Bookings\Infrastructure\Config\SettingsRepository();
+        }
+
+        return $repository;
+    }
+}
+
 // Force publish future-dated 'bokun_booking' posts
 function bokun_force_publish_future_posts($data, $postarr) {
     if ($data['post_type'] == 'bokun_booking') {
@@ -66,14 +87,12 @@ function bokun_generate_signature($date, $apiKey, $method, $endpoint, $secretKey
 
 // Fetch bookings from Bokun API
 function bokun_fetch_bookings($upgrade = '') {
-    if ($upgrade) {        
-        $api_key = get_option('bokun_api_key_upgrade', '');
-        $secret_key = get_option('bokun_secret_key_upgrade', '');
-    } else {
-        $api_key = get_option('bokun_api_key', '');
-        $secret_key = get_option('bokun_secret_key', '');
-    }
-    
+    $context = $upgrade ? 'upgrade' : 'default';
+    $credentials = bokun_get_settings_repository()->getCredentialsForContext($context);
+
+    $api_key = $credentials['api_key'];
+    $secret_key = $credentials['secret_key'];
+
     $url = BOKUN_API_BASE_URL . BOKUN_API_BOOKING_API;
     $method = 'POST';
     $date = bokun_format_date();
@@ -1937,17 +1956,10 @@ function bokun_normalize_product_list_payload($payload) {
  * @return array Array containing the access key and secret key.
  */
 function bokun_get_api_credentials_for_context($context = 'default') {
-    $context = bokun_normalize_import_context($context);
+    $normalized_context = bokun_normalize_import_context($context);
+    $credentials = bokun_get_settings_repository()->getCredentialsForContext($normalized_context);
 
-    if ('upgrade' === $context) {
-        $api_key    = get_option('bokun_api_key_upgrade', '');
-        $secret_key = get_option('bokun_secret_key_upgrade', '');
-    } else {
-        $api_key    = get_option('bokun_api_key', '');
-        $secret_key = get_option('bokun_secret_key', '');
-    }
-
-    return [$api_key, $secret_key];
+    return [$credentials['api_key'], $credentials['secret_key']];
 }
 
 // Register Alarm Status taxonomy and create default terms

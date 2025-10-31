@@ -1,6 +1,7 @@
 <?php
 namespace Bokun\Bookings;
 
+use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
 use Bokun\Bookings\Infrastructure\Container;
 use Bokun\Bookings\Infrastructure\ServiceProvider\LegacyServiceProvider;
 
@@ -30,8 +31,8 @@ class Plugin
      */
     public function boot()
     {
-        $this->defineConstants();
         $this->registerServices();
+        $this->defineConstants();
         $this->loadPlugin();
     }
 
@@ -44,16 +45,16 @@ class Plugin
     {
         $this->define('BOKUN_PLUGIN', '/bokun-bookings-management/');
 
-        $apiKey = get_option('bokun_api_key', '');
-        $secretKey = get_option('bokun_secret_key', '');
-        $apiKeyUpgrade = get_option('bokun_api_key_upgrade', '');
-        $secretKeyUpgrade = get_option('bokun_secret_key_upgrade', '');
+        /** @var SettingsRepository $settings */
+        $settings = $this->container->get('bokun.settings_repository');
+        $primaryCredentials = $settings->getPrimaryCredentials();
+        $upgradeCredentials = $settings->getUpgradeCredentials();
 
         $this->define('BOKUN_API_BASE_URL', 'https://api.bokun.io');
-        $this->define('BOKUN_API_KEY', $apiKey);
-        $this->define('BOKUN_SECRET_KEY', $secretKey);
-        $this->define('BOKUN_API_KEY_UPGRADE', $apiKeyUpgrade);
-        $this->define('BOKUN_SECRET_KEY_UPGRADE', $secretKeyUpgrade);
+        $this->define('BOKUN_API_KEY', $primaryCredentials['api_key']);
+        $this->define('BOKUN_SECRET_KEY', $primaryCredentials['secret_key']);
+        $this->define('BOKUN_API_KEY_UPGRADE', $upgradeCredentials['api_key']);
+        $this->define('BOKUN_SECRET_KEY_UPGRADE', $upgradeCredentials['secret_key']);
         $this->define('BOKUN_API_BOOKING_API', '/booking.json/booking-search');
 
         $pluginDir = WP_PLUGIN_DIR . BOKUN_PLUGIN;
