@@ -2,8 +2,18 @@
 
 namespace Bokun\Bookings\Infrastructure\ServiceProvider;
 
+use Bokun\Bookings\Admin\Assets\AdminAssets;
+use Bokun\Bookings\Admin\Localization\LocalizationLoader;
+use Bokun\Bookings\Admin\History\BookingHistoryPage;
+use Bokun\Bookings\Admin\Menu\AdminMenu;
+use Bokun\Bookings\Admin\PostType\BookingListEnhancer;
+use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
 use Bokun\Bookings\Infrastructure\Container;
 use Bokun\Bookings\Infrastructure\ServiceProviderInterface;
+use Bokun\Bookings\Registration\PostTypeRegistrar;
+use Bokun\Bookings\Registration\TaxonomyRegistrar;
+use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
+use Bokun\Bookings\Infrastructure\Validation\RequestSanitizer;
 
 class LegacyServiceProvider implements ServiceProviderInterface
 {
@@ -12,66 +22,101 @@ class LegacyServiceProvider implements ServiceProviderInterface
      */
     public function register(Container $container)
     {
+        if (! $container->has('bokun.data_sanitizer')) {
+            $container->singleton('bokun.data_sanitizer', function () {
+                return new DataSanitizer();
+            });
+        }
+
+        if (! $container->has('bokun.request_sanitizer')) {
+            $container->singleton('bokun.request_sanitizer', function (Container $container) {
+                return new RequestSanitizer($container->get('bokun.data_sanitizer'));
+            });
+        }
+
+        if (! $container->has('bokun.settings_repository')) {
+            $container->singleton('bokun.settings_repository', function (Container $container) {
+                return new SettingsRepository($container->get('bokun.data_sanitizer'));
+            });
+        }
+
+        if (! $container->has('bokun.admin_menu')) {
+            $container->singleton('bokun.admin_menu', function () {
+                return new AdminMenu();
+            });
+        }
+
+        if (! $container->has('bokun.assets')) {
+            $container->singleton('bokun.assets', function (Container $container) {
+                return new AdminAssets(
+                    $container->get('bokun.admin_menu'),
+                    \BokunBookingManagement::VERSION
+                );
+            });
+        }
+
+        if (! $container->has('bokun.post_type_registrar')) {
+            $container->singleton('bokun.post_type_registrar', function () {
+                return new PostTypeRegistrar();
+            });
+        }
+
+        if (! $container->has('bokun.taxonomy_registrar')) {
+            $container->singleton('bokun.taxonomy_registrar', function () {
+                return new TaxonomyRegistrar();
+            });
+        }
+
+        if (! $container->has('bokun.localization_loader')) {
+            $container->singleton('bokun.localization_loader', function () {
+                return new LocalizationLoader();
+            });
+        }
+
+        if (! $container->has('bokun.booking_history_page')) {
+            $container->singleton('bokun.booking_history_page', function (Container $container) {
+                return new BookingHistoryPage(
+                    $container->get('bokun.data_sanitizer')
+                );
+            });
+        }
+
+        if (! $container->has('bokun.booking_list_enhancer')) {
+            $container->singleton('bokun.booking_list_enhancer', function (Container $container) {
+                $enhancer = new BookingListEnhancer(
+                    $container->get('bokun.data_sanitizer')
+                );
+                $enhancer->register();
+
+                return $enhancer;
+            });
+        }
+
         if (! $container->has('bokun.manager')) {
-            $container->singleton('bokun.manager', function () {
-                return new \BokunBookingManagement();
+            $container->singleton('bokun.manager', function (Container $container) {
+                return new \BokunBookingManagement(
+                    $container->get('bokun.admin_menu'),
+                    $container->get('bokun.assets'),
+                    $container->get('bokun.post_type_registrar'),
+                    $container->get('bokun.taxonomy_registrar'),
+                    $container->get('bokun.localization_loader')
+                );
             });
         }
 
         if (! $container->has('bokun.settings')) {
-            $container->singleton('bokun.settings', function () {
-                $this->includeSettingsFile();
-
-                $settings = new \BOKUN_Settings();
-                $this->setGlobal('bokun_settings', $settings);
-
-                return $settings;
+            $container->singleton('bokun.settings', function (Container $container) {
+                return new \Bokun\Bookings\Admin\Settings\SettingsController(
+                    $container->get('bokun.settings_repository'),
+                    $container->get('bokun.request_sanitizer')
+                );
             });
         }
 
         if (! $container->has('bokun.shortcode')) {
             $container->singleton('bokun.shortcode', function () {
-                $this->includeShortcodeFile();
-
-                $shortcode = new \BOKUN_Shortcode();
-                $this->setGlobal('bokun_shortcode', $shortcode);
-
-                return $shortcode;
+                return new \Bokun\Bookings\Presentation\Shortcode\BookingShortcode();
             });
         }
-    }
-
-    private function includeSettingsFile()
-    {
-        $this->includeWhenExists('bokun_settings.class.php');
-    }
-
-    private function includeShortcodeFile()
-    {
-        $this->includeWhenExists('bokun_shortcode.class.php');
-    }
-
-    private function includeWhenExists($file)
-    {
-        if (! defined('BOKUN_INCLUDES_DIR')) {
-            return;
-        }
-
-        $path = rtrim(BOKUN_INCLUDES_DIR, '/\\') . '/' . ltrim($file, '/\\');
-
-        if (file_exists($path)) {
-            global $bokun_container_bootstrapping;
-            $previous = isset($bokun_container_bootstrapping) ? (bool) $bokun_container_bootstrapping : false;
-            $bokun_container_bootstrapping = true;
-
-            include_once $path;
-
-            $bokun_container_bootstrapping = $previous;
-        }
-    }
-
-    private function setGlobal($key, $value)
-    {
-        $GLOBALS[$key] = $value;
     }
 }

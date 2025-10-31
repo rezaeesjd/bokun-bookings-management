@@ -4,6 +4,96 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
+use Bokun\Bookings\Infrastructure\Container;
+use Bokun\Bookings\Infrastructure\Validation\DataSanitizer;
+use Bokun\Bookings\Infrastructure\Validation\RequestSanitizer;
+use Bokun\Bookings\Plugin;
+use Bokun\Bookings\Registration\PostTypeRegistrar;
+
+if (!function_exists('bokun_get_container')) {
+    function bokun_get_container() {
+        $container = Plugin::getContainerInstance();
+
+        if ($container instanceof Container) {
+            return $container;
+        }
+
+        return null;
+    }
+}
+
+// Retrieve the shared settings repository instance.
+if (!function_exists('bokun_get_settings_repository')) {
+    function bokun_get_settings_repository() {
+        $container = bokun_get_container();
+
+        if ($container) {
+            try {
+                return $container->get('bokun.settings_repository');
+            } catch (\Throwable $exception) {
+                // Fallback to a direct instance if the container cannot provide it.
+            }
+        }
+
+        static $repository = null;
+
+        if (! $repository instanceof SettingsRepository) {
+            $repository = new SettingsRepository(
+                bokun_get_data_sanitizer()
+            );
+        }
+
+        return $repository;
+    }
+}
+
+if (!function_exists('bokun_get_data_sanitizer')) {
+    function bokun_get_data_sanitizer() {
+        $container = bokun_get_container();
+
+        if ($container) {
+            try {
+                return $container->get('bokun.data_sanitizer');
+            } catch (\Throwable $exception) {
+                // Continue to fallback instance below.
+            }
+        }
+
+        static $sanitizer = null;
+
+        if (! $sanitizer instanceof DataSanitizer) {
+            $sanitizer = new DataSanitizer();
+        }
+
+        return $sanitizer;
+    }
+}
+
+if (!function_exists('bokun_get_request_sanitizer')) {
+    function bokun_get_request_sanitizer() {
+        $container = bokun_get_container();
+
+        if ($container) {
+            try {
+                return $container->get('bokun.request_sanitizer');
+            } catch (\Throwable $exception) {
+                // Continue to fallback instance below.
+            }
+        }
+
+        static $requestSanitizer = null;
+
+        if (! $requestSanitizer instanceof RequestSanitizer) {
+            $requestSanitizer = new RequestSanitizer(
+                bokun_get_data_sanitizer()
+            );
+        }
+
+        return $requestSanitizer;
+    }
+}
+
 // Force publish future-dated 'bokun_booking' posts
 function bokun_force_publish_future_posts($data, $postarr) {
     if ($data['post_type'] == 'bokun_booking') {
@@ -66,14 +156,12 @@ function bokun_generate_signature($date, $apiKey, $method, $endpoint, $secretKey
 
 // Fetch bookings from Bokun API
 function bokun_fetch_bookings($upgrade = '') {
-    if ($upgrade) {        
-        $api_key = get_option('bokun_api_key_upgrade', '');
-        $secret_key = get_option('bokun_secret_key_upgrade', '');
-    } else {
-        $api_key = get_option('bokun_api_key', '');
-        $secret_key = get_option('bokun_secret_key', '');
-    }
-    
+    $context = $upgrade ? 'upgrade' : 'default';
+    $credentials = bokun_get_settings_repository()->getCredentialsForContext($context);
+
+    $api_key = $credentials['api_key'];
+    $secret_key = $credentials['secret_key'];
+
     $url = BOKUN_API_BASE_URL . BOKUN_API_BOOKING_API;
     $method = 'POST';
     $date = bokun_format_date();
@@ -238,11 +326,11 @@ function bokun_get_import_progress_label($context) {
 
     switch ($context) {
         case 'upgrade':
-            return __('API 2 import', 'bokun-bookings-manager');
+            return __('API 2 import', BOKUN_TEXT_DOMAIN);
         case 'fetch':
-            return __('API 1 import', 'bokun-bookings-manager');
+            return __('API 1 import', BOKUN_TEXT_DOMAIN);
         default:
-            return __('Import', 'bokun-bookings-manager');
+            return __('Import', BOKUN_TEXT_DOMAIN);
     }
 }
 
@@ -254,16 +342,16 @@ function bokun_get_import_progress_message($context, $status) {
     switch ($status) {
         case 'running':
             /* translators: %s: API label. */
-            return sprintf(__('%s — importing product {current}/{total}', 'bokun-bookings-manager'), $label);
+            return sprintf(__('%s — importing product {current}/{total}', BOKUN_TEXT_DOMAIN), $label);
         case 'completed':
             /* translators: %s: API label. */
-            return sprintf(__('%s — import complete ({total}/{total})', 'bokun-bookings-manager'), $label);
+            return sprintf(__('%s — import complete ({total}/{total})', BOKUN_TEXT_DOMAIN), $label);
         case 'error':
             /* translators: %s: API label. */
-            return sprintf(__('%s — import interrupted', 'bokun-bookings-manager'), $label);
+            return sprintf(__('%s — import interrupted', BOKUN_TEXT_DOMAIN), $label);
         default:
             /* translators: %s: API label. */
-            return sprintf(__('%s — preparing import…', 'bokun-bookings-manager'), $label);
+            return sprintf(__('%s — preparing import…', BOKUN_TEXT_DOMAIN), $label);
     }
 }
 
@@ -421,14 +509,37 @@ function bokun_ensure_booking_post_type_registered() {
         return false;
     }
 
-    global $rb;
+    $container = bokun_get_container();
 
-    if (isset($rb) && is_object($rb) && method_exists($rb, 'bokun_register_custom_post_type')) {
-        $rb->bokun_register_custom_post_type();
+    if ($container) {
+        try {
+            if ($container->has('bokun.post_type_registrar')) {
+                $container->get('bokun.post_type_registrar')->registerPostType();
+            } elseif ($container->has('bokun.manager')) {
+                $manager = $container->get('bokun.manager');
 
-        if (post_type_exists('bokun_booking')) {
-            remove_action('init', array($rb, 'bokun_register_custom_post_type'));
-            return true;
+                if (is_object($manager)) {
+                    if (method_exists($manager, 'registerBookingPostType')) {
+                        $manager->registerBookingPostType();
+                    } elseif (method_exists($manager, 'bokun_register_custom_post_type')) {
+                        $manager->bokun_register_custom_post_type();
+                    }
+                }
+            }
+        } catch (\Throwable $exception) {
+            // Fallback to direct registration below if container resolution fails.
+        }
+    }
+
+    if (post_type_exists('bokun_booking')) {
+        return true;
+    }
+
+    if (class_exists(PostTypeRegistrar::class)) {
+        try {
+            (new PostTypeRegistrar())->registerPostType();
+        } catch (\Throwable $exception) {
+            // Ignore and fall through to the final existence check.
         }
     }
 
@@ -450,7 +561,7 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
     if (!bokun_ensure_booking_post_type_registered()) {
         $stats['skipped'] = $stats['total'];
 
-        $error_message = __('The Bokun Booking post type is not registered. Import aborted to avoid capability errors.', 'bokun-bookings-manager');
+        $error_message = __('The Bokun Booking post type is not registered. Import aborted to avoid capability errors.', BOKUN_TEXT_DOMAIN);
 
         bokun_set_import_progress_state($context, array(
             'status'    => 'error',
@@ -676,6 +787,7 @@ function bokun_check_for_changes($post_id, $booking) {
 
 // Function to save specific fields of the booking
 function bokun_save_specific_fields($post_id, $booking) {
+    $sanitizer = bokun_get_data_sanitizer();
     // Extract nested values
     $customer = $booking['customer'] ?? [];
     $productBooking = $booking['productBookings'][0] ?? [];
@@ -683,22 +795,22 @@ function bokun_save_specific_fields($post_id, $booking) {
     $phoneParsed = parse_phone_number($customer['phoneNumber'] ?? '');
 
     // Save necessary fields, with proper sanitization for text and numeric values
-    update_post_meta($post_id, '_confirmation_code', sanitize_text_field($booking['confirmationCode'] ?? 'N/A'));
-    update_post_meta($post_id, '_first_name', sanitize_text_field($customer['firstName'] ?? 'N/A'));
-    update_post_meta($post_id, '_last_name', sanitize_text_field($customer['lastName'] ?? 'N/A'));
-    update_post_meta($post_id, '_email', sanitize_email($customer['email'] ?? 'N/A'));
-    update_post_meta($post_id, '_phone_prefix', sanitize_text_field($phoneParsed[0] ?? 'N/A'));
-    update_post_meta($post_id, '_phone_number', sanitize_text_field($phoneParsed[1] ?? 'N/A'));
-    update_post_meta($post_id, '_external_booking_reference', sanitize_text_field($booking['externalBookingReference'] ?? 'N/A'));
-    update_post_meta($post_id, '_product_title', sanitize_text_field($productBooking['product']['title'] ?? 'N/A'));
-    update_post_meta($post_id, '_product_id', intval($productBooking['product']['id'] ?? 0));
-    update_post_meta($post_id, '_booking_status_origin', sanitize_text_field($productBooking['status'] ?? 'N/A'));
+    update_post_meta($post_id, '_confirmation_code', $sanitizer->text($booking['confirmationCode'] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_first_name', $sanitizer->text($customer['firstName'] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_last_name', $sanitizer->text($customer['lastName'] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_email', $sanitizer->email($customer['email'] ?? ''));
+    update_post_meta($post_id, '_phone_prefix', $sanitizer->text($phoneParsed[0] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_phone_number', $sanitizer->text($phoneParsed[1] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_external_booking_reference', $sanitizer->text($booking['externalBookingReference'] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_product_title', $sanitizer->text($productBooking['product']['title'] ?? 'N/A', 'N/A'));
+    update_post_meta($post_id, '_product_id', $sanitizer->integer($productBooking['product']['id'] ?? 0));
+    update_post_meta($post_id, '_booking_status_origin', $sanitizer->text($productBooking['status'] ?? 'N/A', 'N/A'));
 
     // Handle timestamps properly for date fields
     $booking_creation_date = $booking['creationDate'] ?? '';
 
     if ('' !== $booking_creation_date) {
-        $sanitized_creation_date = sanitize_text_field($booking_creation_date);
+        $sanitized_creation_date = $sanitizer->text($booking_creation_date);
 
         $original_creation_date = get_post_meta($post_id, '_original_creation_date', true);
         if ($original_creation_date !== $sanitized_creation_date) {
@@ -708,7 +820,7 @@ function bokun_save_specific_fields($post_id, $booking) {
         $formatted_creation_date = bokun_format_booking_datetime($sanitized_creation_date);
 
         if ('' !== $formatted_creation_date) {
-            update_post_meta($post_id, 'bookingcreationdate', sanitize_text_field($formatted_creation_date));
+            update_post_meta($post_id, 'bookingcreationdate', $sanitizer->text($formatted_creation_date));
         } else {
             delete_post_meta($post_id, 'bookingcreationdate');
         }
@@ -718,11 +830,11 @@ function bokun_save_specific_fields($post_id, $booking) {
 
     $original_start_date = get_post_meta($post_id, '_original_start_date', true);
     if ($original_start_date !== $productBooking['startDate']) {
-        update_post_meta($post_id, '_original_start_date', sanitize_text_field($productBooking['startDate']));
+        update_post_meta($post_id, '_original_start_date', $sanitizer->text($productBooking['startDate']));
     }
 
     // Handle product tags (product_id and product_title)
-    $product_title = sanitize_text_field($productBooking['product']['title'] ?? '');
+    $product_title = $sanitizer->text($productBooking['product']['title'] ?? '');
 
     // Assign product title tag to the post
     if (!empty($product_title)) {
@@ -730,7 +842,7 @@ function bokun_save_specific_fields($post_id, $booking) {
     }
 
     // Handle booking status
-    $booking_status = sanitize_text_field($productBooking['status'] ?? '');
+    $booking_status = $sanitizer->text($productBooking['status'] ?? '');
 
     if (!empty($booking_status)) {
         bokun_assign_tag_to_post($post_id, $booking_status, 'booking_status');
@@ -769,8 +881,15 @@ function bokun_assign_not_made_if_not_made_exists($post_id) {
 // Function to parse phone number (example implementation)
 function parse_phone_number($phoneNumber) {
     $phoneRegex = '/^(\+\d+|\w+\+\d+)?\s*(.*)$/';
-    preg_match($phoneRegex, $phoneNumber, $matches);
-    return [($matches[1] ?? ''), ($matches[2] ?? '')];
+    $subject = is_string($phoneNumber) ? wp_unslash($phoneNumber) : '';
+    preg_match($phoneRegex, $subject, $matches);
+
+    $sanitizer = bokun_get_data_sanitizer();
+
+    return [
+        $sanitizer->text($matches[1] ?? ''),
+        $sanitizer->text($matches[2] ?? ''),
+    ];
 }
 
 // Function to assign product tags to the post
@@ -1937,45 +2056,11 @@ function bokun_normalize_product_list_payload($payload) {
  * @return array Array containing the access key and secret key.
  */
 function bokun_get_api_credentials_for_context($context = 'default') {
-    $context = bokun_normalize_import_context($context);
+    $normalized_context = bokun_normalize_import_context($context);
+    $credentials = bokun_get_settings_repository()->getCredentialsForContext($normalized_context);
 
-    if ('upgrade' === $context) {
-        $api_key    = get_option('bokun_api_key_upgrade', '');
-        $secret_key = get_option('bokun_secret_key_upgrade', '');
-    } else {
-        $api_key    = get_option('bokun_api_key', '');
-        $secret_key = get_option('bokun_secret_key', '');
-    }
-
-    return [$api_key, $secret_key];
+    return [$credentials['api_key'], $credentials['secret_key']];
 }
-
-// Register Alarm Status taxonomy and create default terms
-function bokun_register_alarm_status_taxonomy() {
-    register_taxonomy('alarm_status', 'bokun_booking', [
-        'labels' => [
-            'name' => __('Alarm Status'),
-            'singular_name' => __('Alarm Status'),
-        ],
-        'public' => true,
-        'rewrite' => ['slug' => 'alarm-status'],
-        'hierarchical' => false,
-        'show_in_nav_menus' => true,
-        'show_in_menu' => true,
-        'show_in_rest' => true, // Important for Elementor
-        'show_ui' => true,
-        'show_admin_column' => true, // This adds the taxonomy in post lists
-    ]);
-
-    // Check if the terms 'Ok', 'Attention', and 'Alarm' exist, if not, create them
-    $terms = ['Ok', 'Attention', 'Alarm'];
-    foreach ($terms as $term) {
-        if (!term_exists($term, 'alarm_status')) {
-            wp_insert_term($term, 'alarm_status');
-        }
-    }
-}
-add_action('init', 'bokun_register_alarm_status_taxonomy');
 
 function bokun_booking_history_table_exists() {
     static $table_exists = null;
@@ -1994,9 +2079,10 @@ function bokun_booking_history_table_exists() {
 }
 
 function bokun_get_team_member_name_from_cookies() {
+    $sanitizer = bokun_get_data_sanitizer();
     foreach ($_COOKIE as $cookie_name => $value) {
         if (0 === strpos($cookie_name, 'bokunTeamMemberAuthorized_')) {
-            $team_member_name = sanitize_text_field(wp_unslash($value));
+            $team_member_name = $sanitizer->text($value);
 
             if (!empty($team_member_name)) {
                 return $team_member_name;
@@ -2018,9 +2104,11 @@ function bokun_get_booking_history_actor_details() {
             $user_name = $user->display_name ? $user->display_name : $user->user_login;
         }
 
+        $sanitizer = bokun_get_data_sanitizer();
+
         return [
             'user_id'      => $user_id,
-            'user_name'    => sanitize_text_field($user_name),
+            'user_name'    => $sanitizer->text($user_name),
             'actor_source' => 'wp_user',
         ];
     }
@@ -2082,18 +2170,18 @@ function bokun_record_booking_history($post_id, $booking_id, $action_type, $chec
 function update_booking_status() {
     check_ajax_referer('update_booking_nonce', 'security');
 
-    $booking_id = isset($_POST['booking_id']) ? sanitize_text_field(wp_unslash($_POST['booking_id'])) : '';
-    $checked    = isset($_POST['checked']) ? filter_var(wp_unslash($_POST['checked']), FILTER_VALIDATE_BOOLEAN) : false;
-    $type       = isset($_POST['type']) ? strtolower(sanitize_text_field(wp_unslash($_POST['type']))) : '';
+    $request = bokun_get_request_sanitizer();
+    $booking_id = $request->postText('booking_id');
+    $checked    = $request->postBoolean('checked', false);
+    $allowed_types = ['full', 'partial', 'not-available', 'refund-partner'];
+    $type       = $request->postEnum('type', $allowed_types, '');
 
     if (empty($booking_id)) {
         wp_send_json_error(['message' => 'Invalid booking ID provided.']);
         wp_die();
     }
 
-    $allowed_types = ['full', 'partial', 'not-available', 'refund-partner'];
-
-    if (!in_array($type, $allowed_types, true)) {
+    if ('' === $type) {
         wp_send_json_error(['message' => 'Invalid booking status type provided.']);
         wp_die();
     }
@@ -2174,12 +2262,12 @@ add_action('wp_ajax_nopriv_update_booking_status', 'update_booking_status');
 function bokun_handle_add_team_member() {
     check_ajax_referer('add_team_member_nonce', 'security');
 
-    $team_member_name = isset($_POST['team_member_name']) ? sanitize_text_field(wp_unslash($_POST['team_member_name'])) : '';
-    $team_member_name = trim($team_member_name);
+    $request = bokun_get_request_sanitizer();
+    $team_member_name = trim($request->postText('team_member_name'));
 
     if ('' === $team_member_name) {
         wp_send_json_error([
-            'message' => __('Please provide a team member name.', 'bokun-bookings-manager'),
+            'message' => __('Please provide a team member name.', BOKUN_TEXT_DOMAIN),
         ]);
     }
 
@@ -2187,7 +2275,7 @@ function bokun_handle_add_team_member() {
 
     if ($existing_term) {
         wp_send_json_success([
-            'message' => __('This team member already exists.', 'bokun-bookings-manager'),
+            'message' => __('This team member already exists.', BOKUN_TEXT_DOMAIN),
             'created' => false,
         ]);
     }
@@ -2201,7 +2289,7 @@ function bokun_handle_add_team_member() {
     }
 
     wp_send_json_success([
-        'message' => __('Team member added successfully.', 'bokun-bookings-manager'),
+        'message' => __('Team member added successfully.', BOKUN_TEXT_DOMAIN),
         'created' => true,
     ]);
 }
@@ -2211,6 +2299,7 @@ add_action('wp_ajax_nopriv_add_team_member', 'bokun_handle_add_team_member');
 
 // Function to process price categories and save to fixed fields
 function process_price_categories_and_save($post_id, $booking_data) {
+    $sanitizer = bokun_get_data_sanitizer();
     $category_counts = [];
 
     // Check if 'productBookings' exists and has at least one entry
@@ -2220,8 +2309,8 @@ function process_price_categories_and_save($post_id, $booking_data) {
         // Loop through each price category booking
         foreach ($price_category_bookings as $price_category_booking) {
             if (isset($price_category_booking['pricingCategory']['fullTitle']) && isset($price_category_booking['quantity'])) {
-                $category_name = $price_category_booking['pricingCategory']['fullTitle'];
-                $quantity = intval($price_category_booking['quantity']);
+                $category_name = $sanitizer->text($price_category_booking['pricingCategory']['fullTitle'] ?? '');
+                $quantity = $sanitizer->integer($price_category_booking['quantity'] ?? 0, 0, 0);
 
                 // Increment the count for each category name
                 $category_counts[$category_name] = ($category_counts[$category_name] ?? 0) + $quantity;
@@ -2240,7 +2329,7 @@ function process_price_categories_and_save($post_id, $booking_data) {
         if ($index < 5) {
             $field_name = $pricecategory_fields[$index];
             $value_to_save = $count . ' ' . $category_name;
-            update_post_meta($post_id, $field_name, sanitize_text_field($value_to_save));
+            update_post_meta($post_id, $field_name, $sanitizer->text($value_to_save));
         }
         $index++;
     }
@@ -2282,7 +2371,7 @@ add_action('add_meta_boxes', 'bokun_add_custom_fields_metabox');
 function bokun_add_custom_fields_metabox() {
     add_meta_box(
         'bokun_custom_fields',
-        __('Booking Custom Fields'),
+        __('Booking Custom Fields', BOKUN_TEXT_DOMAIN),
         'bokun_display_custom_fields_metabox',
         'bokun_booking',
         'normal',
@@ -2606,12 +2695,12 @@ function bokun_team_member_submission_shortcode() {
     ?>
     <div id="<?php echo esc_attr($overlay_id); ?>" class="bokun-team-member-overlay" role="dialog" aria-modal="true" aria-hidden="true">
         <div class="bokun-team-member-overlay__dialog">
-            <h2 class="bokun-team-member-overlay__title"><?php esc_html_e('Team Member Verification', 'bokun-bookings-manager'); ?></h2>
-            <p class="bokun-team-member-overlay__description"><?php esc_html_e('Enter your name to access this page.', 'bokun-bookings-manager'); ?></p>
+            <h2 class="bokun-team-member-overlay__title"><?php esc_html_e('Team Member Verification', BOKUN_TEXT_DOMAIN); ?></h2>
+            <p class="bokun-team-member-overlay__description"><?php esc_html_e('Enter your name to access this page.', BOKUN_TEXT_DOMAIN); ?></p>
             <form class="bokun-team-member-form" data-overlay-id="<?php echo esc_attr($overlay_id); ?>" data-storage-key="<?php echo esc_attr($storage_key); ?>" data-legacy-storage-key="<?php echo esc_attr($legacy_storage_key); ?>" novalidate>
-                <label class="bokun-team-member-form__label" for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Team Member Name', 'bokun-bookings-manager'); ?></label>
+                <label class="bokun-team-member-form__label" for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Team Member Name', BOKUN_TEXT_DOMAIN); ?></label>
                 <input class="bokun-team-member-form__input" type="text" id="<?php echo esc_attr($input_id); ?>" name="team_member_name" autocomplete="off" required>
-                <button class="bokun-team-member-form__button" type="submit"><?php esc_html_e('Confirm Access', 'bokun-bookings-manager'); ?></button>
+                <button class="bokun-team-member-form__button" type="submit"><?php esc_html_e('Confirm Access', BOKUN_TEXT_DOMAIN); ?></button>
                 <span class="bokun-team-member-message" role="status" aria-live="polite"></span>
             </form>
         </div>
@@ -2934,7 +3023,7 @@ add_shortcode('team_member_field', 'bokun_team_member_submission_shortcode');
 function bokun_team_member_reset_button_shortcode($atts) {
     $atts = shortcode_atts(
         array(
-            'label' => __('Reset Team Member Session', 'bokun-bookings-manager'),
+            'label' => __('Reset Team Member Session', BOKUN_TEXT_DOMAIN),
         ),
         $atts,
         'team_member_reset_button'
@@ -3130,19 +3219,19 @@ add_action('product_tags_add_form_fields', 'add_product_tag_custom_fields', 10, 
 function add_product_tag_custom_fields($taxonomy) {
     ?>
     <div class="form-field">
-        <label for="term_meta[statusok]"><?php _e('Status OK', 'bokun-bookings-manager'); ?></label>
+        <label for="term_meta[statusok]"><?php _e('Status OK', BOKUN_TEXT_DOMAIN); ?></label>
         <input type="number" name="term_meta[statusok]" id="term_meta[statusok]" value="">
-        <p class="description"><?php _e('Enter the number of days for Status OK.', 'bokun-bookings-manager'); ?></p>
+        <p class="description"><?php _e('Enter the number of days for Status OK.', BOKUN_TEXT_DOMAIN); ?></p>
     </div>
     <div class="form-field">
-        <label for="term_meta[statusattention]"><?php _e('Status Attention', 'bokun-bookings-manager'); ?></label>
+        <label for="term_meta[statusattention]"><?php _e('Status Attention', BOKUN_TEXT_DOMAIN); ?></label>
         <input type="number" name="term_meta[statusattention]" id="term_meta[statusattention]" value="">
-        <p class="description"><?php _e('Enter the number of days for Status Attention.', 'bokun-bookings-manager'); ?></p>
+        <p class="description"><?php _e('Enter the number of days for Status Attention.', BOKUN_TEXT_DOMAIN); ?></p>
     </div>
     <div class="form-field">
-        <label for="term_meta[statusalarm]"><?php _e('Status Alarm', 'bokun-bookings-manager'); ?></label>
+        <label for="term_meta[statusalarm]"><?php _e('Status Alarm', BOKUN_TEXT_DOMAIN); ?></label>
         <input type="number" name="term_meta[statusalarm]" id="term_meta[statusalarm]" value="">
-        <p class="description"><?php _e('Enter the number of days for Status Alarm.', 'bokun-bookings-manager'); ?></p>
+        <p class="description"><?php _e('Enter the number of days for Status Alarm.', BOKUN_TEXT_DOMAIN); ?></p>
     </div>
     <?php
 }
@@ -3155,24 +3244,24 @@ function edit_product_tag_custom_fields($term, $taxonomy) {
     $statusalarm = get_term_meta($term->term_id, 'statusalarm', true);
     ?>
     <tr class="form-field">
-        <th scope="row" valign="top"><label for="term_meta[statusok]"><?php _e('Status OK', 'bokun-bookings-manager'); ?></label></th>
+        <th scope="row" valign="top"><label for="term_meta[statusok]"><?php _e('Status OK', BOKUN_TEXT_DOMAIN); ?></label></th>
         <td>
             <input type="number" name="term_meta[statusok]" id="term_meta[statusok]" value="<?php echo esc_attr($statusok) ? esc_attr($statusok) : ''; ?>">
-            <p class="description"><?php _e('Enter the number of days for Status OK.', 'bokun-bookings-manager'); ?></p>
+            <p class="description"><?php _e('Enter the number of days for Status OK.', BOKUN_TEXT_DOMAIN); ?></p>
         </td>
     </tr>
     <tr class="form-field">
-        <th scope="row" valign="top"><label for="term_meta[statusattention]"><?php _e('Status Attention', 'bokun-bookings-manager'); ?></label></th>
+        <th scope="row" valign="top"><label for="term_meta[statusattention]"><?php _e('Status Attention', BOKUN_TEXT_DOMAIN); ?></label></th>
         <td>
             <input type="number" name="term_meta[statusattention]" id="term_meta[statusattention]" value="<?php echo esc_attr($statusattention) ? esc_attr($statusattention) : ''; ?>">
-            <p class="description"><?php _e('Enter the number of days for Status Attention.', 'bokun-bookings-manager'); ?></p>
+            <p class="description"><?php _e('Enter the number of days for Status Attention.', BOKUN_TEXT_DOMAIN); ?></p>
         </td>
     </tr>
     <tr class="form-field">
-        <th scope="row" valign="top"><label for="term_meta[statusalarm]"><?php _e('Status Alarm', 'bokun-bookings-manager'); ?></label></th>
+        <th scope="row" valign="top"><label for="term_meta[statusalarm]"><?php _e('Status Alarm', BOKUN_TEXT_DOMAIN); ?></label></th>
         <td>
             <input type="number" name="term_meta[statusalarm]" id="term_meta[statusalarm]" value="<?php echo esc_attr($statusalarm) ? esc_attr($statusalarm) : ''; ?>">
-            <p class="description"><?php _e('Enter the number of days for Status Alarm.', 'bokun-bookings-manager'); ?></p>
+            <p class="description"><?php _e('Enter the number of days for Status Alarm.', BOKUN_TEXT_DOMAIN); ?></p>
         </td>
     </tr>
     <?php
@@ -3182,12 +3271,14 @@ function edit_product_tag_custom_fields($term, $taxonomy) {
 add_action('created_product_tags', 'save_product_tag_custom_fields', 10, 2);
 add_action('edited_product_tags', 'save_product_tag_custom_fields', 10, 2);
 function save_product_tag_custom_fields($term_id) {
-    if (isset($_POST['term_meta'])) {
-        $term_meta = $_POST['term_meta'];
+    $request = bokun_get_request_sanitizer();
+    $sanitizer = $request->getDataSanitizer();
+    $term_meta = $request->postArray('term_meta', function ($value) use ($sanitizer) {
+        return $sanitizer->text($value);
+    });
 
-        foreach ($term_meta as $key => $value) {
-            update_term_meta($term_id, $key, sanitize_text_field($value));
-        }
+    foreach ($term_meta as $key => $value) {
+        update_term_meta($term_id, $key, $value);
     }
 }
 
@@ -3235,9 +3326,9 @@ add_action('product_tags_add_form_fields', 'add_partnerpageid_field', 10, 2);
 function add_partnerpageid_field($taxonomy) {
     ?>
     <div class="form-field">
-        <label for="term_meta[partnerpageid]"><?php _e('Partner Page ID', 'bokun-bookings-manager'); ?></label>
+        <label for="term_meta[partnerpageid]"><?php _e('Partner Page ID', BOKUN_TEXT_DOMAIN); ?></label>
         <input type="text" name="term_meta[partnerpageid]" id="term_meta[partnerpageid]" value="">
-        <p class="description"><?php _e('Enter the Partner Page ID.', 'bokun-bookings-manager'); ?></p>
+        <p class="description"><?php _e('Enter the Partner Page ID.', BOKUN_TEXT_DOMAIN); ?></p>
     </div>
     <?php
 }
@@ -3248,10 +3339,10 @@ function edit_partnerpageid_field($term, $taxonomy) {
     $partnerpageid = get_term_meta($term->term_id, 'partnerpageid', true);
     ?>
     <tr class="form-field">
-        <th scope="row" valign="top"><label for="term_meta[partnerpageid]"><?php _e('Partner Page ID', 'bokun-bookings-manager'); ?></label></th>
+        <th scope="row" valign="top"><label for="term_meta[partnerpageid]"><?php _e('Partner Page ID', BOKUN_TEXT_DOMAIN); ?></label></th>
         <td>
             <input type="text" name="term_meta[partnerpageid]" id="term_meta[partnerpageid]" value="<?php echo esc_attr($partnerpageid) ? esc_attr($partnerpageid) : ''; ?>">
-            <p class="description"><?php _e('Enter the Partner Page ID.', 'bokun-bookings-manager'); ?></p>
+            <p class="description"><?php _e('Enter the Partner Page ID.', BOKUN_TEXT_DOMAIN); ?></p>
         </td>
     </tr>
     <?php
@@ -3261,8 +3352,12 @@ function edit_partnerpageid_field($term, $taxonomy) {
 add_action('created_product_tags', 'save_partnerpageid_field', 10, 2);
 add_action('edited_product_tags', 'save_partnerpageid_field', 10, 2);
 function save_partnerpageid_field($term_id) {
-    if (isset($_POST['term_meta']['partnerpageid'])) {
-        update_term_meta($term_id, 'partnerpageid', sanitize_text_field($_POST['term_meta']['partnerpageid']));
+    $request = bokun_get_request_sanitizer();
+    $sanitizer = $request->getDataSanitizer();
+    $term_meta = $request->postArray('term_meta');
+
+    if (isset($term_meta['partnerpageid'])) {
+        update_term_meta($term_id, 'partnerpageid', $sanitizer->text($term_meta['partnerpageid']));
     }
 }
 
