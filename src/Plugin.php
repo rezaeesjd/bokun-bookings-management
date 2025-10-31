@@ -1,6 +1,9 @@
 <?php
 namespace Bokun\Bookings;
 
+use Bokun\Bookings\Infrastructure\Container;
+use Bokun\Bookings\Infrastructure\ServiceProvider\LegacyServiceProvider;
+
 class Plugin
 {
     /**
@@ -9,11 +12,17 @@ class Plugin
     private $pluginFile;
 
     /**
+     * @var Container
+     */
+    private $container;
+
+    /**
      * @param string $pluginFile
      */
-    public function __construct($pluginFile)
+    public function __construct($pluginFile, ?Container $container = null)
     {
         $this->pluginFile = $pluginFile;
+        $this->container = $container ?: new Container();
     }
 
     /**
@@ -22,7 +31,13 @@ class Plugin
     public function boot()
     {
         $this->defineConstants();
+        $this->registerServices();
         $this->loadPlugin();
+    }
+
+    private function registerServices()
+    {
+        $this->container->register(new LegacyServiceProvider());
     }
 
     private function defineConstants()
@@ -72,16 +87,18 @@ class Plugin
             return;
         }
 
-        global $rb;
-        $rb = new \BokunBookingManagement();
+        global $rb, $bokun_container;
+
+        $bokun_container = $this->container;
+        $rb = $this->container->get('bokun.manager');
 
         if (! $rb->bokun_is_activate()) {
             return;
         }
 
-        $this->includeIfExists(BOKUN_INCLUDES_DIR . 'bokun_settings.class.php');
+        $this->container->get('bokun.settings');
         $this->includeIfExists(BOKUN_INCLUDES_DIR . 'bokun-bookings-manager.php');
-        $this->includeIfExists(BOKUN_INCLUDES_DIR . 'bokun_shortcode.class.php');
+        $this->container->get('bokun.shortcode');
     }
 
     private function includeIfExists($path)

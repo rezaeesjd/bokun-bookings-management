@@ -11,8 +11,12 @@ Text Domain: BOKUN_text_domain
 */
 
 
+require_once __DIR__ . '/src/Infrastructure/Exception/ContainerException.php';
+require_once __DIR__ . '/src/Infrastructure/Exception/NotFoundException.php';
+require_once __DIR__ . '/src/Infrastructure/ServiceProviderInterface.php';
+require_once __DIR__ . '/src/Infrastructure/Container.php';
+require_once __DIR__ . '/src/Infrastructure/ServiceProvider/LegacyServiceProvider.php';
 require_once __DIR__ . '/src/Plugin.php';
-
 global $bokun_version;
 $bokun_version = '1.0.0';
 
@@ -380,7 +384,6 @@ class BokunBookingManagement {
     }
     
 }
-
-
-$plugin = new \Bokun\Bookings\Plugin(__FILE__);
+$bokunContainer = new \Bokun\Bookings\Infrastructure\Container();
+$plugin = new \Bokun\Bookings\Plugin(__FILE__, $bokunContainer);
 $plugin->boot();
