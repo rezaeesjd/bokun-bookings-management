@@ -147,8 +147,11 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
     }
 
 
-    global $bokun_settings;
-    $bokun_settings = new BOKUN_Settings();
+    global $bokun_settings, $bokun_container_bootstrapping;
+
+    if (empty($bokun_container_bootstrapping)) {
+        $bokun_settings = new BOKUN_Settings();
+    }
 }
-    
+
 ?>

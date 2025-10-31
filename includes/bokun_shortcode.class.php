@@ -482,8 +482,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
     }
 
 
-    global $bokun_shortcode;
-    $bokun_shortcode = new BOKUN_Shortcode();
+    global $bokun_shortcode, $bokun_container_bootstrapping;
+
+    if (empty($bokun_container_bootstrapping)) {
+        $bokun_shortcode = new BOKUN_Shortcode();
+    }
 }
 
 
