@@ -11,6 +11,7 @@ class BookingShortcode
     {
         add_shortcode('bokun_fetch_button', [$this, 'renderFetchButton']);
         add_shortcode('bokun_booking_history', [$this, 'renderBookingHistoryTable']);
+        add_shortcode('bokun_booking_overview', [$this, 'renderBookingOverview']);
     }
 
     public function renderFetchButton()
@@ -109,9 +110,20 @@ class BookingShortcode
                     'noResults' => __('No booking activity has been recorded yet.', BOKUN_TEXT_DOMAIN),
                 ],
                 'language' => [],
-                'exportTitle' => sanitize_title($export_title),
-            ]
+            'exportTitle' => sanitize_title($export_title),
+        ]
         );
+    }
+
+    private function enqueueBookingOverviewAssets()
+    {
+        $style_handle = 'bokun-booking-overview';
+        $style_path   = BOKUN_CSS_DIR . 'bokun-booking-overview.css';
+        $style_url    = BOKUN_CSS_URL . 'bokun-booking-overview.css';
+
+        $version = file_exists($style_path) ? (string) filemtime($style_path) : '1.0.0';
+
+        wp_enqueue_style($style_handle, $style_url, [], $version);
     }
 
     public function renderBookingHistoryTable($atts = [])
@@ -472,6 +484,197 @@ class BookingShortcode
             </table>
         </div>
         <?php
+        return ob_get_clean();
+    }
+
+    public function renderBookingOverview($atts = [])
+    {
+        $this->enqueueBookingOverviewAssets();
+
+        $atts = shortcode_atts(
+            [
+                'per_page'   => 10,
+                'status'     => '',
+                'order'      => 'ASC',
+                'capability' => '',
+            ],
+            $atts,
+            'bokun_booking_overview'
+        );
+
+        if (! empty($atts['capability']) && ! current_user_can(sanitize_key($atts['capability']))) {
+            return sprintf(
+                '<div class="bokun-booking-overview__notice" role="alert">%s</div>',
+                esc_html__('You do not have permission to view these bookings.', BOKUN_TEXT_DOMAIN)
+            );
+        }
+
+        $sanitizer = function_exists('bokun_get_data_sanitizer') ? bokun_get_data_sanitizer() : null;
+        if (! $sanitizer instanceof \Bokun\Bookings\Infrastructure\Validation\DataSanitizer) {
+            $sanitizer = new \Bokun\Bookings\Infrastructure\Validation\DataSanitizer();
+        }
+
+        $perPage = max(1, min(50, (int) $atts['per_page']));
+        $order   = strtoupper($sanitizer->key($atts['order'], 'ASC'));
+        if (! in_array($order, ['ASC', 'DESC'], true)) {
+            $order = 'ASC';
+        }
+
+        $statusFilter = '';
+        if (! empty($atts['status'])) {
+            $statusFilter = sanitize_key($atts['status']);
+        }
+
+        if (isset($_GET['bokun_overview_status'])) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            $statusFilter = sanitize_key(wp_unslash($_GET['bokun_overview_status'])); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        }
+
+        $searchTerm = '';
+        if (isset($_GET['bokun_overview_search'])) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            $searchTerm = $sanitizer->text(wp_unslash($_GET['bokun_overview_search']), ''); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        }
+
+        $paged = isset($_GET['bokun_overview_page']) ? $sanitizer->integer(wp_unslash($_GET['bokun_overview_page']), 1, 1) : 1; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+        $queryArgs = [
+            'post_type'      => 'bokun_booking',
+            'post_status'    => 'publish',
+            'posts_per_page' => $perPage,
+            'paged'          => $paged,
+            'orderby'        => 'meta_value',
+            'meta_key'       => '_original_start_date',
+            'order'          => $order,
+        ];
+
+        if ($searchTerm) {
+            $queryArgs['s'] = $searchTerm;
+        }
+
+        if ($statusFilter) {
+            $queryArgs['tax_query'] = [
+                [
+                    'taxonomy' => 'booking_status',
+                    'field'    => 'slug',
+                    'terms'    => $statusFilter,
+                ],
+            ];
+        }
+
+        $bookings = new \WP_Query($queryArgs);
+
+        $statuses = get_terms([
+            'taxonomy'   => 'booking_status',
+            'hide_empty' => false,
+        ]);
+
+        ob_start();
+
+        echo '<div class="bokun-booking-overview" role="region" aria-label="' . esc_attr__('Bokun bookings overview', BOKUN_TEXT_DOMAIN) . '">';
+        echo '<form method="get" class="bokun-booking-overview__filters">';
+
+        foreach ($_GET as $key => $value) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            if (0 === strpos($key, 'bokun_overview_')) {
+                continue;
+            }
+
+            if ('page_id' === $key || 'p' === $key) {
+                if (is_array($value)) {
+                    continue;
+                }
+
+                printf('<input type="hidden" name="%s" value="%s" />', esc_attr($key), esc_attr(wp_unslash($value))); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+            }
+        }
+
+        echo '<div>';
+        echo '<label for="bokun_overview_status">' . esc_html__('Filter by status', BOKUN_TEXT_DOMAIN) . '</label>';
+        echo '<select id="bokun_overview_status" name="bokun_overview_status">';
+        echo '<option value="">' . esc_html__('All statuses', BOKUN_TEXT_DOMAIN) . '</option>';
+        if (! is_wp_error($statuses)) {
+            foreach ($statuses as $status) {
+                printf(
+                    '<option value="%s" %s>%s</option>',
+                    esc_attr($status->slug),
+                    selected($statusFilter, $status->slug, false),
+                    esc_html($status->name)
+                );
+            }
+        }
+        echo '</select>';
+        echo '</div>';
+
+        echo '<div>';
+        echo '<label for="bokun_overview_search">' . esc_html__('Search bookings', BOKUN_TEXT_DOMAIN) . '</label>';
+        printf(
+            '<input type="search" id="bokun_overview_search" name="bokun_overview_search" value="%s" placeholder="%s" />',
+            esc_attr($searchTerm),
+            esc_attr__('Search by keyword', BOKUN_TEXT_DOMAIN)
+        );
+        echo '</div>';
+
+        echo '<div>';
+        echo '<label for="bokun_overview_submit">' . esc_html__('Apply filters', BOKUN_TEXT_DOMAIN) . '</label>';
+        echo '<button type="submit" id="bokun_overview_submit" class="button">' . esc_html__('Apply', BOKUN_TEXT_DOMAIN) . '</button>';
+        echo '</div>';
+
+        echo '</form>';
+
+        if ($bookings->have_posts()) {
+            echo '<table class="bokun-booking-overview__table">';
+            echo '<thead><tr>';
+            echo '<th>' . esc_html__('Booking', BOKUN_TEXT_DOMAIN) . '</th>';
+            echo '<th>' . esc_html__('Customer', BOKUN_TEXT_DOMAIN) . '</th>';
+            echo '<th>' . esc_html__('Start Date', BOKUN_TEXT_DOMAIN) . '</th>';
+            echo '<th>' . esc_html__('Status', BOKUN_TEXT_DOMAIN) . '</th>';
+            echo '</tr></thead><tbody>';
+
+            while ($bookings->have_posts()) {
+                $bookings->the_post();
+                $postId = get_the_ID();
+                $confirmation = get_post_meta($postId, '_confirmation_code', true);
+                $customerName = trim(get_post_meta($postId, '_first_name', true) . ' ' . get_post_meta($postId, '_last_name', true));
+                if (! $customerName) {
+                    $customerName = get_post_meta($postId, '_email', true);
+                }
+                $startDate = get_post_meta($postId, '_original_start_date', true);
+                $statusNames = wp_get_post_terms($postId, 'booking_status', ['fields' => 'names']);
+
+                echo '<tr>';
+                echo '<td>';
+                if ($confirmation) {
+                    echo esc_html($confirmation) . '<br />';
+                }
+                echo '<a href="' . esc_url(get_permalink($postId)) . '">' . esc_html(get_the_title()) . '</a>';
+                echo '</td>';
+
+                echo '<td>' . esc_html($customerName ? $customerName : __('Unknown', BOKUN_TEXT_DOMAIN)) . '</td>';
+                echo '<td>' . esc_html($startDate ? $startDate : __('Not available', BOKUN_TEXT_DOMAIN)) . '</td>';
+                echo '<td>' . esc_html(! empty($statusNames) ? implode(', ', $statusNames) : __('Not set', BOKUN_TEXT_DOMAIN)) . '</td>';
+                echo '</tr>';
+            }
+
+            echo '</tbody></table>';
+
+            $pagination = paginate_links([
+                'base'      => add_query_arg('bokun_overview_page', '%#%'),
+                'format'    => '',
+                'current'   => max(1, $paged),
+                'total'     => max(1, (int) $bookings->max_num_pages),
+                'prev_text' => __('« Previous', BOKUN_TEXT_DOMAIN),
+                'next_text' => __('Next »', BOKUN_TEXT_DOMAIN),
+            ]);
+
+            if ($pagination) {
+                echo '<div class="bokun-booking-overview__pagination">' . wp_kses_post($pagination) . '</div>';
+            }
+        } else {
+            echo '<div class="bokun-booking-overview__notice" role="status">' . esc_html__('No bookings matched your filters.', BOKUN_TEXT_DOMAIN) . '</div>';
+        }
+
+        echo '</div>';
+
+        wp_reset_postdata();
+
         return ob_get_clean();
     }
 

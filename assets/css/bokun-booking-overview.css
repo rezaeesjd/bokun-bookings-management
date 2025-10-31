@@ -1,0 +1,56 @@
+.bokun-booking-overview {
+    margin: 24px 0;
+}
+
+.bokun-booking-overview__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.bokun-booking-overview__filters label {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.bokun-booking-overview__filters input[type="search"],
+.bokun-booking-overview__filters select {
+    min-width: 220px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid #d0d0d0;
+}
+
+.bokun-booking-overview__table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.bokun-booking-overview__table th,
+.bokun-booking-overview__table td {
+    border: 1px solid #e2e4e7;
+    padding: 10px 12px;
+    text-align: left;
+}
+
+.bokun-booking-overview__table th {
+    background-color: #f6f7f7;
+    font-weight: 600;
+}
+
+.bokun-booking-overview__table tr:nth-child(even) {
+    background-color: #fcfcfc;
+}
+
+.bokun-booking-overview__pagination {
+    margin-top: 16px;
+}
+
+.bokun-booking-overview__notice {
+    padding: 12px;
+    background: #fef7f1;
+    border: 1px solid #f1b87a;
+    border-radius: 4px;
+}

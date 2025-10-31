@@ -4,7 +4,9 @@ namespace Bokun\Bookings\Infrastructure\ServiceProvider;
 
 use Bokun\Bookings\Admin\Assets\AdminAssets;
 use Bokun\Bookings\Admin\Localization\LocalizationLoader;
+use Bokun\Bookings\Admin\History\BookingHistoryPage;
 use Bokun\Bookings\Admin\Menu\AdminMenu;
+use Bokun\Bookings\Admin\PostType\BookingListEnhancer;
 use Bokun\Bookings\Infrastructure\Config\SettingsRepository;
 use Bokun\Bookings\Infrastructure\Container;
 use Bokun\Bookings\Infrastructure\ServiceProviderInterface;
@@ -68,6 +70,25 @@ class LegacyServiceProvider implements ServiceProviderInterface
         if (! $container->has('bokun.localization_loader')) {
             $container->singleton('bokun.localization_loader', function () {
                 return new LocalizationLoader();
+            });
+        }
+
+        if (! $container->has('bokun.booking_history_page')) {
+            $container->singleton('bokun.booking_history_page', function (Container $container) {
+                return new BookingHistoryPage(
+                    $container->get('bokun.data_sanitizer')
+                );
+            });
+        }
+
+        if (! $container->has('bokun.booking_list_enhancer')) {
+            $container->singleton('bokun.booking_list_enhancer', function (Container $container) {
+                $enhancer = new BookingListEnhancer(
+                    $container->get('bokun.data_sanitizer')
+                );
+                $enhancer->register();
+
+                return $enhancer;
             });
         }
 
