@@ -4,6 +4,7 @@ jQuery(document).ready(function ($) {
         var importProgressPollers = {};
         var progressPollInterval = 1000;
         var CONTEXT_DISPLAY_ORDER = ['fetch', 'upgrade'];
+        var ajaxUrl = getAjaxUrl();
 
         function startImportProgressPolling(mode, options) {
                 options = options || {};
@@ -12,7 +13,11 @@ jQuery(document).ready(function ($) {
                         return;
                 }
 
-                if (typeof ajaxurl === 'undefined' || !ajaxurl) {
+                if (!ajaxUrl) {
+                        ajaxUrl = getAjaxUrl();
+                }
+
+                if (!ajaxUrl) {
                         return;
                 }
 
@@ -28,7 +33,7 @@ jQuery(document).ready(function ($) {
 
                         $.ajax({
                                 type: 'POST',
-                                url: ajaxurl,
+                                url: ajaxUrl,
                                 data: {
                                         action: 'bokun_get_import_progress',
                                         security: bokun_api_auth_vars.nonce,
@@ -197,8 +202,8 @@ jQuery(document).ready(function ($) {
                         return bokun_api_auth_vars.ajax_url;
                 }
 
-                if (typeof ajaxurl !== 'undefined') {
-                        return ajaxurl;
+                if (typeof window !== 'undefined' && typeof window.ajaxurl !== 'undefined' && window.ajaxurl) {
+                        return window.ajaxurl;
                 }
 
                 return '';
@@ -350,19 +355,28 @@ jQuery(document).ready(function ($) {
                 }
         }
 
-	jQuery(document).on('click', '.bokun_api_auth_save', function () {
-		var form = jQuery('#bokun_api_auth_form')[0];
-		var formData = new FormData(form);
-		formData.append('action', 'bokun_save_api_auth');
-		formData.append('security', bokun_api_auth_vars.nonce);
+        jQuery(document).on('click', '.bokun_api_auth_save', function () {
+                var form = jQuery('#bokun_api_auth_form')[0];
+                var formData = new FormData(form);
+                formData.append('action', 'bokun_save_api_auth');
+                formData.append('security', bokun_api_auth_vars.nonce);
 
-		jQuery.ajax({
-			type: 'POST',
-			url: ajaxurl,
-			data: formData,
-			processData: false,
-			contentType: false,
-			dataType: 'json',
+                var url = ajaxUrl || getAjaxUrl();
+
+                if (!url) {
+                        console.error('Bokun: AJAX URL is not available.');
+                        return;
+                }
+
+                ajaxUrl = url;
+
+                jQuery.ajax({
+                        type: 'POST',
+                        url: url,
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        dataType: 'json',
 			success: function (res) {
 				
 				jQuery('.msg_success_apis, .msg_error_apis').hide();
@@ -385,19 +399,28 @@ jQuery(document).ready(function ($) {
 		});
 	});
 	
-	jQuery(document).on('click', '.bokun_api_auth_save_upgrade', function () {
-		var form = jQuery('#bokun_api_auth_form_upgrade')[0];
-		var formData = new FormData(form);
-		formData.append('action', 'bokun_save_api_auth_upgrade');
-		formData.append('security', bokun_api_auth_vars.nonce);
+        jQuery(document).on('click', '.bokun_api_auth_save_upgrade', function () {
+                var form = jQuery('#bokun_api_auth_form_upgrade')[0];
+                var formData = new FormData(form);
+                formData.append('action', 'bokun_save_api_auth_upgrade');
+                formData.append('security', bokun_api_auth_vars.nonce);
 
-		jQuery.ajax({
-			type: 'POST',
-			url: ajaxurl,
-			data: formData,
-			processData: false,
-			contentType: false,
-			dataType: 'json',
+                var url = ajaxUrl || getAjaxUrl();
+
+                if (!url) {
+                        console.error('Bokun: AJAX URL is not available.');
+                        return;
+                }
+
+                ajaxUrl = url;
+
+                jQuery.ajax({
+                        type: 'POST',
+                        url: url,
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        dataType: 'json',
 			success: function (res) {
 				
 				jQuery('.msg_success_apis_upgrade, .msg_error_apis_upgrade').hide();
@@ -430,14 +453,25 @@ jQuery(document).ready(function ($) {
                         current: 0
                 });
                 startImportProgressPolling('fetch');
+
+                var url = ajaxUrl || getAjaxUrl();
+
+                if (!url) {
+                        console.error('Bokun: AJAX URL is not available.');
+                        stopImportProgressPolling('fetch');
+                        return;
+                }
+
+                ajaxUrl = url;
+
                 jQuery.ajax({
                         type: 'POST',
-                        url: ajaxurl,
+                        url: url,
                         data: {
                                 action: 'bokun_bookings_manager_page',
-				security: bokun_api_auth_vars.nonce,
-				mode: 'fetch'
-			},
+                                security: bokun_api_auth_vars.nonce,
+                                mode: 'fetch'
+                        },
 			dataType: 'json',
 			success: function (res) {
 
@@ -494,9 +528,20 @@ jQuery(document).ready(function ($) {
                         totalItems: progressState.totalItems
                 });
                 startImportProgressPolling('upgrade');
+
+                var url = ajaxUrl || getAjaxUrl();
+
+                if (!url) {
+                        console.error('Bokun: AJAX URL is not available.');
+                        stopImportProgressPolling('upgrade');
+                        return;
+                }
+
+                ajaxUrl = url;
+
                 jQuery.ajax({
                         type: 'POST',
-                        url: ajaxurl,
+                        url: url,
                         data: {
                                 action: 'bokun_bookings_manager_page',
                                 security: bokun_api_auth_vars.nonce,

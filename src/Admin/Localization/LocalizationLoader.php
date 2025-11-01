@@ -9,7 +9,7 @@ class LocalizationLoader
      */
     public function register()
     {
-        add_action('plugins_loaded', [$this, 'loadTextDomain']);
+        add_action('init', [$this, 'loadTextDomain']);
     }
 
     /**
