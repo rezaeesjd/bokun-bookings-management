@@ -70,7 +70,16 @@ class SettingsController
                 'message'   => $is_error_message ? bokun_get_import_progress_message($progress_context, 'error') : bokun_get_import_progress_message($progress_context, 'completed'),
             ]);
 
-            wp_send_json_success(['msg' => esc_html($bookings), 'status' => false]);
+            $response = [
+                'msg'    => esc_html($bookings),
+                'status' => false,
+            ];
+
+            if ($is_error_message) {
+                wp_send_json_error($response);
+            }
+
+            wp_send_json_success($response);
         } else {
             $import_summary = bokun_save_bookings_as_posts($bookings, $progress_context);
 
