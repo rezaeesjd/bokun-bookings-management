@@ -1,0 +1,189 @@
+.bokun-booking-dashboard {
+    display: grid;
+    gap: 1.5rem;
+    margin: 0 auto;
+    max-width: 1200px;
+}
+
+.bokun-booking-dashboard__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.bokun-booking-dashboard__action {
+    white-space: nowrap;
+}
+
+.bokun-booking-dashboard__search {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.bokun-booking-dashboard__search-input {
+    max-width: 24rem;
+    padding: 0.5rem 0.75rem;
+}
+
+.bokun-booking-dashboard__tabs {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 1px solid #dcdcde;
+    padding-bottom: 0.5rem;
+}
+
+.bokun-booking-dashboard__tab {
+    background: transparent;
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    font-weight: 600;
+    padding: 0.5rem 1rem;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.bokun-booking-dashboard__tab:hover,
+.bokun-booking-dashboard__tab:focus {
+    background: #f0f0f1;
+    outline: none;
+}
+
+.bokun-booking-dashboard__tab.is-active {
+    background: #2271b1;
+    color: #ffffff;
+}
+
+.bokun-booking-dashboard__panel {
+    display: none;
+}
+
+.bokun-booking-dashboard__panel.is-active {
+    display: block;
+}
+
+.bokun-booking-dashboard__grid {
+    display: grid;
+    gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+    .bokun-booking-dashboard__grid {
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    }
+}
+
+.bokun-booking-card {
+    background: #ffffff;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem;
+}
+
+.bokun-booking-card__header {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.bokun-booking-card__reference {
+    color: #646970;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.bokun-booking-card__titles {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.bokun-booking-card__product {
+    color: #50575e;
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.bokun-booking-card__title {
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.bokun-booking-card__title a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.bokun-booking-card__title a:hover,
+.bokun-booking-card__title a:focus {
+    text-decoration: underline;
+}
+
+.bokun-booking-card__statuses {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.bokun-booking-card__status {
+    background: #f0f6fc;
+    border-radius: 999px;
+    color: #1d2327;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+    text-transform: uppercase;
+}
+
+.bokun-booking-card__details {
+    border-top: 1px solid #dcdcde;
+    padding-top: 1rem;
+}
+
+.bokun-booking-card__list {
+    display: grid;
+    gap: 0.75rem;
+    margin: 0;
+}
+
+.bokun-booking-card__list-item {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.bokun-booking-card__list-item dt {
+    color: #50575e;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.bokun-booking-card__list-item dd {
+    margin: 0;
+}
+
+.bokun-booking-card__list-item a {
+    color: #2271b1;
+    text-decoration: none;
+}
+
+.bokun-booking-card__list-item a:hover,
+.bokun-booking-card__list-item a:focus {
+    text-decoration: underline;
+}
+
+.bokun-booking-dashboard__empty {
+    color: #50575e;
+    font-style: italic;
+    margin: 0;
+}
+
+.bokun-booking-dashboard__notice {
+    background: #fff4e5;
+    border-left: 4px solid #d63638;
+    margin: 1rem 0;
+    padding: 1rem;
+}
