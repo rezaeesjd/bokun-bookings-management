@@ -35,225 +35,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
         }
 
 
-        function render_booking_dashboard($atts = []) {
-            $atts = shortcode_atts(
-                [
-                    'posts_per_page' => -1,
-                ],
-                $atts,
-                'bokun_booking_dashboard'
-            );
-
-            $posts_per_page = intval($atts['posts_per_page']);
-            if (0 === $posts_per_page) {
-                $posts_per_page = -1;
-            }
-
-            $now_gmt = current_time('timestamp', true);
-            $one_month_later_gmt = strtotime('+1 month', $now_gmt);
-
-            $query_args = [
-                'post_type'      => 'bokun_booking',
-                'post_status'    => 'publish',
-                'posts_per_page' => $posts_per_page,
-                'orderby'        => 'date',
-                'order'          => 'ASC',
-                'date_query'     => [
-                    [
-                        'column'    => 'post_date_gmt',
-                        'after'     => gmdate('Y-m-d H:i:s', $now_gmt),
-                        'before'    => gmdate('Y-m-d H:i:s', $one_month_later_gmt),
-                        'inclusive' => true,
-                    ],
-                ],
-            ];
-
-            $dashboard_query = new WP_Query($query_args);
-
-            if (!$dashboard_query->have_posts()) {
-                wp_reset_postdata();
-
-                return sprintf(
-                    '<div class="bokun-booking-dashboard__empty" role="status">%s</div>',
-                    esc_html__('No upcoming bookings were found for the next month.', 'BOKUN_txt_domain')
-                );
-            }
-
-            static $dashboard_styles_printed = false;
-
-            ob_start();
-
-            if (!$dashboard_styles_printed) {
-                $dashboard_styles_printed = true;
-                ?>
-                <style>
-                    .bokun-booking-dashboard {
-                        display: flex;
-                        flex-direction: column;
-                        gap: 24px;
-                    }
-
-                    .bokun-booking-dashboard__grid {
-                        display: grid;
-                        gap: 20px;
-                        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-                    }
-
-                    .bokun-booking-dashboard__item {
-                        border: 1px solid #dcdcde;
-                        border-radius: 8px;
-                        background: #fff;
-                        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
-                        padding: 16px;
-                        display: flex;
-                        flex-direction: column;
-                        gap: 12px;
-                    }
-
-                    .bokun-booking-dashboard__title {
-                        margin: 0;
-                        font-size: 1.15rem;
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: flex-start;
-                        gap: 8px;
-                    }
-
-                    .bokun-booking-dashboard__meta {
-                        display: flex;
-                        flex-direction: column;
-                        gap: 8px;
-                        font-size: 0.95rem;
-                    }
-
-                    .bokun-booking-dashboard__label {
-                        font-weight: 600;
-                    }
-
-                    .bokun-booking-dashboard__status {
-                        margin-top: auto;
-                        font-size: 0.9rem;
-                        display: flex;
-                        flex-wrap: wrap;
-                        gap: 8px;
-                    }
-
-                    .bokun-booking-dashboard__badge {
-                        display: inline-flex;
-                        align-items: center;
-                        gap: 4px;
-                        padding: 4px 8px;
-                        border-radius: 999px;
-                        background-color: #f1f5f9;
-                        color: #0f172a;
-                        font-weight: 600;
-                    }
-                </style>
-                <?php
-            }
-
-            ?>
-            <div class="bokun-booking-dashboard" aria-live="polite">
-                <div class="bokun-booking-dashboard__grid">
-                    <?php
-                    while ($dashboard_query->have_posts()) :
-                        $dashboard_query->the_post();
-
-                        $post_id = get_the_ID();
-                        $booking_permalink = get_permalink($post_id);
-                        $product_title = get_post_meta($post_id, '_product_title', true);
-                        $first_name = get_post_meta($post_id, '_first_name', true);
-                        $last_name = get_post_meta($post_id, '_last_name', true);
-                        $customer_name_parts = array_filter([
-                            is_string($first_name) ? $first_name : '',
-                            is_string($last_name) ? $last_name : '',
-                        ]);
-                        $customer_name = !empty($customer_name_parts) ? implode(' ', array_map('trim', $customer_name_parts)) : '';
-
-                        $booking_reference = get_post_meta($post_id, '_external_booking_reference', true);
-                        $alarm_status = get_post_meta($post_id, 'alarmstatus', true);
-
-                        $start_datetime = get_post_datetime(null, 'date');
-                        $date_format = get_option('date_format');
-                        $time_format = get_option('time_format');
-                        $start_date_display = '';
-                        $start_time_display = '';
-
-                        if ($start_datetime instanceof DateTimeInterface) {
-                            $start_date_display = esc_html($start_datetime->format($date_format));
-                            $start_time_display = esc_html($start_datetime->format($time_format));
-                        }
-
-                        $booking_status_terms = wp_get_post_terms($post_id, 'booking_status', ['fields' => 'names']);
-                        $booking_status = !is_wp_error($booking_status_terms) && !empty($booking_status_terms)
-                            ? implode(', ', array_map('wp_strip_all_tags', $booking_status_terms))
-                            : '';
-                        ?>
-                        <article class="bokun-booking-dashboard__item" aria-labelledby="bokun-booking-<?php echo esc_attr($post_id); ?>">
-                            <h3 id="bokun-booking-<?php echo esc_attr($post_id); ?>" class="bokun-booking-dashboard__title">
-                                <span><?php the_title(); ?></span>
-                                <?php if ($booking_permalink) : ?>
-                                    <a class="button button-link" href="<?php echo esc_url($booking_permalink); ?>">
-                                        <?php esc_html_e('View', 'BOKUN_txt_domain'); ?>
-                                    </a>
-                                <?php endif; ?>
-                            </h3>
-
-                            <div class="bokun-booking-dashboard__meta">
-                                <?php if (!empty($product_title)) : ?>
-                                    <div>
-                                        <span class="bokun-booking-dashboard__label"><?php esc_html_e('Product', 'BOKUN_txt_domain'); ?>:</span>
-                                        <span><?php echo esc_html($product_title); ?></span>
-                                    </div>
-                                <?php endif; ?>
-
-                                <?php if (!empty($customer_name)) : ?>
-                                    <div>
-                                        <span class="bokun-booking-dashboard__label"><?php esc_html_e('Customer', 'BOKUN_txt_domain'); ?>:</span>
-                                        <span><?php echo esc_html($customer_name); ?></span>
-                                    </div>
-                                <?php endif; ?>
-
-                                <?php if (!empty($booking_reference)) : ?>
-                                    <div>
-                                        <span class="bokun-booking-dashboard__label"><?php esc_html_e('Reference', 'BOKUN_txt_domain'); ?>:</span>
-                                        <span><?php echo esc_html($booking_reference); ?></span>
-                                    </div>
-                                <?php endif; ?>
-
-                                <?php if (!empty($start_date_display)) : ?>
-                                    <div>
-                                        <span class="bokun-booking-dashboard__label"><?php esc_html_e('Start', 'BOKUN_txt_domain'); ?>:</span>
-                                        <span><?php echo $start_date_display; ?><?php if (!empty($start_time_display)) : ?> · <?php echo $start_time_display; ?><?php endif; ?></span>
-                                    </div>
-                                <?php endif; ?>
-                            </div>
-
-                            <div class="bokun-booking-dashboard__status">
-                                <?php if (!empty($booking_status)) : ?>
-                                    <span class="bokun-booking-dashboard__badge" aria-label="<?php esc_attr_e('Booking status', 'BOKUN_txt_domain'); ?>">
-                                        <?php echo esc_html($booking_status); ?>
-                                    </span>
-                                <?php endif; ?>
-
-                                <?php if (!empty($alarm_status)) : ?>
-                                    <span class="bokun-booking-dashboard__badge" aria-label="<?php esc_attr_e('Alarm status', 'BOKUN_txt_domain'); ?>">
-                                        <?php echo esc_html($alarm_status); ?>
-                                    </span>
-                                <?php endif; ?>
-                            </div>
-                        </article>
-                    <?php endwhile; ?>
-                </div>
-            </div>
-            <?php
-
-            wp_reset_postdata();
-
-            return ob_get_clean();
-        }
-
-
         private function enqueue_booking_history_assets($export_title) {
             $script_version = '1.0.0';
             $script_path = BOKUN_JS_DIR . 'bokun-booking-history.js';
@@ -707,7 +488,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'bokun_booking_dashboard'
             );
 
-            $days = max(1, absint($atts['days']));
+            $days    = max(1, absint($atts['days']));
             $columns = max(1, min(6, absint($atts['columns'])));
 
             $now_timestamp = current_time('timestamp');
@@ -754,31 +535,48 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 );
             }
 
-            ob_start();
-
+            $dashboard_id = 'bokun-booking-dashboard-' . uniqid();
             $columns_style = sprintf('style="--bokun-booking-dashboard-columns: %d"', $columns);
 
-            echo '<div class="bokun-booking-dashboard" ' . $columns_style . '>';
+            $tabs = [
+                'closest'   => [
+                    'label' => __('Closest bookings', 'BOKUN_txt_domain'),
+                    'items' => [],
+                ],
+                'other'     => [
+                    'label' => __('Other bookings', 'BOKUN_txt_domain'),
+                    'items' => [],
+                ],
+                'cancelled' => [
+                    'label' => __('Cancelled bookings', 'BOKUN_txt_domain'),
+                    'items' => [],
+                ],
+                'all'       => [
+                    'label' => __('All bookings', 'BOKUN_txt_domain'),
+                    'items' => [],
+                ],
+            ];
 
             while ($query->have_posts()) {
                 $query->the_post();
 
-                $post_id           = get_the_ID();
-                $permalink         = get_permalink($post_id);
-                $post_classes      = get_post_class('bokun-booking-dashboard__card', $post_id);
-                $booking_code      = get_post_meta($post_id, '_confirmation_code', true);
-                $product_title     = get_post_meta($post_id, '_product_title', true);
-                $meeting_point     = get_post_meta($post_id, 'bk_meetingpointtitle', true);
-                $external_ref      = get_post_meta($post_id, '_external_booking_reference', true);
-                $customer_first    = get_post_meta($post_id, '_first_name', true);
-                $customer_last     = get_post_meta($post_id, '_last_name', true);
-                $phone_prefix      = get_post_meta($post_id, '_phone_prefix', true);
-                $phone_number      = get_post_meta($post_id, '_phone_number', true);
-                $created_at        = get_post_meta($post_id, 'bookingcreationdate', true);
-                $inclusions        = get_post_meta($post_id, 'inclusions_clean', true);
-                $start_raw         = get_post_meta($post_id, '_original_start_date', true);
-                $participants      = [];
+                $post_id       = get_the_ID();
+                $permalink     = get_permalink($post_id);
+                $post_classes  = get_post_class('bokun-booking-dashboard__card', $post_id);
+                $booking_code  = get_post_meta($post_id, '_confirmation_code', true);
+                $product_title = get_post_meta($post_id, '_product_title', true);
+                $meeting_point = get_post_meta($post_id, 'bk_meetingpointtitle', true);
+                $external_ref  = get_post_meta($post_id, '_external_booking_reference', true);
+                $customer_first = get_post_meta($post_id, '_first_name', true);
+                $customer_last  = get_post_meta($post_id, '_last_name', true);
+                $phone_prefix   = get_post_meta($post_id, '_phone_prefix', true);
+                $phone_number   = get_post_meta($post_id, '_phone_number', true);
+                $created_at     = get_post_meta($post_id, 'bookingcreationdate', true);
+                $inclusions     = get_post_meta($post_id, 'inclusions_clean', true);
+                $alarm_status   = get_post_meta($post_id, 'alarmstatus', true);
+                $start_raw      = get_post_meta($post_id, '_original_start_date', true);
 
+                $participants = [];
                 foreach (range(1, 5) as $index) {
                     $value = get_post_meta($post_id, 'pricecategory' . $index, true);
 
@@ -812,10 +610,17 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 $status_terms = get_the_terms($post_id, 'booking_status');
                 $status_labels = [];
+                $is_cancelled = false;
 
                 if ($status_terms && !is_wp_error($status_terms)) {
                     foreach ($status_terms as $term) {
                         $status_labels[] = $term->name;
+
+                        $term_slug = strtolower($term->slug);
+                        $term_name = strtolower($term->name);
+                        if (false !== strpos($term_slug, 'cancel') || false !== strpos($term_name, 'cancel')) {
+                            $is_cancelled = true;
+                        }
                     }
                 }
 
@@ -835,7 +640,19 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     'refund-partner' => has_term('refund-requested-from-partner', 'booking_status', $post_id),
                 ];
 
+                $normalized_alarm = strtolower($alarm_status);
+                $is_closest = in_array($normalized_alarm, ['alarm', 'attention'], true);
+
+                $date_classes = ['bokun-booking-dashboard__date'];
+                if ('alarm' === $normalized_alarm) {
+                    $date_classes[] = 'bokun-booking-dashboard__date--alarm';
+                } elseif ('attention' === $normalized_alarm) {
+                    $date_classes[] = 'bokun-booking-dashboard__date--attention';
+                }
+
                 $card_class_attribute = esc_attr(implode(' ', $post_classes));
+
+                ob_start();
                 ?>
                 <article class="<?php echo $card_class_attribute; ?>" data-booking-id="<?php echo esc_attr($booking_code); ?>">
                     <header class="bokun-booking-dashboard__header">
@@ -874,7 +691,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 <dt><?php esc_html_e('Start', 'BOKUN_txt_domain'); ?></dt>
                                 <dd>
                                     <?php if (!empty($start_date_display)) : ?>
-                                        <time datetime="<?php echo esc_attr(wp_date('c', $start_timestamp)); ?>"><?php echo esc_html($start_date_display); ?></time>
+                                        <time class="<?php echo esc_attr(implode(' ', $date_classes)); ?>" datetime="<?php echo esc_attr(wp_date('c', $start_timestamp)); ?>"><?php echo esc_html($start_date_display); ?></time>
                                     <?php endif; ?>
                                     <?php if (!empty($start_time_display)) : ?>
                                         <span class="bokun-booking-dashboard__time"><?php echo esc_html($start_time_display); ?></span>
@@ -969,12 +786,149 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     <?php endif; ?>
                 </article>
                 <?php
-            }
+                $card_html = ob_get_clean();
 
-            echo '</div>';
+                $tabs['all']['items'][] = $card_html;
+
+                if ($is_cancelled) {
+                    $tabs['cancelled']['items'][] = $card_html;
+                }
+
+                if ($is_closest && !$is_cancelled) {
+                    $tabs['closest']['items'][] = $card_html;
+                }
+
+                if (!$is_closest && !$is_cancelled) {
+                    $tabs['other']['items'][] = $card_html;
+                }
+            }
 
             wp_reset_postdata();
 
+            $active_tab = 'closest';
+            foreach ($tabs as $key => $tab) {
+                if (!empty($tab['items'])) {
+                    $active_tab = $key;
+                    break;
+                }
+            }
+
+            ob_start();
+            ?>
+            <div id="<?php echo esc_attr($dashboard_id); ?>" class="bokun-booking-dashboard" <?php echo $columns_style; ?>>
+                <div class="bokun-booking-dashboard__tabs" role="tablist" aria-label="<?php esc_attr_e('Booking groups', 'BOKUN_txt_domain'); ?>">
+                    <?php foreach ($tabs as $key => $tab) :
+                        $tab_id    = $dashboard_id . '-tab-' . $key;
+                        $panel_id  = $dashboard_id . '-panel-' . $key;
+                        $is_active = ($key === $active_tab);
+                        $count     = count($tab['items']);
+                        ?>
+                        <button
+                            type="button"
+                            class="bokun-booking-dashboard__tab"
+                            id="<?php echo esc_attr($tab_id); ?>"
+                            role="tab"
+                            data-target="<?php echo esc_attr($panel_id); ?>"
+                            aria-controls="<?php echo esc_attr($panel_id); ?>"
+                            aria-selected="<?php echo $is_active ? 'true' : 'false'; ?>"
+                            <?php echo $is_active ? '' : 'tabindex="-1"'; ?>
+                        >
+                            <span class="bokun-booking-dashboard__tab-label"><?php echo esc_html($tab['label']); ?></span>
+                            <span class="bokun-booking-dashboard__tab-count"><?php echo esc_html($count); ?></span>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+
+                <div class="bokun-booking-dashboard__panels">
+                    <?php foreach ($tabs as $key => $tab) :
+                        $panel_id  = $dashboard_id . '-panel-' . $key;
+                        $tab_id    = $dashboard_id . '-tab-' . $key;
+                        $is_active = ($key === $active_tab);
+                        ?>
+                        <div
+                            id="<?php echo esc_attr($panel_id); ?>"
+                            class="bokun-booking-dashboard__panel"
+                            role="tabpanel"
+                            aria-labelledby="<?php echo esc_attr($tab_id); ?>"
+                            <?php echo $is_active ? '' : 'hidden'; ?>
+                        >
+                            <?php if (!empty($tab['items'])) : ?>
+                                <div class="bokun-booking-dashboard__grid">
+                                    <?php echo implode('', $tab['items']); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                                </div>
+                            <?php else : ?>
+                                <p class="bokun-booking-dashboard__empty" role="status"><?php esc_html_e('No bookings available in this group.', 'BOKUN_txt_domain'); ?></p>
+                            <?php endif; ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <script>
+                (function () {
+                    var dashboard = document.getElementById('<?php echo esc_js($dashboard_id); ?>');
+                    if (!dashboard) {
+                        return;
+                    }
+
+                    if (dashboard.getAttribute('data-tabs-initialized') === 'true') {
+                        return;
+                    }
+                    dashboard.setAttribute('data-tabs-initialized', 'true');
+
+                    var tabs = dashboard.querySelectorAll('[role="tab"]');
+                    var panels = dashboard.querySelectorAll('[role="tabpanel"]');
+
+                    function activateTab(newTab) {
+                        if (!newTab) {
+                            return;
+                        }
+
+                        tabs.forEach(function (tab) {
+                            var isSelected = tab === newTab;
+                            tab.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+                            if (isSelected) {
+                                tab.removeAttribute('tabindex');
+                                tab.focus();
+                            } else {
+                                tab.setAttribute('tabindex', '-1');
+                            }
+                        });
+
+                        var targetId = newTab.getAttribute('data-target');
+                        panels.forEach(function (panel) {
+                            if (panel.id === targetId) {
+                                panel.removeAttribute('hidden');
+                            } else {
+                                panel.setAttribute('hidden', '');
+                            }
+                        });
+                    }
+
+                    function handleKeydown(event) {
+                        var currentIndex = Array.prototype.indexOf.call(tabs, event.currentTarget);
+                        if (currentIndex === -1) {
+                            return;
+                        }
+
+                        if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+                            event.preventDefault();
+                            var delta = event.key === 'ArrowRight' ? 1 : -1;
+                            var newIndex = (currentIndex + delta + tabs.length) % tabs.length;
+                            activateTab(tabs[newIndex]);
+                        }
+                    }
+
+                    tabs.forEach(function (tab) {
+                        tab.addEventListener('click', function () {
+                            activateTab(tab);
+                        });
+
+                        tab.addEventListener('keydown', handleKeydown);
+                    });
+                })();
+            </script>
+            <?php
             return ob_get_clean();
         }
 
