@@ -1,1 +1,0 @@
-# bokun-bookings-management
