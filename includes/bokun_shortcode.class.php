@@ -531,11 +531,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     'posts_per_page'      => -1,
                     'ignore_sticky_posts' => true,
                     'no_found_rows'       => true,
-                    'meta_key'            => '_original_start_date',
-                    'meta_type'           => 'DATETIME',
                     'orderby'             => [
-                        'meta_value' => 'ASC',
-                        'date'       => 'ASC',
+                        'date' => 'ASC',
                     ],
                     'date_query'          => [
                         [
@@ -605,7 +602,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $created_at     = get_post_meta($post_id, 'bookingcreationdate', true);
                 $inclusions     = get_post_meta($post_id, 'inclusions_clean', true);
                 $alarm_status   = get_post_meta($post_id, 'alarmstatus', true);
-                $start_raw      = get_post_meta($post_id, '_original_start_date', true);
 
                 $participants = [];
                 foreach (range(1, 5) as $index) {
@@ -623,18 +619,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 $phone_display = trim(sprintf('%s %s', $phone_prefix, $phone_number));
 
-                $start_timestamp = $start_raw ? strtotime((string) $start_raw) : false;
-
-                if (false === $start_timestamp) {
-                    $formatted_start = bokun_format_booking_datetime($start_raw);
-                    if ('' !== $formatted_start) {
-                        $start_timestamp = strtotime($formatted_start);
-                    }
-                }
-
-                if (false === $start_timestamp) {
-                    $start_timestamp = get_post_time('U', true, $post_id);
-                }
+                $start_timestamp = get_post_time('U', true, $post_id);
 
                 $start_date_display = $start_timestamp ? wp_date(get_option('date_format'), $start_timestamp) : '';
                 $start_time_display = $start_timestamp ? wp_date(get_option('time_format'), $start_timestamp) : '';
