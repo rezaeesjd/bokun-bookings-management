@@ -554,17 +554,57 @@ if ( ! class_exists( 'Bokun_Github_Updater_Addon' ) ) {
                 RecursiveIteratorIterator::SELF_FIRST
             );
 
-            foreach ( $iterator as $file ) {
-                if ( $file->isFile() && 'php' === strtolower( $file->getExtension() ) ) {
-                    $plugin_data = get_plugin_data( $file->getPathname(), false, false );
+            $primary_match = null;
+            $fallback_match = null;
 
-                    if ( ! empty( $plugin_data['Name'] ) ) {
-                        return array(
-                            'slug'      => sanitize_title( $plugin_data['Name'] ),
-                            'main_file' => $file->getPathname(),
-                        );
-                    }
+            foreach ( $iterator as $file ) {
+                if ( ! $file->isFile() || 'php' !== strtolower( $file->getExtension() ) ) {
+                    continue;
                 }
+
+                $path = $file->getPathname();
+
+                // If we directly locate the main plugin file, prefer it immediately.
+                if ( 'bokun-bookings-management.php' === $file->getFilename() ) {
+                    $primary_match = array(
+                        'slug'      => 'bokun-bookings-management',
+                        'main_file' => $path,
+                    );
+                    break;
+                }
+
+                $plugin_data = get_plugin_data( $path, false, false );
+
+                if ( empty( $plugin_data['Name'] ) ) {
+                    continue;
+                }
+
+                $match = array(
+                    'slug'      => sanitize_title( $plugin_data['Name'] ),
+                    'main_file' => $path,
+                );
+
+                if ( ! $fallback_match ) {
+                    $fallback_match = $match;
+                }
+
+                $text_domain = isset( $plugin_data['TextDomain'] ) ? strtolower( $plugin_data['TextDomain'] ) : '';
+
+                if ( 'bokun-bookings-management' === $match['slug'] || 'bokun_text_domain' === $text_domain ) {
+                    $primary_match = array(
+                        'slug'      => 'bokun-bookings-management',
+                        'main_file' => $path,
+                    );
+                    break;
+                }
+            }
+
+            if ( $primary_match ) {
+                return $primary_match;
+            }
+
+            if ( $fallback_match ) {
+                return $fallback_match;
             }
 
             return new WP_Error( 'plugin_slug', __( 'Unable to determine the plugin slug from the downloaded package.', 'bokun-github-updater' ) );
