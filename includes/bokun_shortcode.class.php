@@ -557,6 +557,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 ],
             ];
 
+            $filter_options = [
+                'status' => [],
+                'team'   => [],
+            ];
+
             while ($query->have_posts()) {
                 $query->the_post();
 
@@ -610,11 +615,21 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 $status_terms = get_the_terms($post_id, 'booking_status');
                 $status_labels = [];
+                $status_values = [];
                 $is_cancelled = false;
 
                 if ($status_terms && !is_wp_error($status_terms)) {
                     foreach ($status_terms as $term) {
                         $status_labels[] = $term->name;
+
+                        $sanitized_status = sanitize_title($term->name);
+                        if ('' !== $sanitized_status) {
+                            $status_values[] = $sanitized_status;
+
+                            if (!isset($filter_options['status'][$sanitized_status])) {
+                                $filter_options['status'][$sanitized_status] = $term->name;
+                            }
+                        }
 
                         $term_slug = strtolower($term->slug);
                         $term_name = strtolower($term->name);
@@ -626,10 +641,20 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 $team_terms = get_the_terms($post_id, 'team_member');
                 $team_labels = [];
+                $team_values = [];
 
                 if ($team_terms && !is_wp_error($team_terms)) {
                     foreach ($team_terms as $term) {
                         $team_labels[] = $term->name;
+
+                        $sanitized_team = sanitize_title($term->name);
+                        if ('' !== $sanitized_team) {
+                            $team_values[] = $sanitized_team;
+
+                            if (!isset($filter_options['team'][$sanitized_team])) {
+                                $filter_options['team'][$sanitized_team] = $term->name;
+                            }
+                        }
                     }
                 }
 
@@ -650,11 +675,50 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     $date_classes[] = 'bokun-booking-dashboard__date--attention';
                 }
 
+                $search_fragments = array_filter(
+                    [
+                        get_the_title($post_id),
+                        $booking_code,
+                        $product_title,
+                        $meeting_point,
+                        $customer_name,
+                        $phone_display,
+                        $external_ref,
+                        $created_at,
+                        implode(' ', $status_labels),
+                        implode(' ', $team_labels),
+                        implode(' ', $participants),
+                    ],
+                    static function ($value) {
+                        return !empty($value);
+                    }
+                );
+
+                $search_text = wp_strip_all_tags(implode(' ', $search_fragments));
+                if (function_exists('mb_strtolower')) {
+                    $search_text = mb_strtolower($search_text);
+                } else {
+                    $search_text = strtolower($search_text);
+                }
+                $search_text = preg_replace('/\s+/', ' ', $search_text);
+                if (null === $search_text) {
+                    $search_text = '';
+                }
+
+                $status_attribute = implode(' ', array_unique($status_values));
+                $team_attribute   = implode(' ', array_unique($team_values));
+
                 $card_class_attribute = esc_attr(implode(' ', $post_classes));
 
                 ob_start();
                 ?>
-                <article class="<?php echo $card_class_attribute; ?>" data-booking-id="<?php echo esc_attr($booking_code); ?>">
+                <article
+                    class="<?php echo $card_class_attribute; ?>"
+                    data-booking-id="<?php echo esc_attr($booking_code); ?>"
+                    data-search="<?php echo esc_attr($search_text); ?>"
+                    data-statuses="<?php echo esc_attr($status_attribute); ?>"
+                    data-teams="<?php echo esc_attr($team_attribute); ?>"
+                >
                     <header class="bokun-booking-dashboard__header">
                         <h3 class="bokun-booking-dashboard__title">
                             <?php if (!empty($permalink)) : ?>
@@ -805,6 +869,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
             wp_reset_postdata();
 
+            foreach ($filter_options as $key => $options) {
+                if (!empty($options)) {
+                    natcasesort($options);
+                    $filter_options[$key] = $options;
+                }
+            }
+
             $active_tab = 'closest';
             foreach ($tabs as $key => $tab) {
                 if (!empty($tab['items'])) {
@@ -816,6 +887,73 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             ob_start();
             ?>
             <div id="<?php echo esc_attr($dashboard_id); ?>" class="bokun-booking-dashboard" <?php echo $columns_style; ?>>
+                <div class="bokun-booking-dashboard__controls" data-dashboard-controls>
+                    <div class="bokun-booking-dashboard__search">
+                        <?php
+                        $search_input_id = $dashboard_id . '-search';
+                        $search_label    = __('Search bookings', 'BOKUN_txt_domain');
+                        ?>
+                        <label for="<?php echo esc_attr($search_input_id); ?>"><?php echo esc_html($search_label); ?></label>
+                        <input
+                            type="search"
+                            id="<?php echo esc_attr($search_input_id); ?>"
+                            class="bokun-booking-dashboard__search-input"
+                            placeholder="<?php echo esc_attr($search_label); ?>"
+                            data-dashboard-search
+                        />
+                    </div>
+
+                    <?php if (!empty($filter_options['status'])) : ?>
+                        <fieldset class="bokun-booking-dashboard__filter" data-filter-group="status">
+                            <legend><?php esc_html_e('Filter by status', 'BOKUN_txt_domain'); ?></legend>
+                            <div class="bokun-booking-dashboard__filter-options">
+                                <?php
+                                $status_index = 0;
+                                foreach ($filter_options['status'] as $value => $label) :
+                                    $status_index++;
+                                    $input_id = $dashboard_id . '-status-' . $status_index;
+                                    ?>
+                                    <label class="bokun-booking-dashboard__filter-option" for="<?php echo esc_attr($input_id); ?>">
+                                        <input
+                                            type="checkbox"
+                                            id="<?php echo esc_attr($input_id); ?>"
+                                            value="<?php echo esc_attr($value); ?>"
+                                            checked
+                                            data-filter-status
+                                        />
+                                        <span><?php echo esc_html($label); ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </fieldset>
+                    <?php endif; ?>
+
+                    <?php if (!empty($filter_options['team'])) : ?>
+                        <fieldset class="bokun-booking-dashboard__filter" data-filter-group="team">
+                            <legend><?php esc_html_e('Filter by team member', 'BOKUN_txt_domain'); ?></legend>
+                            <div class="bokun-booking-dashboard__filter-options">
+                                <?php
+                                $team_index = 0;
+                                foreach ($filter_options['team'] as $value => $label) :
+                                    $team_index++;
+                                    $input_id = $dashboard_id . '-team-' . $team_index;
+                                    ?>
+                                    <label class="bokun-booking-dashboard__filter-option" for="<?php echo esc_attr($input_id); ?>">
+                                        <input
+                                            type="checkbox"
+                                            id="<?php echo esc_attr($input_id); ?>"
+                                            value="<?php echo esc_attr($value); ?>"
+                                            checked
+                                            data-filter-team
+                                        />
+                                        <span><?php echo esc_html($label); ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </fieldset>
+                    <?php endif; ?>
+                </div>
+
                 <div class="bokun-booking-dashboard__tabs" role="tablist" aria-label="<?php esc_attr_e('Booking groups', 'BOKUN_txt_domain'); ?>">
                     <?php foreach ($tabs as $key => $tab) :
                         $tab_id    = $dashboard_id . '-tab-' . $key;
@@ -878,6 +1016,153 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                     var tabs = dashboard.querySelectorAll('[role="tab"]');
                     var panels = dashboard.querySelectorAll('[role="tabpanel"]');
+                    var cards = Array.prototype.slice.call(dashboard.querySelectorAll('.bokun-booking-dashboard__card'));
+                    var statusCheckboxes = Array.prototype.slice.call(dashboard.querySelectorAll('[data-filter-status]'));
+                    var teamCheckboxes = Array.prototype.slice.call(dashboard.querySelectorAll('[data-filter-team]'));
+                    var searchInput = dashboard.querySelector('[data-dashboard-search]');
+                    var noResultsMessage = '<?php echo esc_js(__('No bookings match your search or filters.', 'BOKUN_txt_domain')); ?>';
+
+                    var tabCountLookup = {};
+                    tabs.forEach(function (tab) {
+                        var targetId = tab.getAttribute('data-target');
+                        var countElement = tab.querySelector('.bokun-booking-dashboard__tab-count');
+                        if (targetId && countElement) {
+                            tabCountLookup[targetId] = countElement;
+                        }
+                    });
+
+                    var cardsByPanel = {};
+                    cards.forEach(function (card) {
+                        var panel = card.closest('[role="tabpanel"]');
+                        if (!panel) {
+                            return;
+                        }
+
+                        var panelId = panel.id || '';
+                        if (!panelId) {
+                            return;
+                        }
+
+                        if (!cardsByPanel[panelId]) {
+                            cardsByPanel[panelId] = [];
+                        }
+
+                        cardsByPanel[panelId].push(card);
+                    });
+
+                    function getCheckedValues(checkboxes) {
+                        return checkboxes
+                            .filter(function (checkbox) {
+                                return checkbox.checked;
+                            })
+                            .map(function (checkbox) {
+                                return checkbox.value;
+                            });
+                    }
+
+                    function ensureFilteredMessage(panel) {
+                        var message = panel.querySelector('.bokun-booking-dashboard__empty--filtered');
+                        if (!message) {
+                            message = document.createElement('p');
+                            message.className = 'bokun-booking-dashboard__empty bokun-booking-dashboard__empty--filtered';
+                            message.setAttribute('role', 'status');
+                            message.textContent = noResultsMessage;
+                            panel.appendChild(message);
+                        }
+
+                        return message;
+                    }
+
+                    function applyFilters() {
+                        var searchValue = searchInput ? searchInput.value.trim().toLowerCase() : '';
+                        var activeStatuses = statusCheckboxes.length ? getCheckedValues(statusCheckboxes) : [];
+                        var activeTeams = teamCheckboxes.length ? getCheckedValues(teamCheckboxes) : [];
+                        var statusFilterActive = statusCheckboxes.length && activeStatuses.length !== statusCheckboxes.length;
+                        var teamFilterActive = teamCheckboxes.length && activeTeams.length !== teamCheckboxes.length;
+
+                        cards.forEach(function (card) {
+                            var visible = true;
+
+                            if (searchValue) {
+                                var haystack = card.getAttribute('data-search') || '';
+                                if (haystack.indexOf(searchValue) === -1) {
+                                    visible = false;
+                                }
+                            }
+
+                            if (visible && statusCheckboxes.length) {
+                                if (statusFilterActive) {
+                                    if (!activeStatuses.length) {
+                                        visible = false;
+                                    } else {
+                                        var cardStatuses = (card.getAttribute('data-statuses') || '').split(' ');
+                                        var hasStatus = cardStatuses.some(function (value) {
+                                            return value && activeStatuses.indexOf(value) !== -1;
+                                        });
+                                        if (!hasStatus) {
+                                            visible = false;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (visible && teamCheckboxes.length) {
+                                if (teamFilterActive) {
+                                    if (!activeTeams.length) {
+                                        visible = false;
+                                    } else {
+                                        var cardTeams = (card.getAttribute('data-teams') || '').split(' ');
+                                        var hasTeam = cardTeams.some(function (value) {
+                                            return value && activeTeams.indexOf(value) !== -1;
+                                        });
+                                        if (!hasTeam) {
+                                            visible = false;
+                                        }
+                                    }
+                                }
+                            }
+
+                            card.style.display = visible ? '' : 'none';
+                        });
+
+                        panels.forEach(function (panel) {
+                            var panelCards = cardsByPanel[panel.id] || [];
+                            var visibleCount = 0;
+
+                            panelCards.forEach(function (card) {
+                                if (card.style.display !== 'none') {
+                                    visibleCount++;
+                                }
+                            });
+
+                            if (panelCards.length && visibleCount === 0) {
+                                var emptyMessage = ensureFilteredMessage(panel);
+                                emptyMessage.removeAttribute('hidden');
+                            } else {
+                                var existingMessage = panel.querySelector('.bokun-booking-dashboard__empty--filtered');
+                                if (existingMessage) {
+                                    existingMessage.setAttribute('hidden', '');
+                                }
+                            }
+
+                            var countElement = tabCountLookup[panel.id];
+                            if (countElement) {
+                                countElement.textContent = String(visibleCount);
+                            }
+                        });
+                    }
+
+                    if (searchInput) {
+                        searchInput.addEventListener('input', applyFilters);
+                    }
+
+                    statusCheckboxes.forEach(function (checkbox) {
+                        checkbox.addEventListener('change', applyFilters);
+                    });
+
+                    teamCheckboxes.forEach(function (checkbox) {
+                        checkbox.addEventListener('change', applyFilters);
+                    });
 
                     function activateTab(newTab) {
                         if (!newTab) {
@@ -926,6 +1211,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                         tab.addEventListener('keydown', handleKeydown);
                     });
+
+                    applyFilters();
                 })();
             </script>
             <?php
