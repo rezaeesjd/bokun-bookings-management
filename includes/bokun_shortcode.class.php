@@ -736,14 +736,20 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 $card_class_attribute = esc_attr(implode(' ', $post_classes));
 
-                $title_copy_value = trim(get_the_title($post_id));
+                $title_copy_text  = trim(get_the_title($post_id));
+                $title_copy_value = $title_copy_text;
+                $title_copy_html  = '';
+
                 if (!empty($permalink)) {
-                    if ('' !== $title_copy_value) {
-                        $title_copy_value = sprintf('%s - %s', $title_copy_value, $permalink);
+                    if ('' !== $title_copy_text) {
+                        $title_copy_value = sprintf('%s - %s', $title_copy_text, $permalink);
+                        $title_copy_html  = sprintf('<a href="%s">%s</a>', esc_url($permalink), esc_html($title_copy_text));
                     } else {
                         $title_copy_value = $permalink;
+                        $title_copy_html  = sprintf('<a href="%s">%s</a>', esc_url($permalink), esc_html($permalink));
                     }
                 }
+
                 if (null === $title_copy_value) {
                     $title_copy_value = '';
                 }
@@ -773,6 +779,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                     type="button"
                                     class="bokun-booking-dashboard__copy-button"
                                     data-copy-value="<?php echo esc_attr($title_copy_value); ?>"
+                                    <?php if (!empty($title_copy_html)) : ?>data-copy-html="<?php echo esc_attr($title_copy_html); ?>"
+                                    <?php endif; ?>
                                     data-copy-label="<?php esc_attr_e('Copy title & link', 'BOKUN_txt_domain'); ?>"
                                     data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
                                     data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
@@ -1371,47 +1379,79 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         }
                     }
 
-                    function fallbackCopy(value, onSuccess, onError) {
-                        var textarea = document.createElement('textarea');
-                        textarea.value = value;
-                        textarea.setAttribute('readonly', '');
-                        textarea.style.position = 'absolute';
-                        textarea.style.left = '-9999px';
-                        textarea.style.top = '0';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-
+                    function fallbackCopy(value, onSuccess, onError, htmlValue) {
                         var selection = document.getSelection ? document.getSelection() : null;
                         var previousRange = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
-
-                        textarea.select();
+                        var temporaryElement;
+                        var successful = false;
 
                         try {
-                            var successful = document.execCommand('copy');
-                            document.body.removeChild(textarea);
-                            if (selection && selection.removeAllRanges) {
-                                selection.removeAllRanges();
-                                if (previousRange) {
-                                    selection.addRange(previousRange);
-                                }
-                            }
-                            if (successful) {
-                                onSuccess();
+                            if (htmlValue) {
+                                temporaryElement = document.createElement('div');
+                                temporaryElement.innerHTML = htmlValue;
+                                temporaryElement.setAttribute('contenteditable', 'true');
                             } else {
-                                onError();
+                                temporaryElement = document.createElement('textarea');
+                                temporaryElement.value = value;
+                                temporaryElement.setAttribute('readonly', '');
+                                temporaryElement.style.opacity = '0';
                             }
+
+                            temporaryElement.style.position = 'absolute';
+                            temporaryElement.style.left = '-9999px';
+                            temporaryElement.style.top = '0';
+                            document.body.appendChild(temporaryElement);
+
+                            if (htmlValue) {
+                                if (typeof temporaryElement.focus === 'function') {
+                                    try {
+                                        temporaryElement.focus({ preventScroll: true });
+                                    } catch (focusError) {
+                                        temporaryElement.focus();
+                                    }
+                                }
+                                var range = document.createRange();
+                                range.selectNodeContents(temporaryElement);
+                                if (selection && selection.removeAllRanges) {
+                                    selection.removeAllRanges();
+                                    selection.addRange(range);
+                                }
+                            } else if (typeof temporaryElement.select === 'function') {
+                                temporaryElement.select();
+                            }
+
+                            successful = document.execCommand('copy');
                         } catch (error) {
-                            document.body.removeChild(textarea);
+                            successful = false;
+                        }
+
+                        if (selection && selection.removeAllRanges) {
+                            selection.removeAllRanges();
+                            if (previousRange) {
+                                selection.addRange(previousRange);
+                            }
+                        }
+
+                        if (temporaryElement && temporaryElement.parentNode) {
+                            temporaryElement.parentNode.removeChild(temporaryElement);
+                        }
+
+                        if (successful) {
+                            onSuccess();
+                        } else {
                             onError();
                         }
                     }
 
                     function copyValue(button) {
                         var value = button.getAttribute('data-copy-value') || '';
-                        if (!value) {
+                        var htmlValue = button.getAttribute('data-copy-html') || '';
+                        if (!value && !htmlValue) {
                             setCopyButtonState(button, 'error');
                             return;
                         }
+
+                        var plainValue = value || htmlValue;
 
                         var handleSuccess = function () {
                             setCopyButtonState(button, 'copied');
@@ -1421,12 +1461,30 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             setCopyButtonState(button, 'error');
                         };
 
-                        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-                            navigator.clipboard.writeText(value).then(handleSuccess).catch(function () {
-                                fallbackCopy(value, handleSuccess, handleError);
+                        var clipboard = navigator.clipboard;
+                        var clipboardItemConstructor = (typeof window !== 'undefined' && typeof window.ClipboardItem === 'function') ? window.ClipboardItem : null;
+                        var canWriteHtml = !!(htmlValue && clipboard && typeof clipboard.write === 'function' && clipboardItemConstructor);
+
+                        if (canWriteHtml) {
+                            var clipboardItems = {};
+                            clipboardItems['text/html'] = new Blob([htmlValue], { type: 'text/html' });
+                            clipboardItems['text/plain'] = new Blob([plainValue], { type: 'text/plain' });
+
+                            clipboard.write([new clipboardItemConstructor(clipboardItems)]).then(handleSuccess).catch(function () {
+                                if (clipboard && typeof clipboard.writeText === 'function') {
+                                    clipboard.writeText(plainValue).then(handleSuccess).catch(function () {
+                                        fallbackCopy(plainValue, handleSuccess, handleError, htmlValue);
+                                    });
+                                } else {
+                                    fallbackCopy(plainValue, handleSuccess, handleError, htmlValue);
+                                }
+                            });
+                        } else if (clipboard && typeof clipboard.writeText === 'function') {
+                            clipboard.writeText(plainValue).then(handleSuccess).catch(function () {
+                                fallbackCopy(plainValue, handleSuccess, handleError, htmlValue);
                             });
                         } else {
-                            fallbackCopy(value, handleSuccess, handleError);
+                            fallbackCopy(plainValue, handleSuccess, handleError, htmlValue);
                         }
                     }
 
