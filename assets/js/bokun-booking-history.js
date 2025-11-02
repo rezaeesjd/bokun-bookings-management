@@ -153,15 +153,32 @@
                                 textFilters[key] = '';
                             }
 
-                            var $checkboxes = $filter.find('input[type="checkbox"]');
+                            var $optionCheckboxes = $filter.find('input[type="checkbox"][data-filter-option]');
+                            var $allCheckbox = $filter.find('input[type="checkbox"][data-filter-all]');
                             var $textInput = $filter.find('[data-filter-text]');
-                            var $selectAll = $filter.find('[data-filter-select-all]');
-                            var $clear = $filter.find('[data-filter-clear]');
+                            var $clearText = $filter.find('[data-filter-clear-text]');
+
+                            var syncAllCheckbox = function () {
+                                if (!$allCheckbox.length) {
+                                    return;
+                                }
+
+                                var totalOptions = $optionCheckboxes.length;
+                                var selectedCount = $optionCheckboxes.filter(':checked').length;
+
+                                if (selectedCount === 0) {
+                                    $allCheckbox.prop('checked', false).prop('indeterminate', false);
+                                } else if (selectedCount === totalOptions) {
+                                    $allCheckbox.prop('checked', true).prop('indeterminate', false);
+                                } else {
+                                    $allCheckbox.prop('checked', false).prop('indeterminate', true);
+                                }
+                            };
 
                             var updateCheckboxFilter = function () {
                                 var values = [];
 
-                                $checkboxes.each(function () {
+                                $optionCheckboxes.each(function () {
                                     if (!this.checked) {
                                         return;
                                     }
@@ -177,6 +194,7 @@
                                 });
 
                                 checkboxFilters[key] = values;
+                                syncAllCheckbox();
                                 applyFilters();
                             };
 
@@ -192,20 +210,25 @@
                                 applyFilters();
                             };
 
-                            $checkboxes.on('change', updateCheckboxFilter);
+                            $optionCheckboxes.on('change', updateCheckboxFilter);
 
-                            if ($selectAll.length) {
-                                $selectAll.on('click', function (event) {
+                            if ($clearText.length && $textInput.length) {
+                                $clearText.on('click', function (event) {
                                     event.preventDefault();
-                                    $checkboxes.prop('checked', true);
-                                    updateCheckboxFilter();
+                                    $textInput.val('');
+                                    updateTextFilter();
+                                    $textInput.trigger('focus');
                                 });
                             }
 
-                            if ($clear.length) {
-                                $clear.on('click', function (event) {
+                            if ($allCheckbox.length) {
+                                $allCheckbox.on('change', function (event) {
                                     event.preventDefault();
-                                    $checkboxes.prop('checked', false);
+
+                                    var shouldCheck = $allCheckbox.is(':checked');
+                                    $optionCheckboxes.prop('checked', shouldCheck);
+
+                                    syncAllCheckbox();
                                     updateCheckboxFilter();
                                 });
                             }
@@ -216,6 +239,7 @@
 
                             updateCheckboxFilter();
                             updateTextFilter();
+                            syncAllCheckbox();
                         });
                     };
 
