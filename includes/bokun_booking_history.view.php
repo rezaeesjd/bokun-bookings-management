@@ -144,13 +144,18 @@ if (!empty($logs)) {
 
             .bokun-history-filter {
                 position: relative;
-                min-width: 180px;
+                min-width: 220px;
             }
 
             .bokun-history-filter details {
                 border: 1px solid #dcdcde;
                 border-radius: 4px;
                 background: #fff;
+                transition: box-shadow 0.15s ease-in-out;
+            }
+
+            .bokun-history-filter details[open] {
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
             }
 
             .bokun-history-filter summary {
@@ -158,6 +163,7 @@ if (!empty($logs)) {
                 cursor: pointer;
                 font-weight: 600;
                 list-style: none;
+                position: relative;
             }
 
             .bokun-history-filter summary::-webkit-details-marker {
@@ -166,9 +172,11 @@ if (!empty($logs)) {
 
             .bokun-history-filter summary:after {
                 content: '\25BC';
-                float: right;
+                position: absolute;
+                right: 12px;
+                top: 50%;
+                transform: translateY(-50%);
                 font-size: 10px;
-                margin-top: 4px;
             }
 
             .bokun-history-filter details[open] summary {
@@ -190,11 +198,15 @@ if (!empty($logs)) {
                 margin: 0 0 4px;
             }
 
+            .bokun-history-filter-search-input {
+                position: relative;
+            }
+
             .bokun-history-filter-search input[type="text"] {
                 width: 100%;
                 border: 1px solid #dcdcde;
                 border-radius: 3px;
-                padding: 6px 8px;
+                padding: 6px 30px 6px 8px;
                 font-size: 13px;
             }
 
@@ -204,29 +216,29 @@ if (!empty($logs)) {
                 outline: none;
             }
 
+            .bokun-history-filter-clear-text {
+                position: absolute;
+                top: 50%;
+                right: 6px;
+                transform: translateY(-50%);
+                border: none;
+                background: transparent;
+                color: #50575e;
+                cursor: pointer;
+                padding: 0;
+                font-size: 12px;
+                line-height: 1;
+            }
+
+            .bokun-history-filter-clear-text:hover,
+            .bokun-history-filter-clear-text:focus {
+                color: #d63638;
+            }
+
             .bokun-history-filter-options {
-                max-height: 200px;
+                max-height: 220px;
                 overflow: auto;
                 padding: 8px 12px 12px;
-            }
-
-            .bokun-history-filter-actions {
-                display: flex;
-                gap: 8px;
-                padding: 8px 12px 0;
-            }
-
-            .bokun-history-filter-actions button {
-                background: #f6f7f7;
-                border: 1px solid #dcdcde;
-                border-radius: 3px;
-                cursor: pointer;
-                font-size: 12px;
-                padding: 4px 8px;
-            }
-
-            .bokun-history-filter-actions button:hover {
-                background: #fff;
             }
 
             .bokun-history-filter-options ul {
@@ -243,6 +255,13 @@ if (!empty($logs)) {
                 gap: 6px;
                 font-size: 13px;
                 cursor: pointer;
+                align-items: center;
+            }
+
+            .bokun-history-filter-options .bokun-history-filter-option-all {
+                border-bottom: 1px solid #f0f0f1;
+                margin-bottom: 10px;
+                padding-bottom: 6px;
             }
         </style>
 
@@ -270,14 +289,21 @@ if (!empty($logs)) {
                         <summary><?php echo esc_html($filter_labels[$filter_key]); ?></summary>
                         <div class="bokun-history-filter-search">
                             <label for="<?php echo esc_attr($search_id); ?>"><?php echo esc_html($search_label); ?></label>
-                            <input type="text" id="<?php echo esc_attr($search_id); ?>" class="bokun-history-filter-text" data-filter-text placeholder="<?php echo esc_attr($search_label); ?>" />
-                        </div>
-                        <div class="bokun-history-filter-actions">
-                            <button type="button" class="button" data-filter-select-all><?php esc_html_e('Select All', 'BOKUN_txt_domain'); ?></button>
-                            <button type="button" class="button" data-filter-clear><?php esc_html_e('Clear', 'BOKUN_txt_domain'); ?></button>
+                            <div class="bokun-history-filter-search-input">
+                                <input type="text" id="<?php echo esc_attr($search_id); ?>" class="bokun-history-filter-text" data-filter-text placeholder="<?php echo esc_attr($search_label); ?>" />
+                                <button type="button" class="bokun-history-filter-clear-text" data-filter-clear-text aria-label="<?php esc_attr_e('Clear search', 'BOKUN_txt_domain'); ?>">
+                                    &times;
+                                </button>
+                            </div>
                         </div>
                         <div class="bokun-history-filter-options">
                             <ul>
+                                <li class="bokun-history-filter-option-all">
+                                    <label>
+                                        <input type="checkbox" data-filter-all checked />
+                                        <span><?php esc_html_e('All', 'BOKUN_txt_domain'); ?></span>
+                                    </label>
+                                </li>
                                 <?php foreach ($options as $option_value => $option_label) :
                                     $option_label_text = wp_strip_all_tags($option_label);
                                     $option_match = $option_label_text;
@@ -290,7 +316,7 @@ if (!empty($logs)) {
                                 ?>
                                     <li>
                                         <label>
-                                            <input type="checkbox" value="<?php echo esc_attr($option_value); ?>" data-filter-match="<?php echo esc_attr($option_match); ?>" checked />
+                                            <input type="checkbox" value="<?php echo esc_attr($option_value); ?>" data-filter-option data-filter-match="<?php echo esc_attr($option_match); ?>" checked />
                                             <span><?php echo esc_html($option_label); ?></span>
                                         </label>
                                     </li>
@@ -398,13 +424,35 @@ if (!empty($logs)) {
                         filterColumns.set(key, columnIndex);
                     }
 
-                    const checkboxes = filter.querySelectorAll('input[type="checkbox"]');
-                    const selectAllButton = filter.querySelector('[data-filter-select-all]');
-                    const clearButton = filter.querySelector('[data-filter-clear]');
+                    const optionCheckboxes = Array.from(filter.querySelectorAll('input[type="checkbox"][data-filter-option]'));
+                    const allCheckbox = filter.querySelector('input[type="checkbox"][data-filter-all]');
                     const textInput = filter.querySelector('[data-filter-text]');
+                    const clearTextButton = filter.querySelector('[data-filter-clear-text]');
+
+                    const syncAllCheckbox = function () {
+                        if (!allCheckbox) {
+                            return;
+                        }
+
+                        const totalOptions = optionCheckboxes.length;
+                        const selectedCount = optionCheckboxes.filter(function (checkbox) {
+                            return checkbox.checked;
+                        }).length;
+
+                        if (selectedCount === 0) {
+                            allCheckbox.checked = false;
+                            allCheckbox.indeterminate = false;
+                        } else if (selectedCount === totalOptions) {
+                            allCheckbox.checked = true;
+                            allCheckbox.indeterminate = false;
+                        } else {
+                            allCheckbox.checked = false;
+                            allCheckbox.indeterminate = true;
+                        }
+                    };
 
                     const updateFilterState = function () {
-                        const selectedValues = Array.from(checkboxes)
+                        const selectedValues = optionCheckboxes
                             .filter(function (checkbox) {
                                 return checkbox.checked;
                             })
@@ -413,6 +461,7 @@ if (!empty($logs)) {
                             });
 
                         activeFilters.set(key, selectedValues);
+                        syncAllCheckbox();
                         applyFilters();
                     };
 
@@ -426,7 +475,7 @@ if (!empty($logs)) {
                         applyFilters();
                     };
 
-                    checkboxes.forEach(function (checkbox) {
+                    optionCheckboxes.forEach(function (checkbox) {
                         checkbox.addEventListener('change', updateFilterState);
                     });
 
@@ -435,28 +484,32 @@ if (!empty($logs)) {
                         textInput.addEventListener('change', updateTextFilter);
                     }
 
-                    if (selectAllButton) {
-                        selectAllButton.addEventListener('click', function (event) {
+                    if (clearTextButton && textInput) {
+                        clearTextButton.addEventListener('click', function (event) {
                             event.preventDefault();
-                            checkboxes.forEach(function (checkbox) {
-                                checkbox.checked = true;
-                            });
-                            updateFilterState();
+                            textInput.value = '';
+                            updateTextFilter();
+                            textInput.focus();
                         });
                     }
 
-                    if (clearButton) {
-                        clearButton.addEventListener('click', function (event) {
+                    if (allCheckbox) {
+                        allCheckbox.addEventListener('change', function (event) {
                             event.preventDefault();
-                            checkboxes.forEach(function (checkbox) {
-                                checkbox.checked = false;
+                            const shouldCheck = allCheckbox.checked;
+
+                            optionCheckboxes.forEach(function (checkbox) {
+                                checkbox.checked = shouldCheck;
                             });
+
+                            syncAllCheckbox();
                             updateFilterState();
                         });
                     }
 
                     updateFilterState();
                     updateTextFilter();
+                    syncAllCheckbox();
                 });
             });
         </script>
