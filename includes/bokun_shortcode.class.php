@@ -736,6 +736,18 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 $card_class_attribute = esc_attr(implode(' ', $post_classes));
 
+                $title_copy_value = trim(get_the_title($post_id));
+                if (!empty($permalink)) {
+                    if ('' !== $title_copy_value) {
+                        $title_copy_value = sprintf('%s - %s', $title_copy_value, $permalink);
+                    } else {
+                        $title_copy_value = $permalink;
+                    }
+                }
+                if (null === $title_copy_value) {
+                    $title_copy_value = '';
+                }
+
                 ob_start();
                 ?>
                 <article
@@ -746,15 +758,30 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     data-teams="<?php echo esc_attr($team_attribute); ?>"
                 >
                     <header class="bokun-booking-dashboard__header">
-                        <h3 class="bokun-booking-dashboard__title">
-                            <?php if (!empty($permalink)) : ?>
-                                <a href="<?php echo esc_url($permalink); ?>">
+                        <div class="bokun-booking-dashboard__title-row">
+                            <h3 class="bokun-booking-dashboard__title">
+                                <?php if (!empty($permalink)) : ?>
+                                    <a href="<?php echo esc_url($permalink); ?>">
+                                        <?php echo esc_html(get_the_title($post_id)); ?>
+                                    </a>
+                                <?php else : ?>
                                     <?php echo esc_html(get_the_title($post_id)); ?>
-                                </a>
-                            <?php else : ?>
-                                <?php echo esc_html(get_the_title($post_id)); ?>
+                                <?php endif; ?>
+                            </h3>
+                            <?php if (!empty($title_copy_value)) : ?>
+                                <button
+                                    type="button"
+                                    class="bokun-booking-dashboard__copy-button"
+                                    data-copy-value="<?php echo esc_attr($title_copy_value); ?>"
+                                    data-copy-label="<?php esc_attr_e('Copy title & link', 'BOKUN_txt_domain'); ?>"
+                                    data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
+                                    data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
+                                    data-copy-state="default"
+                                >
+                                    <?php esc_html_e('Copy title & link', 'BOKUN_txt_domain'); ?>
+                                </button>
                             <?php endif; ?>
-                        </h3>
+                        </div>
                         <?php if (!empty($booking_code)) : ?>
                             <span class="bokun-booking-dashboard__code"><?php echo esc_html($booking_code); ?></span>
                         <?php endif; ?>
@@ -804,17 +831,83 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             </div>
                         <?php endif; ?>
 
+                        <?php if (!empty($customer_first)) : ?>
+                            <div class="bokun-booking-dashboard__detail">
+                                <dt><?php esc_html_e('First name', 'BOKUN_txt_domain'); ?></dt>
+                                <dd class="bokun-booking-dashboard__detail-copy">
+                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($customer_first); ?></span>
+                                    <button
+                                        type="button"
+                                        class="bokun-booking-dashboard__copy-button"
+                                        data-copy-value="<?php echo esc_attr($customer_first); ?>"
+                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-state="default"
+                                    >
+                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
+                                    </button>
+                                </dd>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if (!empty($customer_last)) : ?>
+                            <div class="bokun-booking-dashboard__detail">
+                                <dt><?php esc_html_e('Last name', 'BOKUN_txt_domain'); ?></dt>
+                                <dd class="bokun-booking-dashboard__detail-copy">
+                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($customer_last); ?></span>
+                                    <button
+                                        type="button"
+                                        class="bokun-booking-dashboard__copy-button"
+                                        data-copy-value="<?php echo esc_attr($customer_last); ?>"
+                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-state="default"
+                                    >
+                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
+                                    </button>
+                                </dd>
+                            </div>
+                        <?php endif; ?>
+
                         <?php if (!empty($phone_display)) : ?>
                             <div class="bokun-booking-dashboard__detail">
                                 <dt><?php esc_html_e('Phone', 'BOKUN_txt_domain'); ?></dt>
-                                <dd><?php echo esc_html($phone_display); ?></dd>
+                                <dd class="bokun-booking-dashboard__detail-copy">
+                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($phone_display); ?></span>
+                                    <button
+                                        type="button"
+                                        class="bokun-booking-dashboard__copy-button"
+                                        data-copy-value="<?php echo esc_attr($phone_display); ?>"
+                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-state="default"
+                                    >
+                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
+                                    </button>
+                                </dd>
                             </div>
                         <?php endif; ?>
 
                         <?php if (!empty($external_ref)) : ?>
                             <div class="bokun-booking-dashboard__detail">
                                 <dt><?php esc_html_e('Reference', 'BOKUN_txt_domain'); ?></dt>
-                                <dd><?php echo esc_html($external_ref); ?></dd>
+                                <dd class="bokun-booking-dashboard__detail-copy">
+                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($external_ref); ?></span>
+                                    <button
+                                        type="button"
+                                        class="bokun-booking-dashboard__copy-button"
+                                        data-copy-value="<?php echo esc_attr($external_ref); ?>"
+                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-state="default"
+                                    >
+                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
+                                    </button>
+                                </dd>
                             </div>
                         <?php endif; ?>
 
@@ -920,63 +1013,90 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         $search_label    = __('Search bookings', 'BOKUN_txt_domain');
                         ?>
                         <label for="<?php echo esc_attr($search_input_id); ?>"><?php echo esc_html($search_label); ?></label>
-                        <input
-                            type="search"
-                            id="<?php echo esc_attr($search_input_id); ?>"
-                            class="bokun-booking-dashboard__search-input"
-                            placeholder="<?php echo esc_attr($search_label); ?>"
-                            data-dashboard-search
-                        />
+                        <div class="bokun-booking-dashboard__search-field">
+                            <input
+                                type="search"
+                                id="<?php echo esc_attr($search_input_id); ?>"
+                                class="bokun-booking-dashboard__search-input"
+                                placeholder="<?php echo esc_attr($search_label); ?>"
+                                data-dashboard-search
+                            />
+                            <button
+                                type="button"
+                                class="bokun-booking-dashboard__search-clear"
+                                data-dashboard-search-clear
+                                aria-label="<?php esc_attr_e('Clear search', 'BOKUN_txt_domain'); ?>"
+                                hidden
+                            >
+                                &times;
+                            </button>
+                        </div>
                     </div>
 
                     <?php if (!empty($filter_options['status'])) : ?>
-                        <fieldset class="bokun-booking-dashboard__filter" data-filter-group="status">
-                            <legend><?php esc_html_e('Filter by status', 'BOKUN_txt_domain'); ?></legend>
-                            <div class="bokun-booking-dashboard__filter-options">
-                                <?php
-                                $status_index = 0;
-                                foreach ($filter_options['status'] as $value => $label) :
-                                    $status_index++;
-                                    $input_id = $dashboard_id . '-status-' . $status_index;
-                                    ?>
-                                    <label class="bokun-booking-dashboard__filter-option" for="<?php echo esc_attr($input_id); ?>">
-                                        <input
-                                            type="checkbox"
-                                            id="<?php echo esc_attr($input_id); ?>"
-                                            value="<?php echo esc_attr($value); ?>"
-                                            checked
-                                            data-filter-status
-                                        />
-                                        <span><?php echo esc_html($label); ?></span>
-                                    </label>
-                                <?php endforeach; ?>
-                            </div>
-                        </fieldset>
+                        <div class="bokun-booking-dashboard__filter" data-filter-group="status">
+                            <details class="bokun-booking-dashboard__filter-dropdown">
+                                <summary><?php esc_html_e('Filter by status', 'BOKUN_txt_domain'); ?></summary>
+                                <div class="bokun-booking-dashboard__filter-menu" role="group" aria-label="<?php esc_attr_e('Filter by status', 'BOKUN_txt_domain'); ?>">
+                                    <div class="bokun-booking-dashboard__filter-options">
+                                        <label class="bokun-booking-dashboard__filter-option bokun-booking-dashboard__filter-option--all">
+                                            <input type="checkbox" data-filter-status-all checked />
+                                            <span><?php esc_html_e('All', 'BOKUN_txt_domain'); ?></span>
+                                        </label>
+                                        <?php
+                                        $status_index = 0;
+                                        foreach ($filter_options['status'] as $value => $label) :
+                                            $status_index++;
+                                            $input_id = $dashboard_id . '-status-' . $status_index;
+                                            ?>
+                                            <label class="bokun-booking-dashboard__filter-option" for="<?php echo esc_attr($input_id); ?>">
+                                                <input
+                                                    type="checkbox"
+                                                    id="<?php echo esc_attr($input_id); ?>"
+                                                    value="<?php echo esc_attr($value); ?>"
+                                                    checked
+                                                    data-filter-status
+                                                />
+                                                <span><?php echo esc_html($label); ?></span>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
                     <?php endif; ?>
 
                     <?php if (!empty($filter_options['team'])) : ?>
-                        <fieldset class="bokun-booking-dashboard__filter" data-filter-group="team">
-                            <legend><?php esc_html_e('Filter by team member', 'BOKUN_txt_domain'); ?></legend>
-                            <div class="bokun-booking-dashboard__filter-options">
-                                <?php
-                                $team_index = 0;
-                                foreach ($filter_options['team'] as $value => $label) :
-                                    $team_index++;
-                                    $input_id = $dashboard_id . '-team-' . $team_index;
-                                    ?>
-                                    <label class="bokun-booking-dashboard__filter-option" for="<?php echo esc_attr($input_id); ?>">
-                                        <input
-                                            type="checkbox"
-                                            id="<?php echo esc_attr($input_id); ?>"
-                                            value="<?php echo esc_attr($value); ?>"
-                                            checked
-                                            data-filter-team
-                                        />
-                                        <span><?php echo esc_html($label); ?></span>
-                                    </label>
-                                <?php endforeach; ?>
-                            </div>
-                        </fieldset>
+                        <div class="bokun-booking-dashboard__filter" data-filter-group="team">
+                            <details class="bokun-booking-dashboard__filter-dropdown">
+                                <summary><?php esc_html_e('Filter by team member', 'BOKUN_txt_domain'); ?></summary>
+                                <div class="bokun-booking-dashboard__filter-menu" role="group" aria-label="<?php esc_attr_e('Filter by team member', 'BOKUN_txt_domain'); ?>">
+                                    <div class="bokun-booking-dashboard__filter-options">
+                                        <label class="bokun-booking-dashboard__filter-option bokun-booking-dashboard__filter-option--all">
+                                            <input type="checkbox" data-filter-team-all checked />
+                                            <span><?php esc_html_e('All', 'BOKUN_txt_domain'); ?></span>
+                                        </label>
+                                        <?php
+                                        $team_index = 0;
+                                        foreach ($filter_options['team'] as $value => $label) :
+                                            $team_index++;
+                                            $input_id = $dashboard_id . '-team-' . $team_index;
+                                            ?>
+                                            <label class="bokun-booking-dashboard__filter-option" for="<?php echo esc_attr($input_id); ?>">
+                                                <input
+                                                    type="checkbox"
+                                                    id="<?php echo esc_attr($input_id); ?>"
+                                                    value="<?php echo esc_attr($value); ?>"
+                                                    checked
+                                                    data-filter-team
+                                                />
+                                                <span><?php echo esc_html($label); ?></span>
+                                            </label>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                            </details>
+                        </div>
                     <?php endif; ?>
                 </div>
 
@@ -1046,6 +1166,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var statusCheckboxes = Array.prototype.slice.call(dashboard.querySelectorAll('[data-filter-status]'));
                     var teamCheckboxes = Array.prototype.slice.call(dashboard.querySelectorAll('[data-filter-team]'));
                     var searchInput = dashboard.querySelector('[data-dashboard-search]');
+                    var searchClearButton = dashboard.querySelector('[data-dashboard-search-clear]');
+                    var statusAllCheckbox = dashboard.querySelector('[data-filter-status-all]');
+                    var teamAllCheckbox = dashboard.querySelector('[data-filter-team-all]');
+                    var copyButtons = Array.prototype.slice.call(dashboard.querySelectorAll('[data-copy-value]'));
                     var noResultsMessage = '<?php echo esc_js(__('No bookings match your search or filters.', 'BOKUN_txt_domain')); ?>';
 
                     var tabCountLookup = {};
@@ -1086,6 +1210,34 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             });
                     }
 
+                    function syncFilterGroup(checkboxes, allCheckbox) {
+                        if (!allCheckbox) {
+                            return;
+                        }
+
+                        var total = checkboxes.length;
+                        if (!total) {
+                            allCheckbox.checked = true;
+                            allCheckbox.indeterminate = false;
+                            return;
+                        }
+
+                        var selected = checkboxes.filter(function (checkbox) {
+                            return checkbox.checked;
+                        }).length;
+
+                        if (selected === 0) {
+                            allCheckbox.checked = false;
+                            allCheckbox.indeterminate = false;
+                        } else if (selected === total) {
+                            allCheckbox.checked = true;
+                            allCheckbox.indeterminate = false;
+                        } else {
+                            allCheckbox.checked = false;
+                            allCheckbox.indeterminate = true;
+                        }
+                    }
+
                     function ensureFilteredMessage(panel) {
                         var message = panel.querySelector('.bokun-booking-dashboard__empty--filtered');
                         if (!message) {
@@ -1101,6 +1253,18 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                     function applyFilters() {
                         var searchValue = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+                        if (searchClearButton) {
+                            if (searchValue) {
+                                searchClearButton.removeAttribute('hidden');
+                            } else {
+                                searchClearButton.setAttribute('hidden', '');
+                            }
+                        }
+
+                        syncFilterGroup(statusCheckboxes, statusAllCheckbox);
+                        syncFilterGroup(teamCheckboxes, teamAllCheckbox);
+
                         var activeStatuses = statusCheckboxes.length ? getCheckedValues(statusCheckboxes) : [];
                         var activeTeams = teamCheckboxes.length ? getCheckedValues(teamCheckboxes) : [];
                         var statusFilterActive = statusCheckboxes.length && activeStatuses.length !== statusCheckboxes.length;
@@ -1178,16 +1342,146 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         });
                     }
 
+                    function setCopyButtonState(button, state) {
+                        var defaultLabel = button.getAttribute('data-copy-label') || button.textContent;
+                        var successLabel = button.getAttribute('data-copy-done') || defaultLabel;
+                        var errorLabel = button.getAttribute('data-copy-error') || defaultLabel;
+
+                        if (button.copyTimeoutId) {
+                            window.clearTimeout(button.copyTimeoutId);
+                            button.copyTimeoutId = null;
+                        }
+
+                        var displayLabel = defaultLabel;
+                        if (state === 'copied') {
+                            displayLabel = successLabel;
+                        } else if (state === 'error') {
+                            displayLabel = errorLabel;
+                        }
+
+                        button.textContent = displayLabel;
+                        button.setAttribute('data-copy-state', state);
+
+                        if (state === 'copied' || state === 'error') {
+                            button.copyTimeoutId = window.setTimeout(function () {
+                                button.textContent = defaultLabel;
+                                button.setAttribute('data-copy-state', 'default');
+                                button.copyTimeoutId = null;
+                            }, 2000);
+                        }
+                    }
+
+                    function fallbackCopy(value, onSuccess, onError) {
+                        var textarea = document.createElement('textarea');
+                        textarea.value = value;
+                        textarea.setAttribute('readonly', '');
+                        textarea.style.position = 'absolute';
+                        textarea.style.left = '-9999px';
+                        textarea.style.top = '0';
+                        textarea.style.opacity = '0';
+                        document.body.appendChild(textarea);
+
+                        var selection = document.getSelection ? document.getSelection() : null;
+                        var previousRange = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+
+                        textarea.select();
+
+                        try {
+                            var successful = document.execCommand('copy');
+                            document.body.removeChild(textarea);
+                            if (selection && selection.removeAllRanges) {
+                                selection.removeAllRanges();
+                                if (previousRange) {
+                                    selection.addRange(previousRange);
+                                }
+                            }
+                            if (successful) {
+                                onSuccess();
+                            } else {
+                                onError();
+                            }
+                        } catch (error) {
+                            document.body.removeChild(textarea);
+                            onError();
+                        }
+                    }
+
+                    function copyValue(button) {
+                        var value = button.getAttribute('data-copy-value') || '';
+                        if (!value) {
+                            setCopyButtonState(button, 'error');
+                            return;
+                        }
+
+                        var handleSuccess = function () {
+                            setCopyButtonState(button, 'copied');
+                        };
+
+                        var handleError = function () {
+                            setCopyButtonState(button, 'error');
+                        };
+
+                        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+                            navigator.clipboard.writeText(value).then(handleSuccess).catch(function () {
+                                fallbackCopy(value, handleSuccess, handleError);
+                            });
+                        } else {
+                            fallbackCopy(value, handleSuccess, handleError);
+                        }
+                    }
+
                     if (searchInput) {
                         searchInput.addEventListener('input', applyFilters);
+                    }
+
+                    if (searchClearButton && searchInput) {
+                        searchClearButton.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            if (searchInput.value) {
+                                searchInput.value = '';
+                                applyFilters();
+                            }
+                            searchInput.focus();
+                        });
                     }
 
                     statusCheckboxes.forEach(function (checkbox) {
                         checkbox.addEventListener('change', applyFilters);
                     });
 
+                    if (statusAllCheckbox) {
+                        statusAllCheckbox.addEventListener('change', function (event) {
+                            event.preventDefault();
+                            var shouldCheck = statusAllCheckbox.checked;
+                            statusAllCheckbox.indeterminate = false;
+                            statusCheckboxes.forEach(function (checkbox) {
+                                checkbox.checked = shouldCheck;
+                            });
+                            applyFilters();
+                        });
+                    }
+
                     teamCheckboxes.forEach(function (checkbox) {
                         checkbox.addEventListener('change', applyFilters);
+                    });
+
+                    if (teamAllCheckbox) {
+                        teamAllCheckbox.addEventListener('change', function (event) {
+                            event.preventDefault();
+                            var shouldCheck = teamAllCheckbox.checked;
+                            teamAllCheckbox.indeterminate = false;
+                            teamCheckboxes.forEach(function (checkbox) {
+                                checkbox.checked = shouldCheck;
+                            });
+                            applyFilters();
+                        });
+                    }
+
+                    copyButtons.forEach(function (button) {
+                        button.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            copyValue(button);
+                        });
                     });
 
                     function activateTab(newTab) {
