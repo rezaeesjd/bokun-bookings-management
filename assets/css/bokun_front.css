@@ -402,6 +402,15 @@
   width: 100%;
 }
 
+.bokun-booking-dashboard__title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
 .bokun-booking-dashboard__title {
   margin: 0;
   font-size: 1.125rem;
@@ -420,45 +429,65 @@
 }
 
 .bokun-booking-dashboard__copy-button {
-  border: 1px solid #cbd5e1;
-  background: #f8fafc;
-  color: #0f172a;
-  border-radius: 999px;
-  padding: 0.25rem 0.8rem;
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  padding: 0;
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  transition: color 0.2s ease;
 }
 
 .bokun-booking-dashboard__copy-button:hover,
 .bokun-booking-dashboard__copy-button:focus {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+  color: #1d4ed8;
+  text-decoration: underline;
   outline: none;
-  transform: translateY(-1px);
 }
 
 .bokun-booking-dashboard__copy-button[data-copy-state="copied"] {
-  background: #16a34a;
-  border-color: #16a34a;
-  color: #ffffff;
+  color: #16a34a;
 }
 
 .bokun-booking-dashboard__copy-button[data-copy-state="error"] {
-  background: #dc2626;
-  border-color: #dc2626;
-  color: #ffffff;
+  color: #dc2626;
 }
 
-.bokun-booking-dashboard__code {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #475569;
-  white-space: nowrap;
-  align-self: flex-start;
+.bokun-booking-dashboard__reserve-link {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.bokun-booking-dashboard__reserve-link:hover,
+.bokun-booking-dashboard__reserve-link:focus {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.bokun-booking-dashboard__vendor {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.bokun-booking-dashboard__vendor--highlight {
+  color: #2563eb;
+}
+
+.bokun-booking-dashboard__vendor--accent {
+  color: #7b1e3a;
 }
 
 .bokun-booking-dashboard__status-list {
