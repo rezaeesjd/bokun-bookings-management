@@ -507,16 +507,31 @@ if ( ! class_exists( 'Bokun_Github_Updater_Addon' ) ) {
                 return new WP_Error( 'destination', __( 'Unable to access the plugins directory.', 'bokun-github-updater' ) );
             }
 
-            $moved = $wp_filesystem->move( rtrim( $package_root, '/' ), $destination, true );
+            $source      = rtrim( $package_root, '/' );
+            $moved       = $wp_filesystem->move( $source, $destination, true );
 
             if ( ! $moved ) {
                 // Attempt PHP rename as a fallback.
-                $php_moved = @rename( rtrim( $package_root, '/' ), $destination );
+                $php_moved = @rename( $source, $destination );
 
                 if ( ! $php_moved ) {
-                    $wp_filesystem->delete( $working_dir, true );
-                    return new WP_Error( 'move_failed', __( 'Unable to move the extracted plugin into the plugins directory.', 'bokun-github-updater' ) );
+                    // Fall back to a recursive copy which works across filesystem boundaries.
+                    $copied = copy_dir( $source, $destination );
+
+                    if ( is_wp_error( $copied ) ) {
+                        $wp_filesystem->delete( $working_dir, true );
+                        return $copied;
+                    }
+
+                    $moved = true;
+                } else {
+                    $moved = true;
                 }
+            }
+
+            if ( ! $moved ) {
+                $wp_filesystem->delete( $working_dir, true );
+                return new WP_Error( 'move_failed', __( 'Unable to move the extracted plugin into the plugins directory.', 'bokun-github-updater' ) );
             }
 
             $wp_filesystem->delete( $working_dir, true );
