@@ -120,14 +120,82 @@
 
 .bokun-booking-dashboard {
   --bokun-booking-dashboard-columns: 3;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 1.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   margin: 2rem 0;
 }
 
+.bokun-booking-dashboard__tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.bokun-booking-dashboard__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid #cbd5f5;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bokun-booking-dashboard__tab[aria-selected="true"] {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(37, 99, 235, 0.25);
+}
+
+.bokun-booking-dashboard__tab:focus {
+  outline: 3px solid rgba(37, 99, 235, 0.4);
+  outline-offset: 2px;
+}
+
+.bokun-booking-dashboard__tab-label {
+  pointer-events: none;
+}
+
+.bokun-booking-dashboard__tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.08);
+  color: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.bokun-booking-dashboard__panels {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.bokun-booking-dashboard__panel[hidden] {
+  display: none;
+}
+
+.bokun-booking-dashboard__grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
 @media (min-width: 1024px) {
-  .bokun-booking-dashboard {
+  .bokun-booking-dashboard__grid {
     grid-template-columns: repeat(var(--bokun-booking-dashboard-columns), minmax(0, 1fr));
   }
 }
@@ -231,6 +299,19 @@
 
 .bokun-booking-dashboard__detail dd {
   margin: 0;
+}
+
+.bokun-booking-dashboard__date {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.bokun-booking-dashboard__date--alarm {
+  color: #d63638;
+}
+
+.bokun-booking-dashboard__date--attention {
+  color: #1a7f37;
 }
 
 .bokun-booking-dashboard__time {
