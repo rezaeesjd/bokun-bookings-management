@@ -83,8 +83,9 @@ class BokunBookingManagement {
         
         add_action('init', array( $this,'bokun_register_booking_status_taxonomy'));
         add_action('init', array( $this,'bokun_register_team_member_taxonomy'));
-        
-	}
+        add_filter('the_content', array( $this, 'bokun_maybe_append_dashboard_to_page' ));
+
+        }
     
 
     // Register custom taxonomy for Booking Status    
@@ -134,6 +135,35 @@ class BokunBookingManagement {
                 'show_in_rest' => true,
             ]
         );
+    }
+
+
+    function bokun_maybe_append_dashboard_to_page($content) {
+        if (is_admin()) {
+            return $content;
+        }
+
+        if (!is_singular('page') || !in_the_loop() || !is_main_query()) {
+            return $content;
+        }
+
+        $dashboard_page_id = absint(get_option('bokun_dashboard_page_id', 0));
+
+        if ($dashboard_page_id <= 0 || get_the_ID() !== $dashboard_page_id) {
+            return $content;
+        }
+
+        if (has_shortcode($content, 'bokun_booking_dashboard')) {
+            return $content;
+        }
+
+        $dashboard_content = do_shortcode('[bokun_booking_dashboard]');
+
+        if (empty($dashboard_content)) {
+            return $content;
+        }
+
+        return $content . $dashboard_content;
     }
     
 

@@ -225,15 +225,15 @@ jQuery(document).ready(function ($) {
 		});
 	});
 	
-	jQuery(document).on('click', '.bokun_api_auth_save_upgrade', function () {
-		var form = jQuery('#bokun_api_auth_form_upgrade')[0];
-		var formData = new FormData(form);
-		formData.append('action', 'bokun_save_api_auth_upgrade');
-		formData.append('security', bokun_api_auth_vars.nonce);
+        jQuery(document).on('click', '.bokun_api_auth_save_upgrade', function () {
+                var form = jQuery('#bokun_api_auth_form_upgrade')[0];
+                var formData = new FormData(form);
+                formData.append('action', 'bokun_save_api_auth_upgrade');
+                formData.append('security', bokun_api_auth_vars.nonce);
 
-		jQuery.ajax({
-			type: 'POST',
-			url: ajaxurl,
+                jQuery.ajax({
+                        type: 'POST',
+                        url: ajaxurl,
 			data: formData,
 			processData: false,
 			contentType: false,
@@ -254,9 +254,61 @@ jQuery(document).ready(function ($) {
 			error: function (xhr, status, error) {
 				console.error('Error:', error);
 				alert('An error occurred. Please try again.');
-			}
-		});
-	});
+                        }
+                });
+        });
+
+        jQuery(document).on('click', '.bokun_dashboard_settings_save', function () {
+                var form = jQuery('#bokun_dashboard_settings_form')[0];
+
+                if (!form) {
+                        return;
+                }
+
+                var ajaxUrl = (typeof ajaxurl !== 'undefined' && ajaxurl) ? ajaxurl : (bokun_api_auth_vars && bokun_api_auth_vars.ajax_url ? bokun_api_auth_vars.ajax_url : '');
+
+                if (!ajaxUrl) {
+                        return;
+                }
+
+                var formData = new FormData(form);
+                formData.append('action', 'bokun_save_dashboard_settings');
+                formData.append('security', bokun_api_auth_vars.nonce);
+
+                jQuery.ajax({
+                        type: 'POST',
+                        url: ajaxUrl,
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        dataType: 'json',
+                        success: function (res) {
+                                jQuery('.msg_dashboard_success, .msg_dashboard_error').hide();
+
+                                if (res && res.success) {
+                                        var message = res.data && res.data.msg ? decodeHTMLEntities(res.data.msg) : '';
+                                        jQuery('.msg_dashboard_success p').html('<strong>Success:</strong> ' + message);
+                                        jQuery('.msg_dashboard_success').show();
+                                } else {
+                                        var errorMessage = res && res.data && res.data.msg ? decodeHTMLEntities(res.data.msg) : 'An unexpected error occurred.';
+                                        jQuery('.msg_dashboard_error p').html('<strong>Error:</strong> ' + errorMessage);
+                                        jQuery('.msg_dashboard_error').show();
+                                }
+                        },
+                        error: function (xhr, status, error) {
+                                jQuery('.msg_dashboard_success').hide();
+                                var message = 'An error occurred. Please try again.';
+
+                                if (xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.msg) {
+                                        message = decodeHTMLEntities(xhr.responseJSON.data.msg);
+                                }
+
+                                jQuery('.msg_dashboard_error p').html('<strong>Error:</strong> ' + message);
+                                jQuery('.msg_dashboard_error').show();
+                                console.error('Error:', error);
+                        }
+                });
+        });
 
         jQuery(document).on('click', '.bokun_fetch_booking_data', function (e) {
                 e.preventDefault();

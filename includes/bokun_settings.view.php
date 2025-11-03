@@ -3,10 +3,22 @@ $api_key = get_option('bokun_api_key', '');
 $secret_key = get_option('bokun_secret_key', '');
 $api_key_upgrade = get_option('bokun_api_key_upgrade', '');
 $secret_key_upgrade = get_option('bokun_secret_key_upgrade', '');
+$dashboard_page_id = (int) get_option('bokun_dashboard_page_id', 0);
+$dashboard_page_dropdown = wp_dropdown_pages(
+    array(
+        'name'              => 'dashboard_page_id',
+        'id'                => 'bokun_dashboard_page_select',
+        'class'             => 'widefat',
+        'selected'          => $dashboard_page_id,
+        'show_option_none'  => __('— Select a page —', 'BOKUN_txt_domain'),
+        'option_none_value' => '0',
+        'echo'              => false,
+    )
+);
 ?>
 <div id="booking">
     <div class="container-fluid">
-        
+
         <div class="row">
             
             <div class="col-4 text-center ">
@@ -111,6 +123,39 @@ $secret_key_upgrade = get_option('bokun_secret_key_upgrade', '');
                 </div>
             </div>
 
+        </div>
+
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <h2><?php esc_html_e('Booking dashboard display', 'BOKUN_txt_domain'); ?></h2>
+                    <p>
+                        <?php esc_html_e('Use the [bokun_booking_dashboard] shortcode or choose a page below to automatically display the dashboard.', 'BOKUN_txt_domain'); ?>
+                    </p>
+                    <div class="notice notice-info is-dismissible msg_dashboard_success" style="display:none;">
+                        <p>
+                            <strong><?php esc_html_e('Success:', 'BOKUN_txt_domain'); ?></strong>
+                        </p>
+                    </div>
+                    <div class="notice notice-error is-dismissible msg_dashboard_error" style="display:none;">
+                        <p>
+                            <strong><?php esc_html_e('Error:', 'BOKUN_txt_domain'); ?></strong>
+                        </p>
+                    </div>
+                    <form method="post" action="javascript:;" id="bokun_dashboard_settings_form" name="bokun_dashboard_settings_form" enctype='multipart/form-data'>
+                        <div class="bokun_cmrc-table">
+                            <div class="bokun_settings-fb-config">
+                                <label for="bokun_dashboard_page_select"><?php esc_html_e('Dashboard page', 'BOKUN_txt_domain'); ?>:</label>
+                                <?php echo $dashboard_page_dropdown; ?>
+                                <p class="description">
+                                    <?php esc_html_e('Select a page to automatically append the booking dashboard content. Leave blank to manage placement with the shortcode.', 'BOKUN_txt_domain'); ?>
+                                </p>
+                                <input type="submit" name="submit" class="button button-primary bokun_dashboard_settings_save" value="<?php esc_attr_e('Save dashboard settings', 'BOKUN_txt_domain'); ?>">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
         </div>
     </div>
 </div>
