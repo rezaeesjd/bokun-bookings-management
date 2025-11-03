@@ -69,11 +69,15 @@ class BokunBookingManagement {
 
         add_action( 'admin_enqueue_scripts', array( $this, 'bokun_enqueue_scripts' ) );
 
-		add_action( 'wp_enqueue_scripts', array( $this, 'bokun_front_enqueue_scripts' ) );
+                add_action( 'wp_enqueue_scripts', array( $this, 'bokun_front_enqueue_scripts' ) );
 
         add_action( 'wp_loaded', array( $this,'bokun_register_all_scripts' ));
 
         add_action( 'plugins_loaded', array( $this, 'bokun_load_textdomain' ) );
+
+        add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), array( $this, 'bokun_add_settings_link' ) );
+
+        add_action( 'admin_init', array( $this, 'bokun_redirect_to_settings_page' ) );
 
        // add_action('wp_enqueue_scripts', array( $this,'enqueue_bokun_script')) ;
 
@@ -195,6 +199,7 @@ class BokunBookingManagement {
 
         update_option( "bokun_plugin", true );
         update_option( "bokun_version", $bokun_version );
+        update_option( 'bokun_plugin_redirect', true );
 
         $table_name = $wpdb->prefix . 'bokun_booking_history';
 
@@ -219,6 +224,33 @@ class BokunBookingManagement {
 
     static function bokun_deactivation() {
         // deactivation process here
+    }
+
+    public function bokun_add_settings_link( $links ) {
+        $settings_url  = admin_url( 'edit.php?post_type=bokun_booking&page=' . $this->bokun_settings );
+        $settings_link = '<a href="' . esc_url( $settings_url ) . '">' . esc_html__( 'Settings', BOKUN_txt_domain ) . '</a>';
+
+        array_unshift( $links, $settings_link );
+
+        return $links;
+    }
+
+    public function bokun_redirect_to_settings_page() {
+        if ( ! get_option( 'bokun_plugin_redirect' ) ) {
+            return;
+        }
+
+        if ( wp_doing_ajax() || ! current_user_can( 'manage_options' ) || is_network_admin() ) {
+            delete_option( 'bokun_plugin_redirect' );
+
+            return;
+        }
+
+        delete_option( 'bokun_plugin_redirect' );
+
+        $settings_url = admin_url( 'edit.php?post_type=bokun_booking&page=' . $this->bokun_settings );
+        wp_safe_redirect( $settings_url );
+        exit;
     }
 
 	function bokun_get_sub_menu() {
