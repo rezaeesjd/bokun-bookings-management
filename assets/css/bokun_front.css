@@ -472,6 +472,7 @@
 .bokun-booking-dashboard__reserve-link:hover,
 .bokun-booking-dashboard__reserve-link:focus {
   background: #1d4ed8;
+  color: #ffffff;
   transform: translateY(-1px);
   outline: none;
 }

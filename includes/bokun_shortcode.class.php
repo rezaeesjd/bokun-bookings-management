@@ -614,7 +614,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $viator_url = '';
                 if ($external_ref !== '') {
                     $viator_url = sprintf(
-                        'https://supplier.viator.com/messaging/conversation/booking/%s/',
+                        'https://supplier.viator.com/messaging/conversation/booking/%s',
                         rawurlencode($external_ref)
                     );
                 }
@@ -622,7 +622,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $bokun_url = '';
                 if ($parent_booking_id !== '') {
                     $bokun_url = sprintf(
-                        'https://florenceadventuressrl.bokun.io/sales/%s/',
+                        'https://florenceadventuressrl.bokun.io/sales/%s',
                         rawurlencode($parent_booking_id)
                     );
                 }
@@ -765,7 +765,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $partner_page_url = '';
                 if (!empty($partner_page_id)) {
                     $partner_page_url = sprintf(
-                        'https://extranet.ciaoflorence.it/en/tourDetails/%s/',
+                        'https://extranet.ciaoflorence.it/en/tourDetails/%s',
                         rawurlencode($partner_page_id)
                     );
                 }

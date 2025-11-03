@@ -17,6 +17,8 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
             add_action('wp_ajax_bokun_get_import_progress', array($this, 'bokun_get_import_progress'), 10);
             add_action('wp_ajax_nopriv_bokun_get_import_progress', array($this, 'bokun_get_import_progress'), 10);
 
+            add_action('wp_ajax_bokun_save_dashboard_settings', array($this, 'bokun_save_dashboard_settings'));
+
         } 
 
         
@@ -136,6 +138,39 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
             // Return a success response
             wp_send_json_success(array('msg' => 'API keys saved successfully.', 'status' => false));
             wp_die(); // Terminate the script to prevent WordPress from outputting any further content
+        }
+
+        function bokun_save_dashboard_settings() {
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error(array('msg' => __('You are not allowed to update these settings.', 'BOKUN_txt_domain')));
+                wp_die();
+            }
+
+            if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
+                wp_send_json_error(array('msg' => __('Invalid nonce.', 'BOKUN_txt_domain')));
+                wp_die();
+            }
+
+            $page_id = isset($_POST['dashboard_page_id']) ? absint($_POST['dashboard_page_id']) : 0;
+
+            if ($page_id > 0) {
+                $page_post = get_post($page_id);
+                if (!$page_post || 'page' !== $page_post->post_type) {
+                    wp_send_json_error(array('msg' => __('Please choose a valid page.', 'BOKUN_txt_domain')));
+                    wp_die();
+                }
+            }
+
+            update_option('bokun_dashboard_page_id', $page_id);
+
+            if ($page_id > 0) {
+                $message = __('Dashboard page selection saved. The dashboard will be displayed on the chosen page.', 'BOKUN_txt_domain');
+            } else {
+                $message = __('Dashboard page selection cleared. Use the shortcode to display the dashboard.', 'BOKUN_txt_domain');
+            }
+
+            wp_send_json_success(array('msg' => $message));
+            wp_die();
         }
          
         function bokun_display_settings( ) {
