@@ -694,6 +694,8 @@ function bokun_save_specific_fields($post_id, $booking, $context = 'default') {
     update_post_meta($post_id, '_product_id', intval($productBooking['product']['id'] ?? 0));
     update_post_meta($post_id, '_booking_status_origin', sanitize_text_field($productBooking['status'] ?? 'N/A'));
 
+    bokun_sync_product_tag_metadata_from_booking($productBooking, $context);
+
     // Handle timestamps properly for date fields
     $booking_creation_date = $booking['creationDate'] ?? '';
 
