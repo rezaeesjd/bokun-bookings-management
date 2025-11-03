@@ -677,6 +677,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
 
                 $phone_display = trim(sprintf('%s %s', $phone_prefix, $phone_number));
+                $phone_copy_value = $phone_display;
+                if ('' !== $phone_copy_value) {
+                    $first_space_position = strpos($phone_copy_value, ' ');
+                    if (false !== $first_space_position) {
+                        $phone_copy_value = trim(substr($phone_copy_value, $first_space_position + 1));
+                    }
+                }
 
                 $start_timestamp = get_post_time('U', true, $post_id);
 
@@ -984,13 +991,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 <?php endif; ?>
 
                                 <?php if (!empty($participants)) : ?>
-                                    <div class="bokun-booking-dashboard__section">
-                                        <h4 class="bokun-booking-dashboard__section-title"><?php esc_html_e('Participants', 'BOKUN_txt_domain'); ?></h4>
-                                        <ul class="bokun-booking-dashboard__participants">
-                                            <?php foreach ($participants as $participant) : ?>
-                                                <li><?php echo esc_html($participant); ?></li>
-                                            <?php endforeach; ?>
-                                        </ul>
+                                    <div class="bokun-booking-dashboard__section bokun-booking-dashboard__section--participants">
+                                        <div class="bokun-booking-dashboard__participants" role="group" aria-label="<?php esc_attr_e('Participants', 'BOKUN_txt_domain'); ?>">
+                                            <span class="bokun-booking-dashboard__participants-label"><?php esc_html_e('Participants', 'BOKUN_txt_domain'); ?>:</span>
+                                            <span class="bokun-booking-dashboard__participants-value"><?php echo esc_html(implode(' • ', $participants)); ?></span>
+                                        </div>
                                     </div>
                                 <?php endif; ?>
 
@@ -1079,7 +1084,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                         href="#"
                                                         class="bokun-booking-dashboard__copy-button"
                                                         role="button"
-                                                        data-copy-value="<?php echo esc_attr($phone_display); ?>"
+                                                        data-copy-value="<?php echo esc_attr($phone_copy_value); ?>"
                                                         data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
                                                         data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
                                                         data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
@@ -1437,18 +1442,19 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                     <?php echo esc_html(number_format_i18n($dual_status_count)); ?>
                                 </span>
                             </div>
-                            <button
-                                type="button"
+                            <a
+                                href="#"
                                 class="bokun-booking-dashboard__dual-status-toggle"
                                 id="<?php echo esc_attr($dual_status_toggle_id); ?>"
                                 data-dashboard-dual-status-toggle
                                 data-show-label="<?php echo esc_attr($dual_status_show_label); ?>"
                                 data-hide-label="<?php echo esc_attr($dual_status_hide_label); ?>"
+                                role="button"
                                 aria-expanded="false"
                                 aria-controls="<?php echo esc_attr($dual_status_panel_id); ?>"
                             >
                                 <?php echo esc_html($dual_status_show_label); ?>
-                            </button>
+                            </a>
                         </div>
                         <p class="bokun-booking-dashboard__dual-status-description">
                             <?php esc_html_e('Use this list to confirm partner cancellations and refunds are fully resolved.', 'BOKUN_txt_domain'); ?>
@@ -1548,16 +1554,17 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         <span class="bokun-booking-dashboard__footer-value"><?php echo esc_html($user_display_name); ?></span>
                     </div>
                     <div class="bokun-booking-dashboard__footer-item bokun-booking-dashboard__footer-item--history">
-                        <button
-                            type="button"
+                        <a
+                            href="#"
                             class="bokun-booking-dashboard__history-launch"
                             data-dashboard-history-open
+                            role="button"
                             aria-haspopup="dialog"
                             aria-expanded="false"
                             aria-controls="<?php echo esc_attr($history_dialog_id); ?>"
                         >
                             <?php esc_html_e('Booking history', 'BOKUN_txt_domain'); ?>
-                        </button>
+                        </a>
                     </div>
                 </div>
 
