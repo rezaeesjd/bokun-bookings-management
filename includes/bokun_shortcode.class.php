@@ -1542,21 +1542,23 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     </div>
                 </div>
 
-                <div class="bokun-booking-dashboard__corner bokun-booking-dashboard__corner--left" data-dashboard-user-indicator>
-                    <span class="bokun-booking-dashboard__corner-label"><?php esc_html_e('Current user', 'BOKUN_txt_domain'); ?>:</span>
-                    <span class="bokun-booking-dashboard__corner-value"><?php echo esc_html($user_display_name); ?></span>
-                </div>
-                <div class="bokun-booking-dashboard__corner bokun-booking-dashboard__corner--right">
-                    <button
-                        type="button"
-                        class="bokun-booking-dashboard__history-launch"
-                        data-dashboard-history-open
-                        aria-haspopup="dialog"
-                        aria-expanded="false"
-                        aria-controls="<?php echo esc_attr($history_dialog_id); ?>"
-                    >
-                        <?php esc_html_e('Booking history', 'BOKUN_txt_domain'); ?>
-                    </button>
+                <div class="bokun-booking-dashboard__footer">
+                    <div class="bokun-booking-dashboard__footer-item" data-dashboard-user-indicator>
+                        <span class="bokun-booking-dashboard__footer-label"><?php esc_html_e('Current user', 'BOKUN_txt_domain'); ?>:</span>
+                        <span class="bokun-booking-dashboard__footer-value"><?php echo esc_html($user_display_name); ?></span>
+                    </div>
+                    <div class="bokun-booking-dashboard__footer-item bokun-booking-dashboard__footer-item--history">
+                        <button
+                            type="button"
+                            class="bokun-booking-dashboard__history-launch"
+                            data-dashboard-history-open
+                            aria-haspopup="dialog"
+                            aria-expanded="false"
+                            aria-controls="<?php echo esc_attr($history_dialog_id); ?>"
+                        >
+                            <?php esc_html_e('Booking history', 'BOKUN_txt_domain'); ?>
+                        </button>
+                    </div>
                 </div>
 
                 <?php if (!empty($product_tags_without_partner)) : ?>
