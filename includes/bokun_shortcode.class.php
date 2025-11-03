@@ -814,9 +814,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                     <?php endif; ?>
                                 </h3>
                                 <?php if (!empty($title_copy_value)) : ?>
-                                    <button
-                                        type="button"
+                                    <a
+                                        href="#"
                                         class="bokun-booking-dashboard__copy-button"
+                                        role="button"
                                         data-copy-value="<?php echo esc_attr($title_copy_value); ?>"
                                         <?php if (!empty($title_copy_html)) : ?>data-copy-html="<?php echo esc_attr($title_copy_html); ?>"<?php endif; ?>
                                         data-copy-label="<?php esc_attr_e('Copy title & link', 'BOKUN_txt_domain'); ?>"
@@ -825,7 +826,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                         data-copy-state="default"
                                     >
                                         <?php esc_html_e('Copy title & link', 'BOKUN_txt_domain'); ?>
-                                    </button>
+                                    </a>
                                 <?php endif; ?>
                             </div>
                             <?php if (!empty($partner_page_url)) : ?>
@@ -851,13 +852,25 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         <?php endif; ?>
                     </header>
 
-                    <?php if (!empty($status_labels)) : ?>
-                        <ul class="bokun-booking-dashboard__status-list">
-                            <?php foreach ($status_labels as $status_label) : ?>
-                                <li class="bokun-booking-dashboard__status-item"><?php echo esc_html($status_label); ?></li>
-                            <?php endforeach; ?>
-                        </ul>
-                    <?php endif; ?>
+                    <div class="bokun-booking-dashboard__toggles" role="group" aria-label="<?php esc_attr_e('Booking status toggles', 'BOKUN_txt_domain'); ?>">
+                        <span class="bokun-booking-dashboard__toggle-label"><?php esc_html_e('Result:', 'BOKUN_txt_domain'); ?></span>
+                        <label class="bokun-booking-dashboard__toggle">
+                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="full" <?php echo checked($checkbox_states['full'], true, false); ?> />
+                            <span><?php esc_html_e('Full', 'BOKUN_txt_domain'); ?></span>
+                        </label>
+                        <label class="bokun-booking-dashboard__toggle">
+                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="partial" <?php echo checked($checkbox_states['partial'], true, false); ?> />
+                            <span><?php esc_html_e('Partial', 'BOKUN_txt_domain'); ?></span>
+                        </label>
+                        <label class="bokun-booking-dashboard__toggle">
+                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="not-available" <?php echo checked($checkbox_states['not-available'], true, false); ?> />
+                            <span><?php esc_html_e('Not available', 'BOKUN_txt_domain'); ?></span>
+                        </label>
+                        <label class="bokun-booking-dashboard__toggle">
+                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refund-partner" <?php echo checked($checkbox_states['refund-partner'], true, false); ?> />
+                            <span><?php esc_html_e('Refund requested', 'BOKUN_txt_domain'); ?></span>
+                        </label>
+                    </div>
 
                     <div class="bokun-booking-dashboard__body">
                         <?php if (!empty($product_title) || !empty($rate_title) || !empty($meeting_point) || !empty($start_date_display) || !empty($start_time_display) || !empty($participants) || !empty($inclusions)) : ?>
@@ -930,9 +943,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                 <dt><?php esc_html_e('Lead traveller', 'BOKUN_txt_domain'); ?></dt>
                                                 <dd class="bokun-booking-dashboard__detail-copy">
                                                     <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($customer_name); ?></span>
-                                                    <button
-                                                        type="button"
+                                                    <a
+                                                        href="#"
                                                         class="bokun-booking-dashboard__copy-button"
+                                                        role="button"
                                                         data-copy-value="<?php echo esc_attr($customer_name); ?>"
                                                         data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
                                                         data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
@@ -940,7 +954,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                         data-copy-state="default"
                                                     >
                                                         <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
-                                                    </button>
+                                                    </a>
                                                 </dd>
                                             </div>
                                         <?php endif; ?>
@@ -950,9 +964,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                 <dt><?php esc_html_e('First name', 'BOKUN_txt_domain'); ?></dt>
                                                 <dd class="bokun-booking-dashboard__detail-copy">
                                                     <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($customer_first); ?></span>
-                                                    <button
-                                                        type="button"
+                                                    <a
+                                                        href="#"
                                                         class="bokun-booking-dashboard__copy-button"
+                                                        role="button"
                                                         data-copy-value="<?php echo esc_attr($customer_first); ?>"
                                                         data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
                                                         data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
@@ -960,7 +975,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                         data-copy-state="default"
                                                     >
                                                         <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
-                                                    </button>
+                                                    </a>
                                                 </dd>
                                             </div>
                                         <?php endif; ?>
@@ -970,9 +985,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                 <dt><?php esc_html_e('Last name', 'BOKUN_txt_domain'); ?></dt>
                                                 <dd class="bokun-booking-dashboard__detail-copy">
                                                     <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($customer_last); ?></span>
-                                                    <button
-                                                        type="button"
+                                                    <a
+                                                        href="#"
                                                         class="bokun-booking-dashboard__copy-button"
+                                                        role="button"
                                                         data-copy-value="<?php echo esc_attr($customer_last); ?>"
                                                         data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
                                                         data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
@@ -980,7 +996,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                         data-copy-state="default"
                                                     >
                                                         <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
-                                                    </button>
+                                                    </a>
                                                 </dd>
                                             </div>
                                         <?php endif; ?>
@@ -990,9 +1006,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                 <dt><?php esc_html_e('Phone', 'BOKUN_txt_domain'); ?></dt>
                                                 <dd class="bokun-booking-dashboard__detail-copy">
                                                     <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($phone_display); ?></span>
-                                                    <button
-                                                        type="button"
+                                                    <a
+                                                        href="#"
                                                         class="bokun-booking-dashboard__copy-button"
+                                                        role="button"
                                                         data-copy-value="<?php echo esc_attr($phone_display); ?>"
                                                         data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
                                                         data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
@@ -1000,19 +1017,20 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                         data-copy-state="default"
                                                     >
                                                         <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
-                                                    </button>
+                                                    </a>
                                                 </dd>
                                             </div>
                                         <?php endif; ?>
 
                                         <?php if (!empty($external_ref)) : ?>
                                             <div class="bokun-booking-dashboard__detail">
-                                                <dt><?php esc_html_e('Reference', 'BOKUN_txt_domain'); ?></dt>
+                                                <dt><?php esc_html_e('Reference for booking:', 'BOKUN_txt_domain'); ?></dt>
                                                 <dd class="bokun-booking-dashboard__detail-copy">
                                                     <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($external_ref); ?></span>
-                                                    <button
-                                                        type="button"
+                                                    <a
+                                                        href="#"
                                                         class="bokun-booking-dashboard__copy-button"
+                                                        role="button"
                                                         data-copy-value="<?php echo esc_attr($external_ref); ?>"
                                                         data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
                                                         data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
@@ -1020,7 +1038,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                         data-copy-state="default"
                                                     >
                                                         <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
-                                                    </button>
+                                                    </a>
                                                 </dd>
                                             </div>
                                         <?php endif; ?>
@@ -1043,7 +1061,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                                 <?php if (!empty($viator_url) || !empty($bokun_url)) : ?>
                                     <div class="bokun-booking-dashboard__references">
-                                        <h4 class="bokun-booking-dashboard__section-title"><?php esc_html_e('Reference for booking', 'BOKUN_txt_domain'); ?></h4>
                                         <ul class="bokun-booking-dashboard__reference-list">
                                             <?php if (!empty($viator_url)) : ?>
                                                 <li>
@@ -1068,25 +1085,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         <?php endif; ?>
                     </div>
 
-                    <div class="bokun-booking-dashboard__toggles" role="group" aria-label="<?php esc_attr_e('Booking status toggles', 'BOKUN_txt_domain'); ?>">
-                        <span class="bokun-booking-dashboard__toggle-label"><?php esc_html_e('Result:', 'BOKUN_txt_domain'); ?></span>
-                        <label class="bokun-booking-dashboard__toggle">
-                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="full" <?php echo checked($checkbox_states['full'], true, false); ?> />
-                            <span><?php esc_html_e('Full', 'BOKUN_txt_domain'); ?></span>
-                        </label>
-                        <label class="bokun-booking-dashboard__toggle">
-                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="partial" <?php echo checked($checkbox_states['partial'], true, false); ?> />
-                            <span><?php esc_html_e('Partial', 'BOKUN_txt_domain'); ?></span>
-                        </label>
-                        <label class="bokun-booking-dashboard__toggle">
-                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="not-available" <?php echo checked($checkbox_states['not-available'], true, false); ?> />
-                            <span><?php esc_html_e('Not available', 'BOKUN_txt_domain'); ?></span>
-                        </label>
-                        <label class="bokun-booking-dashboard__toggle">
-                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refund-partner" <?php echo checked($checkbox_states['refund-partner'], true, false); ?> />
-                            <span><?php esc_html_e('Refund requested', 'BOKUN_txt_domain'); ?></span>
-                        </label>
-                    </div>
+                    <?php if (!empty($status_labels)) : ?>
+                        <ul class="bokun-booking-dashboard__status-list">
+                            <?php foreach ($status_labels as $status_label) : ?>
+                                <li class="bokun-booking-dashboard__status-item"><?php echo esc_html($status_label); ?></li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
 
                 </article>
                 <?php
@@ -1652,6 +1657,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         button.addEventListener('click', function (event) {
                             event.preventDefault();
                             copyValue(button);
+                        });
+
+                        button.addEventListener('keydown', function (event) {
+                            if (event.key === ' ' || event.key === 'Spacebar') {
+                                event.preventDefault();
+                                copyValue(button);
+                            }
                         });
                     });
 
