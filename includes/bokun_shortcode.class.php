@@ -598,15 +598,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     'title'       => __('Booking made', 'BOKUN_txt_domain'),
                     'description' => __('Booking received from partner and awaiting next steps.', 'BOKUN_txt_domain'),
                 ],
-                'confirmed' => [
-                    'title'       => __('Confirmed', 'BOKUN_txt_domain'),
-                    'description' => __('Booking confirmed; make sure all guest communications are up to date.', 'BOKUN_txt_domain'),
-                ],
                 'cancelled' => [
                     'title'       => __('Cancelled', 'BOKUN_txt_domain'),
                     'description' => __('Booked from partner but cancelled by client: need to cancel this reservation on partner website, or emailing them to ask for cancellation.', 'BOKUN_txt_domain'),
                 ],
             ];
+
+            $booking_made_cancelled_cards = [];
 
             $product_tags_without_partner = [];
             $processed_product_tag_ids    = [];
@@ -767,6 +765,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
 
                 $status_attribute = implode(' ', array_unique($status_values));
+                $has_booking_made_status = in_array('booking-made', $status_values, true);
+                $has_cancelled_status    = in_array('cancelled', $status_values, true);
+                $requires_refund_followup = ($has_booking_made_status && $has_cancelled_status);
+
                 $status_guidance_entries = [];
                 if (!empty($status_values)) {
                     foreach ($status_guidance_map as $status_key => $guidance) {
@@ -840,6 +842,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     $title_copy_value = '';
                 }
 
+                $show_refund_toggle = $requires_refund_followup;
+
                 ob_start();
                 ?>
                 <article
@@ -900,6 +904,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         <?php endif; ?>
                     </header>
 
+                    <p class="bokun-booking-dashboard__pre-toggle-note">
+                        <strong><?php esc_html_e('Double check - logged in with correct account on partner website?', 'BOKUN_txt_domain'); ?></strong>
+                    </p>
+
                     <div class="bokun-booking-dashboard__toggles" role="group" aria-label="<?php esc_attr_e('Booking status toggles', 'BOKUN_txt_domain'); ?>">
                         <span class="bokun-booking-dashboard__toggle-label"><?php esc_html_e('Result:', 'BOKUN_txt_domain'); ?></span>
                         <label class="bokun-booking-dashboard__toggle">
@@ -914,10 +922,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="not-available" <?php echo checked($checkbox_states['not-available'], true, false); ?> />
                             <span><?php esc_html_e('Not available', 'BOKUN_txt_domain'); ?></span>
                         </label>
-                        <label class="bokun-booking-dashboard__toggle">
-                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refund-partner" <?php echo checked($checkbox_states['refund-partner'], true, false); ?> />
-                            <span><?php esc_html_e('Refund requested', 'BOKUN_txt_domain'); ?></span>
-                        </label>
+                        <?php if ($show_refund_toggle) : ?>
+                            <label class="bokun-booking-dashboard__toggle">
+                                <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refund-partner" <?php echo checked($checkbox_states['refund-partner'], true, false); ?> />
+                                <span><?php esc_html_e('Refund requested', 'BOKUN_txt_domain'); ?></span>
+                            </label>
+                        <?php endif; ?>
                     </div>
 
                     <div class="bokun-booking-dashboard__body">
@@ -1166,6 +1176,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 if (!$is_closest && !$is_cancelled) {
                     $tabs['other']['items'][] = $card_html;
                 }
+
+                if ($requires_refund_followup) {
+                    $booking_made_cancelled_cards[] = $card_html;
+                }
             }
 
             if (!empty($product_tags_without_partner)) {
@@ -1376,9 +1390,25 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         </div>
                     <?php endforeach; ?>
                 </div>
+                <?php if (!empty($booking_made_cancelled_cards)) : ?>
+                    <section class="bokun-booking-dashboard__dual-status" aria-labelledby="<?php echo esc_attr($dashboard_id); ?>-dual-status-title">
+                        <h3 id="<?php echo esc_attr($dashboard_id); ?>-dual-status-title" class="bokun-booking-dashboard__dual-status-title">
+                            <?php esc_html_e('Bookings tagged “Booking made” and “Cancelled”', 'BOKUN_txt_domain'); ?>
+                        </h3>
+                        <p class="bokun-booking-dashboard__dual-status-description">
+                            <?php esc_html_e('Review these bookings to make sure refunds and partner updates are completed.', 'BOKUN_txt_domain'); ?>
+                        </p>
+                        <div class="bokun-booking-dashboard__dual-status-grid">
+                            <?php foreach ($booking_made_cancelled_cards as $card_html) : ?>
+                                <?php echo $card_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                            <?php endforeach; ?>
+                        </div>
+                    </section>
+                <?php endif; ?>
                 <?php
                 $meeting_point_map_url = 'https://maps.app.goo.gl/P6R5T7zeYNbSYR9YA';
                 ?>
+                <div class="bokun-booking-dashboard__conversations-overlay" data-dashboard-conversations-overlay hidden aria-hidden="true"></div>
                 <div class="bokun-booking-dashboard__conversations" data-dashboard-conversations hidden aria-hidden="true" tabindex="-1">
                     <div class="bokun-booking-dashboard__conversations-header">
                         <h3><?php esc_html_e('Common conversations', 'BOKUN_txt_domain'); ?></h3>
@@ -1460,6 +1490,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var copyButtons = Array.prototype.slice.call(dashboard.querySelectorAll('[data-copy-value]'));
                     var conversationToggle = dashboard.querySelector('[data-dashboard-conversations-toggle]');
                     var conversationPanel = dashboard.querySelector('[data-dashboard-conversations]');
+                    var conversationOverlay = dashboard.querySelector('[data-dashboard-conversations-overlay]');
                     var conversationClose = dashboard.querySelector('[data-dashboard-conversations-close]');
                     var noResultsMessage = '<?php echo esc_js(__('No bookings match your search or filters.', 'BOKUN_txt_domain')); ?>';
 
@@ -1550,6 +1581,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         conversationPanel.removeAttribute('hidden');
                         conversationPanel.setAttribute('aria-hidden', 'false');
 
+                        if (conversationOverlay) {
+                            conversationOverlay.removeAttribute('hidden');
+                            conversationOverlay.setAttribute('aria-hidden', 'false');
+                        }
+
                         if (conversationToggle) {
                             conversationToggle.setAttribute('aria-expanded', 'true');
                         }
@@ -1562,6 +1598,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                         conversationPanel.setAttribute('hidden', '');
                         conversationPanel.setAttribute('aria-hidden', 'true');
+
+                        if (conversationOverlay) {
+                            conversationOverlay.setAttribute('hidden', '');
+                            conversationOverlay.setAttribute('aria-hidden', 'true');
+                        }
 
                         if (conversationToggle) {
                             conversationToggle.setAttribute('aria-expanded', 'false');
@@ -1928,6 +1969,17 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                     if (conversationClose) {
                         conversationClose.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            closeConversations();
+
+                            if (conversationToggle) {
+                                conversationToggle.focus();
+                            }
+                        });
+                    }
+
+                    if (conversationOverlay) {
+                        conversationOverlay.addEventListener('click', function (event) {
                             event.preventDefault();
                             closeConversations();
 
