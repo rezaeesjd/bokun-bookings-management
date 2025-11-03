@@ -1758,6 +1758,77 @@ function bokun_backfill_product_tag_product_id_from_posts($term, $context = 'def
 }
 
 /**
+ * Attempt to backfill product IDs for all product tags that currently lack one.
+ *
+ * @param bool $force When true, bypass cooldown checks and always attempt the backfill.
+ */
+function bokun_backfill_missing_product_tag_ids($force = false) {
+    static $running = false;
+
+    if ($running) {
+        return;
+    }
+
+    $running = true;
+
+    $cooldown = (int) apply_filters('bokun_product_tag_id_backfill_cooldown', HOUR_IN_SECONDS);
+
+    if (!$force && $cooldown > 0) {
+        $last_run = (int) get_option('bokun_product_tag_id_backfill_last_run', 0);
+
+        if ($last_run && (time() - $last_run) < $cooldown) {
+            $running = false;
+            return;
+        }
+    }
+
+    $terms = get_terms(
+        [
+            'taxonomy'   => 'product_tags',
+            'hide_empty' => false,
+        ]
+    );
+
+    if (!is_wp_error($terms)) {
+        foreach ($terms as $term) {
+            if (bokun_get_product_tag_product_id($term->term_id) > 0) {
+                continue;
+            }
+
+            $context = get_term_meta($term->term_id, 'bokun_product_import_context', true);
+
+            if (empty($context)) {
+                $context = 'default';
+            }
+
+            bokun_backfill_product_tag_product_id_from_posts($term, $context);
+        }
+    }
+
+    if ($cooldown > 0) {
+        update_option('bokun_product_tag_id_backfill_last_run', time());
+    }
+
+    $running = false;
+}
+
+/**
+ * Schedule automatic product-tag product ID backfilling during admin requests.
+ */
+function bokun_maybe_backfill_product_tag_ids() {
+    if (!is_admin() || !is_user_logged_in()) {
+        return;
+    }
+
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+
+    bokun_backfill_missing_product_tag_ids(false);
+}
+add_action('admin_init', 'bokun_maybe_backfill_product_tag_ids', 20);
+
+/**
  * Import Bokun activity images for all product tags.
  *
  * @param array $args Optional arguments.
@@ -1775,6 +1846,9 @@ function bokun_import_images_for_all_product_tags($args = []) {
 
     $context       = bokun_normalize_import_context($args['context']);
     $requested_ids = array_filter(array_map('intval', (array) $args['term_ids']));
+
+    // Ensure any legacy product tags attempt to hydrate their product IDs before importing images.
+    bokun_backfill_missing_product_tag_ids(true);
 
     $term_query = [
         'taxonomy'   => 'product_tags',
@@ -3842,12 +3916,35 @@ function edit_product_tag_custom_fields($term, $taxonomy) {
     $statusalarm = get_term_meta($term->term_id, 'statusalarm', true);
     $viator_product_id = get_term_meta($term->term_id, 'viatorProductID', true);
     $image_ids = get_term_meta($term->term_id, 'bokun_product_image_ids', true);
+    $key_photo_id = (int) get_term_meta($term->term_id, 'bokun_product_key_photo_attachment', true);
+    $last_import  = get_term_meta($term->term_id, 'bokun_product_last_image_import', true);
+    $import_context = get_term_meta($term->term_id, 'bokun_product_image_import_context', true);
 
     if (!is_array($image_ids)) {
         $image_ids = [];
     }
 
     $image_ids = array_filter(array_map('intval', $image_ids));
+
+    if (!is_string($import_context)) {
+        $import_context = '';
+    }
+
+    $import_context_label   = bokun_normalize_import_context($import_context ?: 'default');
+    $import_context_display = ucwords(str_replace('_', ' ', $import_context_label));
+
+    $last_import_display = '';
+
+    if (!empty($last_import)) {
+        $timestamp = strtotime($last_import);
+
+        if ($timestamp) {
+            $last_import_display = wp_date(
+                get_option('date_format') . ' ' . get_option('time_format'),
+                $timestamp
+            );
+        }
+    }
     ?>
     <tr class="form-field">
         <th scope="row" valign="top"><label for="term_meta[statusok]"><?php _e('Status OK', 'bokun-bookings-manager'); ?></label></th>
@@ -3881,13 +3978,39 @@ function edit_product_tag_custom_fields($term, $taxonomy) {
         <th scope="row" valign="top"><?php _e('Imported images', 'bokun-bookings-manager'); ?></th>
         <td>
             <?php if (!empty($image_ids)) : ?>
-                <ul class="bokun-product-tag-images" style="display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:0;padding:0;">
+                <ul class="bokun-product-tag-images" style="display:flex;flex-wrap:wrap;gap:12px;list-style:none;margin:0;padding:0;">
                     <?php foreach ($image_ids as $attachment_id) : ?>
-                        <li>
-                            <?php echo wp_get_attachment_image($attachment_id, [80, 80], false, ['style' => 'max-width:80px;height:auto;']); ?>
+                        <?php
+                        $attachment_id = (int) $attachment_id;
+                        $attachment_url = wp_get_attachment_url($attachment_id);
+                        $is_key_photo   = ($attachment_id === $key_photo_id);
+                        ?>
+                        <li style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;">
+                            <?php if ($attachment_url) : ?>
+                                <a href="<?php echo esc_url($attachment_url); ?>" target="_blank" rel="noopener noreferrer" style="display:inline-flex;">
+                                    <?php echo wp_get_attachment_image($attachment_id, [80, 80], false, ['style' => 'max-width:80px;height:auto;border-radius:4px;']); ?>
+                                </a>
+                            <?php else : ?>
+                                <?php echo wp_get_attachment_image($attachment_id, [80, 80], false, ['style' => 'max-width:80px;height:auto;border-radius:4px;']); ?>
+                            <?php endif; ?>
+                            <?php if ($is_key_photo) : ?>
+                                <span class="description" style="font-size:11px;line-height:1.4;"><?php _e('Key photo', 'bokun-bookings-manager'); ?></span>
+                            <?php endif; ?>
                         </li>
                     <?php endforeach; ?>
                 </ul>
+                <?php if ($last_import_display) : ?>
+                    <p class="description" style="margin-top:8px;">
+                        <?php
+                        printf(
+                            /* translators: 1: Date of last import. 2: Context used during import. */
+                            __('Last imported on %1$s via the %2$s context.', 'bokun-bookings-manager'),
+                            esc_html($last_import_display),
+                            esc_html($import_context_display)
+                        );
+                        ?>
+                    </p>
+                <?php endif; ?>
             <?php else : ?>
                 <p class="description"><?php _e('No images have been imported for this product tag yet.', 'bokun-bookings-manager'); ?></p>
             <?php endif; ?>
@@ -3901,16 +4024,59 @@ add_action('created_product_tags', 'save_product_tag_custom_fields', 10, 2);
 add_action('edited_product_tags', 'save_product_tag_custom_fields', 10, 2);
 function save_product_tag_custom_fields($term_id) {
     if (isset($_POST['term_meta'])) {
-        $term_meta = $_POST['term_meta'];
+        $term_meta = wp_unslash($_POST['term_meta']);
 
         foreach ($term_meta as $key => $value) {
-            if ('viatorProductID' === $key || 'bokun_product_id' === $key) {
-                $value = absint($value);
-            } else {
-                $value = sanitize_text_field($value);
+            if (is_array($value)) {
+                $value = reset($value);
             }
 
-            update_term_meta($term_id, $key, $value);
+            if (is_string($value)) {
+                $value = trim($value);
+            }
+
+            if ('viatorProductID' === $key || 'bokun_product_id' === $key) {
+                if ('' === $value || null === $value) {
+                    delete_term_meta($term_id, $key);
+                    if ('viatorProductID' === $key) {
+                        delete_term_meta($term_id, 'bokun_product_id');
+                    } elseif ('bokun_product_id' === $key) {
+                        delete_term_meta($term_id, 'viatorProductID');
+                    }
+                    continue;
+                }
+
+                $normalized = absint($value);
+
+                if ($normalized <= 0) {
+                    delete_term_meta($term_id, $key);
+                    if ('viatorProductID' === $key) {
+                        delete_term_meta($term_id, 'bokun_product_id');
+                    } elseif ('bokun_product_id' === $key) {
+                        delete_term_meta($term_id, 'viatorProductID');
+                    }
+                    continue;
+                }
+
+                update_term_meta($term_id, $key, $normalized);
+
+                if ('viatorProductID' === $key) {
+                    update_term_meta($term_id, 'bokun_product_id', $normalized);
+                } elseif ('bokun_product_id' === $key) {
+                    update_term_meta($term_id, 'viatorProductID', $normalized);
+                }
+
+                continue;
+            }
+
+            $sanitized_value = sanitize_text_field($value);
+
+            if ('' === $sanitized_value) {
+                delete_term_meta($term_id, $key);
+                continue;
+            }
+
+            update_term_meta($term_id, $key, $sanitized_value);
         }
     }
 }
