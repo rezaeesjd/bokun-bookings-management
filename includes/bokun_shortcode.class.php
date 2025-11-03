@@ -595,6 +595,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $product_title = get_post_meta($post_id, '_product_title', true);
                 $meeting_point = get_post_meta($post_id, 'bk_meetingpointtitle', true);
                 $external_ref  = get_post_meta($post_id, '_external_booking_reference', true);
+                $parent_booking_id_meta = get_post_meta($post_id, 'productBookings_0_parentBookingId', true);
                 $customer_first = get_post_meta($post_id, '_first_name', true);
                 $customer_last  = get_post_meta($post_id, '_last_name', true);
                 $phone_prefix   = get_post_meta($post_id, '_phone_prefix', true);
@@ -606,6 +607,25 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $rate_title_meta   = get_post_meta($post_id, 'productBookings_0_fields_rateTitle', true);
                 $vendor_title      = is_scalar($vendor_title_meta) ? (string) $vendor_title_meta : '';
                 $rate_title        = is_scalar($rate_title_meta) ? (string) $rate_title_meta : '';
+
+                $external_ref  = is_scalar($external_ref) ? (string) $external_ref : '';
+                $parent_booking_id = is_scalar($parent_booking_id_meta) ? (string) $parent_booking_id_meta : '';
+
+                $viator_url = '';
+                if ($external_ref !== '') {
+                    $viator_url = sprintf(
+                        'https://supplier.viator.com/messaging/conversation/booking/%s/',
+                        rawurlencode($external_ref)
+                    );
+                }
+
+                $bokun_url = '';
+                if ($parent_booking_id !== '') {
+                    $bokun_url = sprintf(
+                        'https://florenceadventuressrl.bokun.io/sales/%s/',
+                        rawurlencode($parent_booking_id)
+                    );
+                }
 
                 $participants = [];
                 foreach (range(1, 5) as $index) {
@@ -841,173 +861,217 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         </ul>
                     <?php endif; ?>
 
-                    <dl class="bokun-booking-dashboard__details">
-                        <?php if (!empty($product_title)) : ?>
-                            <div class="bokun-booking-dashboard__detail">
-                                <dt><?php esc_html_e('Product', 'BOKUN_txt_domain'); ?></dt>
-                                <dd><?php echo esc_html($product_title); ?></dd>
+                    <div class="bokun-booking-dashboard__body">
+                        <?php if (!empty($product_title) || !empty($rate_title) || !empty($meeting_point) || !empty($start_date_display) || !empty($start_time_display) || !empty($participants) || !empty($inclusions)) : ?>
+                            <div class="bokun-booking-dashboard__column bokun-booking-dashboard__column--primary">
+                                <?php if (!empty($product_title) || !empty($rate_title) || !empty($meeting_point) || !empty($start_date_display) || !empty($start_time_display)) : ?>
+                                    <dl class="bokun-booking-dashboard__details">
+                                        <?php if (!empty($product_title)) : ?>
+                                            <div class="bokun-booking-dashboard__detail">
+                                                <dt><?php esc_html_e('Product', 'BOKUN_txt_domain'); ?></dt>
+                                                <dd><?php echo esc_html($product_title); ?></dd>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($rate_title)) : ?>
+                                            <div class="bokun-booking-dashboard__detail">
+                                                <dt><?php esc_html_e('Which option is booked?', 'BOKUN_txt_domain'); ?></dt>
+                                                <dd><?php echo esc_html($rate_title); ?></dd>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($start_date_display) || !empty($start_time_display)) : ?>
+                                            <div class="bokun-booking-dashboard__detail">
+                                                <dt><?php esc_html_e('Start', 'BOKUN_txt_domain'); ?></dt>
+                                                <dd>
+                                                    <?php if (!empty($start_date_display)) : ?>
+                                                        <time class="<?php echo esc_attr(implode(' ', $date_classes)); ?>" datetime="<?php echo esc_attr(wp_date('c', $start_timestamp)); ?>"><?php echo esc_html($start_date_display); ?></time>
+                                                    <?php endif; ?>
+                                                    <?php if (!empty($start_time_display)) : ?>
+                                                        <span class="bokun-booking-dashboard__time"><?php echo esc_html($start_time_display); ?></span>
+                                                    <?php endif; ?>
+                                                </dd>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($meeting_point)) : ?>
+                                            <div class="bokun-booking-dashboard__detail">
+                                                <dt><?php esc_html_e('Meeting point', 'BOKUN_txt_domain'); ?></dt>
+                                                <dd><?php echo esc_html($meeting_point); ?></dd>
+                                            </div>
+                                        <?php endif; ?>
+                                    </dl>
+                                <?php endif; ?>
+
+                                <?php if (!empty($participants)) : ?>
+                                    <div class="bokun-booking-dashboard__section">
+                                        <h4 class="bokun-booking-dashboard__section-title"><?php esc_html_e('Participants', 'BOKUN_txt_domain'); ?></h4>
+                                        <ul class="bokun-booking-dashboard__participants">
+                                            <?php foreach ($participants as $participant) : ?>
+                                                <li><?php echo esc_html($participant); ?></li>
+                                            <?php endforeach; ?>
+                                        </ul>
+                                    </div>
+                                <?php endif; ?>
+
+                                <?php if (!empty($inclusions)) : ?>
+                                    <div class="bokun-booking-dashboard__inclusions">
+                                        <h4 class="bokun-booking-dashboard__section-title"><?php esc_html_e('Inclusions & notes', 'BOKUN_txt_domain'); ?></h4>
+                                        <p><?php echo wp_kses_post(nl2br(esc_html($inclusions))); ?></p>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         <?php endif; ?>
 
-                        <?php if (!empty($rate_title)) : ?>
-                            <div class="bokun-booking-dashboard__detail">
-                                <dt><?php esc_html_e('Which option is booked?', 'BOKUN_txt_domain'); ?></dt>
-                                <dd><?php echo esc_html($rate_title); ?></dd>
+                        <?php if (!empty($customer_name) || !empty($customer_first) || !empty($customer_last) || !empty($phone_display) || !empty($external_ref) || !empty($created_at) || !empty($team_labels) || !empty($viator_url) || !empty($bokun_url)) : ?>
+                            <div class="bokun-booking-dashboard__column bokun-booking-dashboard__column--secondary">
+                                <?php if (!empty($customer_name) || !empty($customer_first) || !empty($customer_last) || !empty($phone_display) || !empty($external_ref) || !empty($created_at) || !empty($team_labels)) : ?>
+                                    <dl class="bokun-booking-dashboard__details">
+                                        <?php if (!empty($customer_name)) : ?>
+                                            <div class="bokun-booking-dashboard__detail">
+                                                <dt><?php esc_html_e('Lead traveller', 'BOKUN_txt_domain'); ?></dt>
+                                                <dd class="bokun-booking-dashboard__detail-copy">
+                                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($customer_name); ?></span>
+                                                    <button
+                                                        type="button"
+                                                        class="bokun-booking-dashboard__copy-button"
+                                                        data-copy-value="<?php echo esc_attr($customer_name); ?>"
+                                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-state="default"
+                                                    >
+                                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
+                                                    </button>
+                                                </dd>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($customer_first)) : ?>
+                                            <div class="bokun-booking-dashboard__detail">
+                                                <dt><?php esc_html_e('First name', 'BOKUN_txt_domain'); ?></dt>
+                                                <dd class="bokun-booking-dashboard__detail-copy">
+                                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($customer_first); ?></span>
+                                                    <button
+                                                        type="button"
+                                                        class="bokun-booking-dashboard__copy-button"
+                                                        data-copy-value="<?php echo esc_attr($customer_first); ?>"
+                                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-state="default"
+                                                    >
+                                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
+                                                    </button>
+                                                </dd>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($customer_last)) : ?>
+                                            <div class="bokun-booking-dashboard__detail">
+                                                <dt><?php esc_html_e('Last name', 'BOKUN_txt_domain'); ?></dt>
+                                                <dd class="bokun-booking-dashboard__detail-copy">
+                                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($customer_last); ?></span>
+                                                    <button
+                                                        type="button"
+                                                        class="bokun-booking-dashboard__copy-button"
+                                                        data-copy-value="<?php echo esc_attr($customer_last); ?>"
+                                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-state="default"
+                                                    >
+                                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
+                                                    </button>
+                                                </dd>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($phone_display)) : ?>
+                                            <div class="bokun-booking-dashboard__detail">
+                                                <dt><?php esc_html_e('Phone', 'BOKUN_txt_domain'); ?></dt>
+                                                <dd class="bokun-booking-dashboard__detail-copy">
+                                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($phone_display); ?></span>
+                                                    <button
+                                                        type="button"
+                                                        class="bokun-booking-dashboard__copy-button"
+                                                        data-copy-value="<?php echo esc_attr($phone_display); ?>"
+                                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-state="default"
+                                                    >
+                                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
+                                                    </button>
+                                                </dd>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($external_ref)) : ?>
+                                            <div class="bokun-booking-dashboard__detail">
+                                                <dt><?php esc_html_e('Reference', 'BOKUN_txt_domain'); ?></dt>
+                                                <dd class="bokun-booking-dashboard__detail-copy">
+                                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($external_ref); ?></span>
+                                                    <button
+                                                        type="button"
+                                                        class="bokun-booking-dashboard__copy-button"
+                                                        data-copy-value="<?php echo esc_attr($external_ref); ?>"
+                                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
+                                                        data-copy-state="default"
+                                                    >
+                                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
+                                                    </button>
+                                                </dd>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($created_at)) : ?>
+                                            <div class="bokun-booking-dashboard__detail">
+                                                <dt><?php esc_html_e('Created', 'BOKUN_txt_domain'); ?></dt>
+                                                <dd><?php echo esc_html($created_at); ?></dd>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <?php if (!empty($team_labels)) : ?>
+                                            <div class="bokun-booking-dashboard__detail">
+                                                <dt><?php esc_html_e('Team members', 'BOKUN_txt_domain'); ?></dt>
+                                                <dd><?php echo esc_html(implode(', ', $team_labels)); ?></dd>
+                                            </div>
+                                        <?php endif; ?>
+                                    </dl>
+                                <?php endif; ?>
+
+                                <?php if (!empty($viator_url) || !empty($bokun_url)) : ?>
+                                    <div class="bokun-booking-dashboard__references">
+                                        <h4 class="bokun-booking-dashboard__section-title"><?php esc_html_e('Reference for booking', 'BOKUN_txt_domain'); ?></h4>
+                                        <ul class="bokun-booking-dashboard__reference-list">
+                                            <?php if (!empty($viator_url)) : ?>
+                                                <li>
+                                                    <span class="bokun-booking-dashboard__reference-label"><?php esc_html_e('Viator:', 'BOKUN_txt_domain'); ?></span>
+                                                    <a href="<?php echo esc_url($viator_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
+                                                        <?php esc_html_e('Open conversation', 'BOKUN_txt_domain'); ?>
+                                                    </a>
+                                                </li>
+                                            <?php endif; ?>
+                                            <?php if (!empty($bokun_url)) : ?>
+                                                <li>
+                                                    <span class="bokun-booking-dashboard__reference-label"><?php esc_html_e('Bokun:', 'BOKUN_txt_domain'); ?></span>
+                                                    <a href="<?php echo esc_url($bokun_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
+                                                        <?php esc_html_e('Open booking', 'BOKUN_txt_domain'); ?>
+                                                    </a>
+                                                </li>
+                                            <?php endif; ?>
+                                        </ul>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         <?php endif; ?>
-
-                        <?php if (!empty($start_date_display) || !empty($start_time_display)) : ?>
-                            <div class="bokun-booking-dashboard__detail">
-                                <dt><?php esc_html_e('Start', 'BOKUN_txt_domain'); ?></dt>
-                                <dd>
-                                    <?php if (!empty($start_date_display)) : ?>
-                                        <time class="<?php echo esc_attr(implode(' ', $date_classes)); ?>" datetime="<?php echo esc_attr(wp_date('c', $start_timestamp)); ?>"><?php echo esc_html($start_date_display); ?></time>
-                                    <?php endif; ?>
-                                    <?php if (!empty($start_time_display)) : ?>
-                                        <span class="bokun-booking-dashboard__time"><?php echo esc_html($start_time_display); ?></span>
-                                    <?php endif; ?>
-                                </dd>
-                            </div>
-                        <?php endif; ?>
-
-                        <?php if (!empty($meeting_point)) : ?>
-                            <div class="bokun-booking-dashboard__detail">
-                                <dt><?php esc_html_e('Meeting point', 'BOKUN_txt_domain'); ?></dt>
-                                <dd><?php echo esc_html($meeting_point); ?></dd>
-                            </div>
-                        <?php endif; ?>
-
-                        <?php if (!empty($customer_name)) : ?>
-                            <div class="bokun-booking-dashboard__detail">
-                                <dt><?php esc_html_e('Lead traveller', 'BOKUN_txt_domain'); ?></dt>
-                                <dd class="bokun-booking-dashboard__detail-copy">
-                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($customer_name); ?></span>
-                                    <button
-                                        type="button"
-                                        class="bokun-booking-dashboard__copy-button"
-                                        data-copy-value="<?php echo esc_attr($customer_name); ?>"
-                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-state="default"
-                                    >
-                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
-                                    </button>
-                                </dd>
-                            </div>
-                        <?php endif; ?>
-
-                        <?php if (!empty($customer_first)) : ?>
-                            <div class="bokun-booking-dashboard__detail">
-                                <dt><?php esc_html_e('First name', 'BOKUN_txt_domain'); ?></dt>
-                                <dd class="bokun-booking-dashboard__detail-copy">
-                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($customer_first); ?></span>
-                                    <button
-                                        type="button"
-                                        class="bokun-booking-dashboard__copy-button"
-                                        data-copy-value="<?php echo esc_attr($customer_first); ?>"
-                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-state="default"
-                                    >
-                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
-                                    </button>
-                                </dd>
-                            </div>
-                        <?php endif; ?>
-
-                        <?php if (!empty($customer_last)) : ?>
-                            <div class="bokun-booking-dashboard__detail">
-                                <dt><?php esc_html_e('Last name', 'BOKUN_txt_domain'); ?></dt>
-                                <dd class="bokun-booking-dashboard__detail-copy">
-                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($customer_last); ?></span>
-                                    <button
-                                        type="button"
-                                        class="bokun-booking-dashboard__copy-button"
-                                        data-copy-value="<?php echo esc_attr($customer_last); ?>"
-                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-state="default"
-                                    >
-                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
-                                    </button>
-                                </dd>
-                            </div>
-                        <?php endif; ?>
-
-                        <?php if (!empty($phone_display)) : ?>
-                            <div class="bokun-booking-dashboard__detail">
-                                <dt><?php esc_html_e('Phone', 'BOKUN_txt_domain'); ?></dt>
-                                <dd class="bokun-booking-dashboard__detail-copy">
-                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($phone_display); ?></span>
-                                    <button
-                                        type="button"
-                                        class="bokun-booking-dashboard__copy-button"
-                                        data-copy-value="<?php echo esc_attr($phone_display); ?>"
-                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-state="default"
-                                    >
-                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
-                                    </button>
-                                </dd>
-                            </div>
-                        <?php endif; ?>
-
-                        <?php if (!empty($external_ref)) : ?>
-                            <div class="bokun-booking-dashboard__detail">
-                                <dt><?php esc_html_e('Reference', 'BOKUN_txt_domain'); ?></dt>
-                                <dd class="bokun-booking-dashboard__detail-copy">
-                                    <span class="bokun-booking-dashboard__detail-value"><?php echo esc_html($external_ref); ?></span>
-                                    <button
-                                        type="button"
-                                        class="bokun-booking-dashboard__copy-button"
-                                        data-copy-value="<?php echo esc_attr($external_ref); ?>"
-                                        data-copy-label="<?php esc_attr_e('Copy', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
-                                        data-copy-state="default"
-                                    >
-                                        <?php esc_html_e('Copy', 'BOKUN_txt_domain'); ?>
-                                    </button>
-                                </dd>
-                            </div>
-                        <?php endif; ?>
-
-                        <?php if (!empty($created_at)) : ?>
-                            <div class="bokun-booking-dashboard__detail">
-                                <dt><?php esc_html_e('Created', 'BOKUN_txt_domain'); ?></dt>
-                                <dd><?php echo esc_html($created_at); ?></dd>
-                            </div>
-                        <?php endif; ?>
-
-                        <?php if (!empty($team_labels)) : ?>
-                            <div class="bokun-booking-dashboard__detail">
-                                <dt><?php esc_html_e('Team members', 'BOKUN_txt_domain'); ?></dt>
-                                <dd><?php echo esc_html(implode(', ', $team_labels)); ?></dd>
-                            </div>
-                        <?php endif; ?>
-                    </dl>
-
-                    <?php if (!empty($participants)) : ?>
-                        <ul class="bokun-booking-dashboard__participants">
-                            <?php foreach ($participants as $participant) : ?>
-                                <li><?php echo esc_html($participant); ?></li>
-                            <?php endforeach; ?>
-                        </ul>
-                    <?php endif; ?>
-
-                    <?php if (!empty($inclusions)) : ?>
-                        <div class="bokun-booking-dashboard__inclusions">
-                            <h4 class="bokun-booking-dashboard__section-title"><?php esc_html_e('Inclusions & notes', 'BOKUN_txt_domain'); ?></h4>
-                            <p><?php echo wp_kses_post(nl2br(esc_html($inclusions))); ?></p>
-                        </div>
-                    <?php endif; ?>
+                    </div>
 
                     <div class="bokun-booking-dashboard__toggles" role="group" aria-label="<?php esc_attr_e('Booking status toggles', 'BOKUN_txt_domain'); ?>">
+                        <span class="bokun-booking-dashboard__toggle-label"><?php esc_html_e('Result:', 'BOKUN_txt_domain'); ?></span>
                         <label class="bokun-booking-dashboard__toggle">
                             <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="full" <?php echo checked($checkbox_states['full'], true, false); ?> />
                             <span><?php esc_html_e('Full', 'BOKUN_txt_domain'); ?></span>
@@ -1026,13 +1090,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         </label>
                     </div>
 
-                    <?php if (!empty($permalink)) : ?>
-                        <div class="bokun-booking-dashboard__footer">
-                            <a class="bokun-booking-dashboard__link" href="<?php echo esc_url($permalink); ?>" target="_blank" rel="noopener noreferrer">
-                                <?php esc_html_e('Open booking', 'BOKUN_txt_domain'); ?>
-                            </a>
-                        </div>
-                    <?php endif; ?>
                 </article>
                 <?php
                 $card_html = ob_get_clean();
