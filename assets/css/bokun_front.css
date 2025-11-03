@@ -632,21 +632,6 @@
   line-height: 1.35;
 }
 
-.bokun-booking-dashboard__status-grid {
-  display: grid;
-  gap: 0.85rem;
-  margin-top: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.bokun-booking-dashboard__status-grid-item {
-  padding: 0.85rem 1rem;
-  border-radius: 0.85rem;
-  border: 1px solid #dbeafe;
-  background: #f8fbff;
-  box-shadow: 0 12px 24px rgba(148, 163, 184, 0.2);
-}
-
 .bokun-booking-dashboard__dual-status {
   margin-top: 1.5rem;
   padding: 1.2rem;
@@ -735,23 +720,6 @@
   display: grid;
   gap: 1.25rem;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-}
-
-.bokun-booking-dashboard__status-grid-label {
-  display: block;
-  margin: 0 0 0.4rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #1d4ed8;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.bokun-booking-dashboard__status-grid-text {
-  margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.45;
-  color: #1f2937;
 }
 
 .bokun-booking-dashboard__history-overlay {
@@ -848,8 +816,8 @@
 }
 
 .bokun-booking-dashboard__footer-item[data-dashboard-user-indicator] {
-  background: rgba(251, 191, 36, 0.18);
-  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.45);
+  background: transparent;
+  box-shadow: none;
 }
 
 .bokun-booking-dashboard__footer-label {
@@ -870,29 +838,30 @@
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
-  border: 1px solid transparent;
-  background: linear-gradient(135deg, #059669, #10b981);
-  color: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: rgba(226, 232, 240, 0.6);
+  color: #0f172a;
   font-weight: 600;
   font-size: 0.8rem;
   padding: 0.5rem 1rem;
   border-radius: 999px;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 16px 28px rgba(16, 185, 129, 0.35);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  box-shadow: 0 10px 20px rgba(148, 163, 184, 0.3);
   text-decoration: none;
 }
 
 .bokun-booking-dashboard__history-launch:hover,
 .bokun-booking-dashboard__history-launch:focus {
   transform: translateY(-1px);
-  box-shadow: 0 20px 36px rgba(16, 185, 129, 0.4);
+  background: rgba(226, 232, 240, 0.85);
+  box-shadow: 0 14px 26px rgba(148, 163, 184, 0.32);
   outline: none;
   text-decoration: none;
 }
 
 .bokun-booking-dashboard__history-launch:focus-visible {
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
 }
 
 .bokun-booking-dashboard__details {
