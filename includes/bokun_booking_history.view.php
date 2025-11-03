@@ -122,7 +122,24 @@ if (!empty($logs)) {
     }
 }
 ?>
-<div class="wrap">
+<div class="wrap bokun-history-wrap">
+    <style>
+        .bokun-history-wrap {
+            margin: 0;
+            max-width: none;
+            width: 100%;
+            padding-left: 16px;
+            padding-right: 16px;
+            box-sizing: border-box;
+        }
+
+        @media (min-width: 782px) {
+            .bokun-history-wrap {
+                padding-left: 24px;
+                padding-right: 24px;
+            }
+        }
+    </style>
     <h1><?php esc_html_e('Booking History', 'BOKUN_txt_domain'); ?></h1>
 
     <?php if (!$table_exists) : ?>
