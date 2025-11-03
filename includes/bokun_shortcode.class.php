@@ -1541,7 +1541,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     <div class="bokun-booking-dashboard__footer-item bokun-booking-dashboard__footer-item--history">
                         <a
                             href="#"
-                            class="bokun-booking-dashboard__history-launch"
                             data-dashboard-history-open
                             role="button"
                             aria-haspopup="dialog"
