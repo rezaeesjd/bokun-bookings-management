@@ -1164,21 +1164,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         </div>
                     <?php endif; ?>
 
-                    <?php if (!empty($status_guidance_entries)) : ?>
-                        <div class="bokun-booking-dashboard__status-grid" role="group" aria-label="<?php esc_attr_e('Booking status guidance', 'BOKUN_txt_domain'); ?>">
-                            <?php foreach ($status_guidance_entries as $guidance_entry) :
-                                $guidance_description = isset($guidance_entry['description']) ? trim((string) $guidance_entry['description']) : '';
-                                ?>
-                                <div class="bokun-booking-dashboard__status-grid-item">
-                                    <span class="bokun-booking-dashboard__status-grid-label"><?php echo esc_html($guidance_entry['title']); ?></span>
-                                    <?php if ($guidance_description !== '') : ?>
-                                        <p class="bokun-booking-dashboard__status-grid-text"><?php echo esc_html($guidance_description); ?></p>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
-
                 </article>
                 <?php
                 $card_html = ob_get_clean();

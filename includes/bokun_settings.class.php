@@ -44,7 +44,15 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
             // die;
             if (is_string($bookings)) {
                 $normalized_message = trim($bookings);
-                $is_error_message = stripos($normalized_message, 'error') === 0;
+                $is_error_message   = stripos($normalized_message, 'error') === 0;
+
+                if ($is_error_message) {
+                    $progress_message = bokun_get_import_progress_message($progress_context, 'error');
+                } else {
+                    $progress_label    = bokun_get_import_progress_label($progress_context);
+                    /* translators: %s: API label. */
+                    $progress_message  = sprintf(__('%s — no bookings found; continuing with remaining imports.', 'bokun-bookings-manager'), $progress_label);
+                }
 
                 bokun_set_import_progress_state($progress_context, array(
                     'status'    => $is_error_message ? 'error' : 'completed',
@@ -53,9 +61,16 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
                     'created'   => 0,
                     'updated'   => 0,
                     'skipped'   => 0,
-                    'message'   => $is_error_message ? bokun_get_import_progress_message($progress_context, 'error') : bokun_get_import_progress_message($progress_context, 'completed'),
+                    'message'   => $progress_message,
                 ));
-                wp_send_json_success(array('msg' => esc_html($bookings), 'status' => false));
+
+                wp_send_json_success(
+                    array(
+                        'msg'               => esc_html($bookings),
+                        'status'            => false,
+                        'progress_message'  => esc_html($progress_message),
+                    )
+                );
             } else {
                 $import_summary = bokun_save_bookings_as_posts($bookings, $progress_context);
 

@@ -340,6 +340,18 @@ jQuery(document).ready(function ($) {
                                                         isFinal: true,
                                                         context: 'fetch'
                                                 });
+                                        } else if (res.data && res.data.progress_message) {
+                                                var api1Message = decodeHTMLEntities(res.data.progress_message);
+                                                setImportProgress('summaryUpdate', {
+                                                        summary: { total: 0, processed: 0, created: 0, updated: 0, skipped: 0 },
+                                                        message: api1Message,
+                                                        isFinal: true,
+                                                        useAbsolute: true,
+                                                        context: 'fetch',
+                                                        totalItems: 0,
+                                                        current: 0,
+                                                        value: 100
+                                                });
                                         } else {
                                                 setImportProgress('api1Complete');
                                         }
@@ -402,6 +414,18 @@ jQuery(document).ready(function ($) {
                                                         label: 'Imported items from API 2',
                                                         isFinal: true,
                                                         context: 'upgrade'
+                                                });
+                                        } else if (res.data && res.data.progress_message) {
+                                                var api2Message = decodeHTMLEntities(res.data.progress_message);
+                                                setImportProgress('summaryUpdate', {
+                                                        summary: { total: 0, processed: 0, created: 0, updated: 0, skipped: 0 },
+                                                        message: api2Message,
+                                                        isFinal: true,
+                                                        useAbsolute: true,
+                                                        context: 'upgrade',
+                                                        totalItems: 0,
+                                                        current: 0,
+                                                        value: 100
                                                 });
                                         } else {
                                                 setImportProgress('api2Complete');
