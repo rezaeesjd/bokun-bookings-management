@@ -458,6 +458,95 @@ jQuery(document).ready(function ($) {
                 });
         }
 
+        function appendMessageList($container, messages) {
+                if (!$container || !$container.length || !messages || !messages.length) {
+                        return;
+                }
+
+                var list = jQuery('<ul class="bokun-admin-message-list"></ul>');
+
+                messages.forEach(function (message) {
+                        if (!message) {
+                                return;
+                        }
+
+                        var normalized = decodeHTMLEntities(message);
+                        var item = jQuery('<li></li>').text(normalized);
+                        list.append(item);
+                });
+
+                if (list.children().length) {
+                        $container.append(list);
+                }
+        }
+
+        jQuery(document).on('click', '.bokun_import_product_tag_images', function (e) {
+                e.preventDefault();
+
+                var $button = jQuery(this);
+
+                if ($button.prop('disabled')) {
+                        return;
+                }
+
+                var originalLabel = $button.val();
+                var loadingLabel = $button.data('loadingText') || $button.data('loading-text') || 'Importing…';
+
+                $button.prop('disabled', true).val(loadingLabel);
+
+                var $successNotice = jQuery('.msg_product_images_success');
+                var $errorNotice = jQuery('.msg_product_images_error');
+
+                $successNotice.hide().find('.bokun-admin-message-list').remove();
+                $errorNotice.hide().find('.bokun-admin-message-list').remove();
+
+                jQuery.ajax({
+                        type: 'POST',
+                        url: ajaxurl,
+                        data: {
+                                action: 'bokun_import_product_tag_images',
+                                security: bokun_api_auth_vars.nonce
+                        },
+                        dataType: 'json'
+                }).done(function (res) {
+                        if (res && res.success && res.data) {
+                                var responseData = res.data;
+                                var message = responseData.message ? decodeHTMLEntities(responseData.message) : '';
+                                var messages = Array.isArray(responseData.messages) ? responseData.messages : [];
+
+                                if (responseData.has_errors) {
+                                        $errorNotice.find('p').html('<strong>Error:</strong> ' + message);
+                                        appendMessageList($errorNotice, messages);
+                                        $errorNotice.show();
+                                } else {
+                                        $successNotice.find('p').html('<strong>Success:</strong> ' + message);
+                                        appendMessageList($successNotice, messages);
+                                        $successNotice.show();
+                                }
+                        } else {
+                                var errorMessage = 'An unexpected error occurred. Please try again.';
+
+                                if (res && res.data && res.data.msg) {
+                                        errorMessage = decodeHTMLEntities(res.data.msg);
+                                }
+
+                                $errorNotice.find('p').html('<strong>Error:</strong> ' + errorMessage);
+                                $errorNotice.show();
+                        }
+                }).fail(function (xhr) {
+                        var errorText = 'An unexpected error occurred. Please try again.';
+
+                        if (xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.msg) {
+                                errorText = decodeHTMLEntities(xhr.responseJSON.data.msg);
+                        }
+
+                        $errorNotice.find('p').html('<strong>Error:</strong> ' + errorText);
+                        $errorNotice.show();
+                }).always(function () {
+                        $button.prop('disabled', false).val(originalLabel);
+                });
+        });
+
         function decodeHTMLEntities(text) {
                 var tempElement = document.createElement('textarea');
                 tempElement.innerHTML = text;

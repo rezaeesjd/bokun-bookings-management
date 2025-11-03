@@ -19,6 +19,8 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
 
             add_action('wp_ajax_bokun_save_dashboard_settings', array($this, 'bokun_save_dashboard_settings'));
 
+            add_action('wp_ajax_bokun_import_product_tag_images', array($this, 'bokun_import_product_tag_images'));
+
         } 
 
         
@@ -187,7 +189,74 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
             wp_send_json_success(array('msg' => $message));
             wp_die();
         }
-         
+
+        function bokun_import_product_tag_images() {
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error(array('msg' => __('You are not allowed to import product tag images.', 'BOKUN_txt_domain')));
+                wp_die();
+            }
+
+            if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
+                wp_send_json_error(array('msg' => __('Invalid nonce.', 'BOKUN_txt_domain')));
+                wp_die();
+            }
+
+            $context = isset($_POST['context']) ? sanitize_key(wp_unslash($_POST['context'])) : 'default';
+
+            $summary = bokun_import_images_for_all_product_tags(array('context' => $context));
+
+            if (!is_array($summary)) {
+                wp_send_json_error(array('msg' => __('Unable to import product tag images.', 'BOKUN_txt_domain')));
+                wp_die();
+            }
+
+            if (!empty($summary['query_error']) && !empty($summary['messages'])) {
+                $message = sanitize_text_field($summary['messages'][0]);
+                wp_send_json_error(array('msg' => $message));
+                wp_die();
+            }
+
+            $processed   = isset($summary['processed_terms']) ? (int) $summary['processed_terms'] : 0;
+            $updated     = isset($summary['updated_terms']) ? (int) $summary['updated_terms'] : 0;
+            $unchanged   = isset($summary['unchanged_terms']) ? (int) $summary['unchanged_terms'] : 0;
+            $skipped     = isset($summary['skipped_terms']) ? (int) $summary['skipped_terms'] : 0;
+            $errors      = isset($summary['errors']) ? (int) $summary['errors'] : 0;
+            $has_errors  = $errors > 0;
+            $total_terms = isset($summary['total_terms']) ? (int) $summary['total_terms'] : $processed;
+
+            $primary_message = sprintf(
+                /* translators: 1: Processed term count. 2: Updated count. 3: Unchanged count. 4: Skipped count. */
+                __('Processed %1$d product tags (%2$d updated, %3$d unchanged, %4$d skipped).', 'BOKUN_txt_domain'),
+                $processed,
+                $updated,
+                $unchanged,
+                $skipped
+            );
+
+            if (0 === $total_terms) {
+                $primary_message = __('No product tags with Bokun product IDs are available for import.', 'BOKUN_txt_domain');
+            }
+
+            $messages = array();
+
+            if (!empty($summary['messages']) && is_array($summary['messages'])) {
+                foreach ($summary['messages'] as $message_text) {
+                    $messages[] = sanitize_text_field($message_text);
+                }
+            }
+
+            wp_send_json_success(
+                array(
+                    'message'    => $primary_message,
+                    'messages'   => $messages,
+                    'summary'    => $summary,
+                    'has_errors' => $has_errors,
+                )
+            );
+
+            wp_die();
+        }
+
         function bokun_display_settings( ) {
             if( file_exists( BOKUN_INCLUDES_DIR . "bokun_settings.view.php" ) ) {
                 include_once( BOKUN_INCLUDES_DIR . "bokun_settings.view.php" );

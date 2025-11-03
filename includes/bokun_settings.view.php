@@ -157,5 +157,33 @@ $dashboard_page_dropdown = wp_dropdown_pages(
                 </div>
             </div>
         </div>
+
+        <div class="row">
+            <div class="col-4 text-center ">
+                <div class="card">
+                    <h2><?php esc_html_e('Import Product Tag Images', 'BOKUN_txt_domain'); ?></h2>
+                    <div class="notice notice-info is-dismissible msg_product_images_success" style="display:none;">
+                        <p>
+                            <strong><?php esc_html_e('Success:', 'BOKUN_txt_domain'); ?></strong>
+                        </p>
+                    </div>
+                    <div class="notice notice-error is-dismissible msg_product_images_error" style="display:none;">
+                        <p>
+                            <strong><?php esc_html_e('Error:', 'BOKUN_txt_domain'); ?></strong>
+                        </p>
+                    </div>
+                    <p class="description">
+                        <?php esc_html_e('Download gallery images for all product tags from Bokun and attach them to the corresponding taxonomy terms.', 'BOKUN_txt_domain'); ?>
+                    </p>
+                    <form method="post" action="javascript:;" id="bokun_import_product_tag_images_form" name="bokun_import_product_tag_images_form" enctype='multipart/form-data'>
+                        <div class="bokun_cmrc-table">
+                            <div class="bokun_settings-fb-config">
+                                <input type="submit" name="submit" class="button button-primary bokun_import_product_tag_images" value="<?php esc_attr_e('Import Images', 'BOKUN_txt_domain'); ?>" data-loading-text="<?php esc_attr_e('Importing…', 'BOKUN_txt_domain'); ?>">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
