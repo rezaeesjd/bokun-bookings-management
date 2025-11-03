@@ -13,22 +13,30 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
         
         function function_bokun_fetch_button() {
+            $should_render_progress = !defined('BOKUN_PROGRESS_RENDERED');
+
+            if ($should_render_progress) {
+                define('BOKUN_PROGRESS_RENDERED', true);
+            }
+
             ob_start();
             ?>
             <div class="bokun-fetch-wrapper">
-                <button class="button button-primary bokun_fetch_booking_data_front">Fetch</button>
-                <div id="bokun_progress" class="bokun-progress" style="display:none;" role="status" aria-live="polite">
-                    <div class="bokun-progress__header">
-                        <span id="bokun_progress_message" class="bokun-progress__message">Import progress</span>
-                        <span class="bokun-progress__status">
-                            <span id="bokun_progress_value" class="bokun-progress__value">0%</span>
-                            <img id="bokun_progress_spinner" class="bokun-progress__spinner" src="<?= BOKUN_IMAGES_URL.'ajax-loading.gif'; ?>" alt="Loading" width="18" height="18">
-                        </span>
+                <a href="#" class="button button-primary bokun_fetch_booking_data_front" role="button">Fetch</a>
+                <?php if ($should_render_progress) : ?>
+                    <div id="bokun_progress" class="bokun-progress" style="display:none;" role="status" aria-live="polite">
+                        <div class="bokun-progress__header">
+                            <span id="bokun_progress_message" class="bokun-progress__message">Import progress</span>
+                            <span class="bokun-progress__status">
+                                <span id="bokun_progress_value" class="bokun-progress__value">0%</span>
+                                <img id="bokun_progress_spinner" class="bokun-progress__spinner" src="<?= BOKUN_IMAGES_URL.'ajax-loading.gif'; ?>" alt="Loading" width="18" height="18">
+                            </span>
+                        </div>
+                        <div class="bokun-progress__track" aria-hidden="true">
+                            <div id="bokun_progress_bar" class="bokun-progress__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+                        </div>
                     </div>
-                    <div class="bokun-progress__track" aria-hidden="true">
-                        <div id="bokun_progress_bar" class="bokun-progress__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
-                    </div>
-                </div>
+                <?php endif; ?>
             </div>
             <?php
             return ob_get_clean();
@@ -585,6 +593,24 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'team'   => [],
             ];
 
+            $status_guidance_map = [
+                'booking-made' => [
+                    'title'       => __('Booking made', 'BOKUN_txt_domain'),
+                    'description' => __('Booking received from partner and awaiting next steps.', 'BOKUN_txt_domain'),
+                ],
+                'confirmed' => [
+                    'title'       => __('Confirmed', 'BOKUN_txt_domain'),
+                    'description' => __('Booking confirmed; make sure all guest communications are up to date.', 'BOKUN_txt_domain'),
+                ],
+                'cancelled' => [
+                    'title'       => __('Cancelled', 'BOKUN_txt_domain'),
+                    'description' => __('Booked from partner but cancelled by client: need to cancel this reservation on partner website, or emailing them to ask for cancellation.', 'BOKUN_txt_domain'),
+                ],
+            ];
+
+            $product_tags_without_partner = [];
+            $processed_product_tag_ids    = [];
+
             while ($query->have_posts()) {
                 $query->the_post();
 
@@ -741,6 +767,15 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
 
                 $status_attribute = implode(' ', array_unique($status_values));
+                $status_guidance_entries = [];
+                if (!empty($status_values)) {
+                    foreach ($status_guidance_map as $status_key => $guidance) {
+                        if (in_array($status_key, $status_values, true)) {
+                            $status_guidance_entries[] = $guidance;
+                        }
+                    }
+                }
+
                 $team_attribute   = implode(' ', array_unique($team_values));
 
                 $card_class_attribute = esc_attr(implode(' ', $post_classes));
@@ -755,6 +790,19 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     foreach ($partner_terms as $term) {
                         $term_partner_meta = get_term_meta($term->term_id, 'partnerpageid', true);
                         $term_partner_id   = is_scalar($term_partner_meta) ? (string) $term_partner_meta : '';
+
+                        if (!isset($processed_product_tag_ids[$term->term_id])) {
+                            $processed_product_tag_ids[$term->term_id] = true;
+
+                            if ($term_partner_id === '') {
+                                $edit_link = get_edit_term_link($term, 'product_tags');
+                                $product_tags_without_partner[$term->term_id] = [
+                                    'name'      => $term->name,
+                                    'edit_link' => (!is_wp_error($edit_link) && !empty($edit_link)) ? $edit_link : '',
+                                ];
+                            }
+                        }
+
                         if ($term_partner_id !== '') {
                             $partner_page_id = $term_partner_id;
                             break;
@@ -1059,38 +1107,46 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                     </dl>
                                 <?php endif; ?>
 
-                                <?php if (!empty($viator_url) || !empty($bokun_url)) : ?>
-                                    <div class="bokun-booking-dashboard__references">
-                                        <ul class="bokun-booking-dashboard__reference-list">
-                                            <?php if (!empty($viator_url)) : ?>
-                                                <li>
-                                                    <span class="bokun-booking-dashboard__reference-label"><?php esc_html_e('Viator:', 'BOKUN_txt_domain'); ?></span>
-                                                    <a href="<?php echo esc_url($viator_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
-                                                        <?php esc_html_e('Open conversation', 'BOKUN_txt_domain'); ?>
-                                                    </a>
-                                                </li>
-                                            <?php endif; ?>
-                                            <?php if (!empty($bokun_url)) : ?>
-                                                <li>
-                                                    <span class="bokun-booking-dashboard__reference-label"><?php esc_html_e('Bokun:', 'BOKUN_txt_domain'); ?></span>
-                                                    <a href="<?php echo esc_url($bokun_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
-                                                        <?php esc_html_e('Open booking', 'BOKUN_txt_domain'); ?>
-                                                    </a>
-                                                </li>
-                                            <?php endif; ?>
-                                        </ul>
-                                    </div>
-                                <?php endif; ?>
                             </div>
                         <?php endif; ?>
                     </div>
 
-                    <?php if (!empty($status_labels)) : ?>
-                        <ul class="bokun-booking-dashboard__status-list">
-                            <?php foreach ($status_labels as $status_label) : ?>
-                                <li class="bokun-booking-dashboard__status-item"><?php echo esc_html($status_label); ?></li>
+                    <?php if (!empty($status_labels) || !empty($viator_url) || !empty($bokun_url)) : ?>
+                        <div class="bokun-booking-dashboard__meta-line">
+                            <?php if (!empty($status_labels)) : ?>
+                                <ul class="bokun-booking-dashboard__status-list">
+                                    <?php foreach ($status_labels as $status_label) : ?>
+                                        <li class="bokun-booking-dashboard__status-item"><?php echo esc_html($status_label); ?></li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            <?php endif; ?>
+
+                            <?php if (!empty($viator_url) || !empty($bokun_url)) : ?>
+                                <div class="bokun-booking-dashboard__reference-links">
+                                    <?php if (!empty($viator_url)) : ?>
+                                        <a href="<?php echo esc_url($viator_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
+                                            <?php esc_html_e('Viator link', 'BOKUN_txt_domain'); ?>
+                                        </a>
+                                    <?php endif; ?>
+                                    <?php if (!empty($bokun_url)) : ?>
+                                        <a href="<?php echo esc_url($bokun_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
+                                            <?php esc_html_e('Bokun link', 'BOKUN_txt_domain'); ?>
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($status_guidance_entries)) : ?>
+                        <div class="bokun-booking-dashboard__status-grid" role="group" aria-label="<?php esc_attr_e('Booking status guidance', 'BOKUN_txt_domain'); ?>">
+                            <?php foreach ($status_guidance_entries as $guidance_entry) : ?>
+                                <div class="bokun-booking-dashboard__status-grid-item">
+                                    <span class="bokun-booking-dashboard__status-grid-label"><?php echo esc_html($guidance_entry['title']); ?></span>
+                                    <p class="bokun-booking-dashboard__status-grid-text"><?php echo esc_html($guidance_entry['description']); ?></p>
+                                </div>
                             <?php endforeach; ?>
-                        </ul>
+                        </div>
                     <?php endif; ?>
 
                 </article>
@@ -1112,6 +1168,15 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
             }
 
+            if (!empty($product_tags_without_partner)) {
+                uasort(
+                    $product_tags_without_partner,
+                    static function ($a, $b) {
+                        return strcasecmp($a['name'], $b['name']);
+                    }
+                );
+            }
+
             wp_reset_postdata();
 
             foreach ($filter_options as $key => $options) {
@@ -1129,9 +1194,47 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
             }
 
+            $should_render_progress = !defined('BOKUN_PROGRESS_RENDERED');
+
+            if ($should_render_progress) {
+                define('BOKUN_PROGRESS_RENDERED', true);
+            }
+
             ob_start();
             ?>
             <div id="<?php echo esc_attr($dashboard_id); ?>" class="bokun-booking-dashboard" <?php echo $columns_style; ?>>
+                <div class="bokun-booking-dashboard__toolbar">
+                    <div class="bokun-booking-dashboard__toolbar-group">
+                        <a href="#" class="bokun-booking-dashboard__toolbar-link bokun_fetch_booking_data_front" role="button">
+                            <?php esc_html_e('Fetch bookings', 'BOKUN_txt_domain'); ?>
+                        </a>
+                    </div>
+                    <div class="bokun-booking-dashboard__toolbar-group bokun-booking-dashboard__toolbar-group--right">
+                        <a
+                            href="#"
+                            class="bokun-booking-dashboard__toolbar-link"
+                            data-dashboard-conversations-toggle
+                            aria-haspopup="dialog"
+                            aria-expanded="false"
+                        >
+                            <?php esc_html_e('Common conversations', 'BOKUN_txt_domain'); ?>
+                        </a>
+                    </div>
+                </div>
+                <?php if ($should_render_progress) : ?>
+                    <div id="bokun_progress" class="bokun-progress" style="display:none;" role="status" aria-live="polite">
+                        <div class="bokun-progress__header">
+                            <span id="bokun_progress_message" class="bokun-progress__message">Import progress</span>
+                            <span class="bokun-progress__status">
+                                <span id="bokun_progress_value" class="bokun-progress__value">0%</span>
+                                <img id="bokun_progress_spinner" class="bokun-progress__spinner" src="<?= BOKUN_IMAGES_URL.'ajax-loading.gif'; ?>" alt="Loading" width="18" height="18">
+                            </span>
+                        </div>
+                        <div class="bokun-progress__track" aria-hidden="true">
+                            <div id="bokun_progress_bar" class="bokun-progress__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+                        </div>
+                    </div>
+                <?php endif; ?>
                 <div class="bokun-booking-dashboard__controls" data-dashboard-controls>
                     <div class="bokun-booking-dashboard__search">
                         <?php
@@ -1147,15 +1250,16 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 placeholder="<?php echo esc_attr($search_label); ?>"
                                 data-dashboard-search
                             />
-                            <button
-                                type="button"
+                            <a
+                                href="#"
                                 class="bokun-booking-dashboard__search-clear"
                                 data-dashboard-search-clear
+                                role="button"
                                 aria-label="<?php esc_attr_e('Clear search', 'BOKUN_txt_domain'); ?>"
                                 hidden
                             >
                                 &times;
-                            </button>
+                            </a>
                         </div>
                     </div>
 
@@ -1233,8 +1337,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         $is_active = ($key === $active_tab);
                         $count     = count($tab['items']);
                         ?>
-                        <button
-                            type="button"
+                        <a
+                            href="#"
                             class="bokun-booking-dashboard__tab"
                             id="<?php echo esc_attr($tab_id); ?>"
                             role="tab"
@@ -1245,7 +1349,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         >
                             <span class="bokun-booking-dashboard__tab-label"><?php echo esc_html($tab['label']); ?></span>
                             <span class="bokun-booking-dashboard__tab-count"><?php echo esc_html($count); ?></span>
-                        </button>
+                        </a>
                     <?php endforeach; ?>
                 </div>
 
@@ -1272,6 +1376,64 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         </div>
                     <?php endforeach; ?>
                 </div>
+                <?php
+                $meeting_point_map_url = 'https://maps.app.goo.gl/P6R5T7zeYNbSYR9YA';
+                ?>
+                <div class="bokun-booking-dashboard__conversations" data-dashboard-conversations hidden aria-hidden="true" tabindex="-1">
+                    <div class="bokun-booking-dashboard__conversations-header">
+                        <h3><?php esc_html_e('Common conversations', 'BOKUN_txt_domain'); ?></h3>
+                        <a href="#" class="bokun-booking-dashboard__conversations-close" data-dashboard-conversations-close role="button" aria-label="<?php esc_attr_e('Close common conversations', 'BOKUN_txt_domain'); ?>">&times;</a>
+                    </div>
+                    <div class="bokun-booking-dashboard__conversations-body">
+                        <section class="bokun-booking-dashboard__conversation">
+                            <h4><?php esc_html_e('Meeting point', 'BOKUN_txt_domain'); ?></h4>
+                            <p><?php esc_html_e('Hello, we hope this message finds you well.', 'BOKUN_txt_domain'); ?></p>
+                            <p><?php esc_html_e('Here is the exact meeting point for your tour:', 'BOKUN_txt_domain'); ?></p>
+                            <p><strong><?php esc_html_e('Piazzale Montelungo', 'BOKUN_txt_domain'); ?></strong></p>
+                            <p>
+                                <a href="<?php echo esc_url($meeting_point_map_url); ?>" target="_blank" rel="noopener noreferrer">
+                                    <?php echo esc_html($meeting_point_map_url); ?>
+                                </a>
+                            </p>
+                            <p><?php esc_html_e('You will find us in fuchsia shirts.', 'BOKUN_txt_domain'); ?></p>
+                            <p><?php esc_html_e('Please make sure to be there at least 15 minutes before the tour starts.', 'BOKUN_txt_domain'); ?></p>
+                            <p><?php esc_html_e('Best regards', 'BOKUN_txt_domain'); ?></p>
+                        </section>
+                        <section class="bokun-booking-dashboard__conversation">
+                            <h4><?php esc_html_e('Alternative date', 'BOKUN_txt_domain'); ?></h4>
+                            <p><?php esc_html_e('Hello, we hope this message finds you well.', 'BOKUN_txt_domain'); ?></p>
+                            <p><?php esc_html_e('Unfortunately this tour is not available for Day and Month. We apologize for any inconvenience caused by this. The first available date will be Day and Month.', 'BOKUN_txt_domain'); ?></p>
+                            <p><?php esc_html_e('Let us know if that works for you. If not, we have to cancel the reservation with a full refund.', 'BOKUN_txt_domain'); ?></p>
+                            <p><?php esc_html_e('Thank you for understanding and patience.', 'BOKUN_txt_domain'); ?></p>
+                            <p><?php esc_html_e('Best regards', 'BOKUN_txt_domain'); ?></p>
+                        </section>
+                        <section class="bokun-booking-dashboard__conversation">
+                            <h4><?php esc_html_e('Tour not available', 'BOKUN_txt_domain'); ?></h4>
+                            <p><?php esc_html_e('Hello, we hope this message finds you well.', 'BOKUN_txt_domain'); ?></p>
+                            <p><?php esc_html_e('Unfortunately this tour is not available for Day and Month. We apologize for the inconvenience but we have to cancel the reservation with a full refund.', 'BOKUN_txt_domain'); ?></p>
+                            <p><?php esc_html_e('Thank you for understanding and patience.', 'BOKUN_txt_domain'); ?></p>
+                            <p><?php esc_html_e('Best regards', 'BOKUN_txt_domain'); ?></p>
+                        </section>
+                    </div>
+                </div>
+
+                <?php if (!empty($product_tags_without_partner)) : ?>
+                    <div class="bokun-booking-dashboard__missing-tags">
+                        <h3><?php esc_html_e('Product tags without link to partner website:', 'BOKUN_txt_domain'); ?></h3>
+                        <ul class="bokun-booking-dashboard__missing-tags-list">
+                            <?php foreach ($product_tags_without_partner as $term_data) : ?>
+                                <li class="bokun-booking-dashboard__missing-tags-item">
+                                    <span class="bokun-booking-dashboard__missing-tag-name"><?php echo esc_html($term_data['name']); ?></span>
+                                    <?php if (!empty($term_data['edit_link'])) : ?>
+                                        <a href="<?php echo esc_url($term_data['edit_link']); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__missing-tag-link">
+                                            <?php esc_html_e('Edit tag', 'BOKUN_txt_domain'); ?>
+                                        </a>
+                                    <?php endif; ?>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <script>
@@ -1296,6 +1458,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var statusAllCheckbox = dashboard.querySelector('[data-filter-status-all]');
                     var teamAllCheckbox = dashboard.querySelector('[data-filter-team-all]');
                     var copyButtons = Array.prototype.slice.call(dashboard.querySelectorAll('[data-copy-value]'));
+                    var conversationToggle = dashboard.querySelector('[data-dashboard-conversations-toggle]');
+                    var conversationPanel = dashboard.querySelector('[data-dashboard-conversations]');
+                    var conversationClose = dashboard.querySelector('[data-dashboard-conversations-close]');
                     var noResultsMessage = '<?php echo esc_js(__('No bookings match your search or filters.', 'BOKUN_txt_domain')); ?>';
 
                     var tabCountLookup = {};
@@ -1375,6 +1540,32 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         }
 
                         return message;
+                    }
+
+                    function openConversations() {
+                        if (!conversationPanel) {
+                            return;
+                        }
+
+                        conversationPanel.removeAttribute('hidden');
+                        conversationPanel.setAttribute('aria-hidden', 'false');
+
+                        if (conversationToggle) {
+                            conversationToggle.setAttribute('aria-expanded', 'true');
+                        }
+                    }
+
+                    function closeConversations() {
+                        if (!conversationPanel) {
+                            return;
+                        }
+
+                        conversationPanel.setAttribute('hidden', '');
+                        conversationPanel.setAttribute('aria-hidden', 'true');
+
+                        if (conversationToggle) {
+                            conversationToggle.setAttribute('aria-expanded', 'false');
+                        }
                     }
 
                     function applyFilters() {
@@ -1699,6 +1890,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             return;
                         }
 
+                        if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+                            event.preventDefault();
+                            activateTab(event.currentTarget);
+                            return;
+                        }
+
                         if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
                             event.preventDefault();
                             var delta = event.key === 'ArrowRight' ? 1 : -1;
@@ -1708,12 +1905,50 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     }
 
                     tabs.forEach(function (tab) {
-                        tab.addEventListener('click', function () {
+                        tab.addEventListener('click', function (event) {
+                            event.preventDefault();
                             activateTab(tab);
                         });
 
                         tab.addEventListener('keydown', handleKeydown);
                     });
+
+                    if (conversationToggle && conversationPanel) {
+                        conversationToggle.addEventListener('click', function (event) {
+                            event.preventDefault();
+
+                            if (conversationPanel.hasAttribute('hidden')) {
+                                openConversations();
+                                conversationPanel.focus();
+                            } else {
+                                closeConversations();
+                            }
+                        });
+                    }
+
+                    if (conversationClose) {
+                        conversationClose.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            closeConversations();
+
+                            if (conversationToggle) {
+                                conversationToggle.focus();
+                            }
+                        });
+                    }
+
+                    if (conversationPanel) {
+                        conversationPanel.addEventListener('keydown', function (event) {
+                            if (event.key === 'Escape') {
+                                event.preventDefault();
+                                closeConversations();
+
+                                if (conversationToggle) {
+                                    conversationToggle.focus();
+                                }
+                            }
+                        });
+                    }
 
                     applyFilters();
                 })();
