@@ -717,5 +717,154 @@ jQuery(function ($) {
                 }
         }
 
+        function toggleDualStatusSection(button) {
+                var $button = $(button);
+                var $section = $button.closest('[data-dashboard-dual-status]');
+
+                if (!$section.length) {
+                        return;
+                }
+
+                var $panel = $section.find('[data-dashboard-dual-status-panel]').first();
+                var isExpanded = $button.attr('aria-expanded') === 'true';
+                var nextState = !isExpanded;
+                var showLabel = $button.data('showLabel') || $button.attr('data-show-label') || '';
+                var hideLabel = $button.data('hideLabel') || $button.attr('data-hide-label') || '';
+                var targetLabel = nextState ? (hideLabel || 'Hide bookings') : (showLabel || 'Show bookings');
+
+                $button.attr('aria-expanded', nextState ? 'true' : 'false');
+                $button.toggleClass('is-active', nextState);
+
+                if ($panel.length) {
+                        if (nextState) {
+                                $panel.removeAttr('hidden');
+                        } else {
+                                $panel.attr('hidden', 'hidden');
+                        }
+                }
+
+                $button.text(targetLabel);
+        }
+
+        function getHistoryContext($dashboard) {
+                if (!$dashboard || !$dashboard.length) {
+                        return null;
+                }
+
+                var $overlay = $dashboard.find('[data-dashboard-history-overlay]').first();
+                var $dialog = $dashboard.find('[data-dashboard-history]').first();
+
+                if (!$overlay.length || !$dialog.length) {
+                        return null;
+                }
+
+                return {
+                        dashboard: $dashboard,
+                        overlay: $overlay,
+                        dialog: $dialog,
+                        trigger: $dashboard.data('historyTrigger')
+                };
+        }
+
+        function openHistoryDialog(button) {
+                var $button = $(button);
+                var $dashboard = $button.closest('.bokun-booking-dashboard');
+
+                if (!$dashboard.length) {
+                        return;
+                }
+
+                var context = getHistoryContext($dashboard);
+
+                if (!context) {
+                        return;
+                }
+
+                context.overlay.removeAttr('hidden').attr('aria-hidden', 'false');
+                context.dialog.removeAttr('hidden').attr('aria-hidden', 'false');
+                $dashboard.addClass('bokun-booking-dashboard--history-open');
+                $dashboard.data('historyTrigger', $button);
+                $button.attr('aria-expanded', 'true');
+
+                var $focusTarget = context.dialog.find('[data-dashboard-history-close]').first();
+
+                if (!$focusTarget.length) {
+                        $focusTarget = context.dialog;
+                }
+
+                setTimeout(function () {
+                        $focusTarget.trigger('focus');
+                }, 0);
+        }
+
+        function closeHistoryDialog(element) {
+                var $dashboard;
+
+                if (element && element.jquery) {
+                        $dashboard = element;
+                } else {
+                        $dashboard = $(element).closest('.bokun-booking-dashboard');
+                }
+
+                if (!$dashboard.length) {
+                        return;
+                }
+
+                var context = getHistoryContext($dashboard);
+
+                if (!context) {
+                        return;
+                }
+
+                context.overlay.attr('hidden', 'hidden').attr('aria-hidden', 'true');
+                context.dialog.attr('hidden', 'hidden').attr('aria-hidden', 'true');
+
+                var $trigger = context.trigger && context.trigger.length ? context.trigger : $dashboard.find('[data-dashboard-history-open]').first();
+
+                if ($trigger && $trigger.length) {
+                        $trigger.attr('aria-expanded', 'false');
+                }
+
+                $dashboard.removeClass('bokun-booking-dashboard--history-open');
+                $dashboard.removeData('historyTrigger');
+
+                if ($trigger && $trigger.length) {
+                        setTimeout(function () {
+                                $trigger.trigger('focus');
+                        }, 0);
+                }
+        }
+
+        $(document).on('click', '[data-dashboard-dual-status-toggle]', function (event) {
+                event.preventDefault();
+                toggleDualStatusSection(this);
+        });
+
+        $(document).on('click', '[data-dashboard-history-open]', function (event) {
+                event.preventDefault();
+                openHistoryDialog(this);
+        });
+
+        $(document).on('click', '[data-dashboard-history-close]', function (event) {
+                event.preventDefault();
+                closeHistoryDialog(this);
+        });
+
+        $(document).on('click', '[data-dashboard-history-overlay]', function (event) {
+                event.preventDefault();
+                closeHistoryDialog(this);
+        });
+
+        $(document).on('keydown', function (event) {
+                if (event.key === 'Escape' || event.key === 'Esc' || event.keyCode === 27) {
+                        var $openDashboard = $('.bokun-booking-dashboard--history-open').last();
+
+                        if ($openDashboard.length) {
+                                event.preventDefault();
+                                closeHistoryDialog($openDashboard);
+                        }
+                }
+        });
+
 
 });

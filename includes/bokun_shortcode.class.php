@@ -525,6 +525,17 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             $days    = max(1, absint($atts['days']));
             $columns = max(1, min(6, absint($atts['columns'])));
 
+            $current_user      = wp_get_current_user();
+            $user_display_name = '';
+
+            if ($current_user instanceof WP_User && $current_user->exists()) {
+                $user_display_name = $current_user->display_name ?: $current_user->user_login;
+            }
+
+            if ('' === $user_display_name) {
+                $user_display_name = __('Guest user', 'BOKUN_txt_domain');
+            }
+
             $now_timestamp = current_time('timestamp');
             $range_end     = strtotime('+' . $days . ' days', $now_timestamp);
 
@@ -600,7 +611,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 ],
                 'cancelled' => [
                     'title'       => __('Cancelled', 'BOKUN_txt_domain'),
-                    'description' => __('Booked from partner but cancelled by client: need to cancel this reservation on partner website, or emailing them to ask for cancellation.', 'BOKUN_txt_domain'),
+                    'description' => '',
                 ],
             ];
 
@@ -1150,10 +1161,14 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                     <?php if (!empty($status_guidance_entries)) : ?>
                         <div class="bokun-booking-dashboard__status-grid" role="group" aria-label="<?php esc_attr_e('Booking status guidance', 'BOKUN_txt_domain'); ?>">
-                            <?php foreach ($status_guidance_entries as $guidance_entry) : ?>
+                            <?php foreach ($status_guidance_entries as $guidance_entry) :
+                                $guidance_description = isset($guidance_entry['description']) ? trim((string) $guidance_entry['description']) : '';
+                                ?>
                                 <div class="bokun-booking-dashboard__status-grid-item">
                                     <span class="bokun-booking-dashboard__status-grid-label"><?php echo esc_html($guidance_entry['title']); ?></span>
-                                    <p class="bokun-booking-dashboard__status-grid-text"><?php echo esc_html($guidance_entry['description']); ?></p>
+                                    <?php if ($guidance_description !== '') : ?>
+                                        <p class="bokun-booking-dashboard__status-grid-text"><?php echo esc_html($guidance_description); ?></p>
+                                    <?php endif; ?>
                                 </div>
                             <?php endforeach; ?>
                         </div>
@@ -1213,6 +1228,19 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             if ($should_render_progress) {
                 define('BOKUN_PROGRESS_RENDERED', true);
             }
+
+            $dual_status_count   = count($booking_made_cancelled_cards);
+            $history_markup      = $this->render_booking_history_table([
+                'limit'      => 150,
+                'capability' => '',
+                'export'     => 'dashboard-history',
+            ]);
+            $dual_status_section_id = $dashboard_id . '-dual-status';
+            $dual_status_panel_id   = $dashboard_id . '-dual-status-panel';
+            $dual_status_toggle_id  = $dashboard_id . '-dual-status-toggle';
+            $history_overlay_id     = $dashboard_id . '-history-overlay';
+            $history_dialog_id      = $dashboard_id . '-history-dialog';
+            $history_title_id       = $dashboard_id . '-history-title';
 
             ob_start();
             ?>
@@ -1390,15 +1418,47 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         </div>
                     <?php endforeach; ?>
                 </div>
-                <?php if (!empty($booking_made_cancelled_cards)) : ?>
-                    <section class="bokun-booking-dashboard__dual-status" aria-labelledby="<?php echo esc_attr($dashboard_id); ?>-dual-status-title">
-                        <h3 id="<?php echo esc_attr($dashboard_id); ?>-dual-status-title" class="bokun-booking-dashboard__dual-status-title">
-                            <?php esc_html_e('Bookings tagged “Booking made” and “Cancelled”', 'BOKUN_txt_domain'); ?>
-                        </h3>
+                <?php if ($dual_status_count > 0) :
+                    $dual_status_show_label = __('Show bookings', 'BOKUN_txt_domain');
+                    $dual_status_hide_label = __('Hide bookings', 'BOKUN_txt_domain');
+                    ?>
+                    <section
+                        id="<?php echo esc_attr($dual_status_section_id); ?>"
+                        class="bokun-booking-dashboard__dual-status"
+                        aria-labelledby="<?php echo esc_attr($dual_status_section_id); ?>-title"
+                        data-dashboard-dual-status
+                    >
+                        <div class="bokun-booking-dashboard__dual-status-header">
+                            <div class="bokun-booking-dashboard__dual-status-heading">
+                                <h3 id="<?php echo esc_attr($dual_status_section_id); ?>-title" class="bokun-booking-dashboard__dual-status-title">
+                                    <?php esc_html_e('Bookings tagged “Booking made” and “Cancelled”', 'BOKUN_txt_domain'); ?>
+                                </h3>
+                                <span class="bokun-booking-dashboard__dual-status-count" aria-label="<?php esc_attr_e('Total bookings with both statuses', 'BOKUN_txt_domain'); ?>">
+                                    <?php echo esc_html(number_format_i18n($dual_status_count)); ?>
+                                </span>
+                            </div>
+                            <button
+                                type="button"
+                                class="bokun-booking-dashboard__dual-status-toggle"
+                                id="<?php echo esc_attr($dual_status_toggle_id); ?>"
+                                data-dashboard-dual-status-toggle
+                                data-show-label="<?php echo esc_attr($dual_status_show_label); ?>"
+                                data-hide-label="<?php echo esc_attr($dual_status_hide_label); ?>"
+                                aria-expanded="false"
+                                aria-controls="<?php echo esc_attr($dual_status_panel_id); ?>"
+                            >
+                                <?php echo esc_html($dual_status_show_label); ?>
+                            </button>
+                        </div>
                         <p class="bokun-booking-dashboard__dual-status-description">
-                            <?php esc_html_e('Review these bookings to make sure refunds and partner updates are completed.', 'BOKUN_txt_domain'); ?>
+                            <?php esc_html_e('Use this list to confirm partner cancellations and refunds are fully resolved.', 'BOKUN_txt_domain'); ?>
                         </p>
-                        <div class="bokun-booking-dashboard__dual-status-grid">
+                        <div
+                            id="<?php echo esc_attr($dual_status_panel_id); ?>"
+                            class="bokun-booking-dashboard__dual-status-grid"
+                            data-dashboard-dual-status-panel
+                            hidden
+                        >
                             <?php foreach ($booking_made_cancelled_cards as $card_html) : ?>
                                 <?php echo $card_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                             <?php endforeach; ?>
@@ -1445,6 +1505,58 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             <p><?php esc_html_e('Best regards', 'BOKUN_txt_domain'); ?></p>
                         </section>
                     </div>
+                </div>
+
+                <div
+                    class="bokun-booking-dashboard__history-overlay"
+                    id="<?php echo esc_attr($history_overlay_id); ?>"
+                    data-dashboard-history-overlay
+                    hidden
+                    aria-hidden="true"
+                ></div>
+                <div
+                    class="bokun-booking-dashboard__history"
+                    id="<?php echo esc_attr($history_dialog_id); ?>"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="<?php echo esc_attr($history_title_id); ?>"
+                    data-dashboard-history
+                    hidden
+                    aria-hidden="true"
+                    tabindex="-1"
+                >
+                    <div class="bokun-booking-dashboard__history-header">
+                        <h3 id="<?php echo esc_attr($history_title_id); ?>"><?php esc_html_e('Booking history', 'BOKUN_txt_domain'); ?></h3>
+                        <button type="button" class="bokun-booking-dashboard__history-close" data-dashboard-history-close aria-label="<?php esc_attr_e('Close booking history', 'BOKUN_txt_domain'); ?>">
+                            &times;
+                        </button>
+                    </div>
+                    <div class="bokun-booking-dashboard__history-body">
+                        <?php if (!empty($history_markup)) : ?>
+                            <?php echo $history_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                        <?php else : ?>
+                            <p class="bokun-booking-dashboard__history-empty" role="status">
+                                <?php esc_html_e('No booking history is available yet.', 'BOKUN_txt_domain'); ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <div class="bokun-booking-dashboard__corner bokun-booking-dashboard__corner--left" data-dashboard-user-indicator>
+                    <span class="bokun-booking-dashboard__corner-label"><?php esc_html_e('Current user', 'BOKUN_txt_domain'); ?>:</span>
+                    <span class="bokun-booking-dashboard__corner-value"><?php echo esc_html($user_display_name); ?></span>
+                </div>
+                <div class="bokun-booking-dashboard__corner bokun-booking-dashboard__corner--right">
+                    <button
+                        type="button"
+                        class="bokun-booking-dashboard__history-launch"
+                        data-dashboard-history-open
+                        aria-haspopup="dialog"
+                        aria-expanded="false"
+                        aria-controls="<?php echo esc_attr($history_dialog_id); ?>"
+                    >
+                        <?php esc_html_e('Booking history', 'BOKUN_txt_domain'); ?>
+                    </button>
                 </div>
 
                 <?php if (!empty($product_tags_without_partner)) : ?>
