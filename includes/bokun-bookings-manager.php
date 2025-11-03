@@ -782,12 +782,6 @@ function bokun_sync_product_tag_metadata_from_booking($product_booking, $context
         update_term_meta($term->term_id, 'bokun_product_id', $product_id);
     }
 
-    $existing_viator_id = (int) get_term_meta($term->term_id, 'viatorProductID', true);
-
-    if ($existing_viator_id !== $product_id) {
-        update_term_meta($term->term_id, 'viatorProductID', $product_id);
-    }
-
     $context = bokun_normalize_import_context($context);
 
     if (!empty($context)) {
@@ -1641,55 +1635,6 @@ function bokun_get_meeting_points_from_activity($product_id, $context = 'default
 }
 
 /**
- * Retrieve the stored Bokun/Viator product identifier for a product-tag term.
- *
- * @param int $term_id Term identifier.
- *
- * @return int Normalized product identifier or 0 if unavailable.
- */
-function bokun_get_product_tag_product_id($term_id) {
-    $term_id = (int) $term_id;
-
-    if ($term_id <= 0) {
-        return 0;
-    }
-
-    $viator_product_id = get_term_meta($term_id, 'viatorProductID', true);
-
-    if (is_array($viator_product_id)) {
-        $viator_product_id = reset($viator_product_id);
-    }
-
-    $viator_product_id = is_string($viator_product_id) ? trim($viator_product_id) : $viator_product_id;
-
-    if ('' !== $viator_product_id && null !== $viator_product_id) {
-        $normalized = absint($viator_product_id);
-
-        if ($normalized > 0) {
-            return $normalized;
-        }
-    }
-
-    $bokun_product_id = get_term_meta($term_id, 'bokun_product_id', true);
-
-    if (is_array($bokun_product_id)) {
-        $bokun_product_id = reset($bokun_product_id);
-    }
-
-    $bokun_product_id = is_string($bokun_product_id) ? trim($bokun_product_id) : $bokun_product_id;
-
-    if ('' !== $bokun_product_id && null !== $bokun_product_id) {
-        $normalized = absint($bokun_product_id);
-
-        if ($normalized > 0) {
-            return $normalized;
-        }
-    }
-
-    return 0;
-}
-
-/**
  * Import Bokun activity images for all product tags.
  *
  * @param array $args Optional arguments.
@@ -1746,14 +1691,14 @@ function bokun_import_images_for_all_product_tags($args = []) {
     ];
 
     foreach ($terms as $term) {
-        $product_id = bokun_get_product_tag_product_id($term->term_id);
+        $product_id = (int) get_term_meta($term->term_id, 'bokun_product_id', true);
 
         if ($product_id <= 0) {
             $term_name = wp_strip_all_tags($term->name);
             $summary['skipped_terms']++;
             $summary['messages'][] = sprintf(
                 /* translators: %s: Product tag name. */
-                __('Skipped product tag “%s” because no Viator product ID is stored.', 'bokun-bookings-manager'),
+                __('Skipped product tag “%s” because no Bokun product ID is stored.', 'bokun-bookings-manager'),
                 $term_name
             );
             continue;
@@ -1824,14 +1769,14 @@ function bokun_import_product_tag_images_for_term($term, $context = 'default') {
 
     $term_name = wp_strip_all_tags($term->name);
 
-    $product_id = bokun_get_product_tag_product_id($term->term_id);
+    $product_id = (int) get_term_meta($term->term_id, 'bokun_product_id', true);
 
     if ($product_id <= 0) {
         return [
             'status'    => 'skipped',
             'message'   => sprintf(
                 /* translators: %s: Product tag name. */
-                __('No Viator product ID stored for product tag “%s”.', 'bokun-bookings-manager'),
+                __('No Bokun product ID stored for product tag “%s”.', 'bokun-bookings-manager'),
                 $term_name
             ),
             'term_id'   => $term->term_id,
@@ -3736,11 +3681,6 @@ function add_product_tag_custom_fields($taxonomy) {
         <input type="number" name="term_meta[statusalarm]" id="term_meta[statusalarm]" value="">
         <p class="description"><?php _e('Enter the number of days for Status Alarm.', 'bokun-bookings-manager'); ?></p>
     </div>
-    <div class="form-field">
-        <label for="term_meta[viatorProductID]"><?php _e('Viator Product ID', 'bokun-bookings-manager'); ?></label>
-        <input type="text" name="term_meta[viatorProductID]" id="term_meta[viatorProductID]" value="">
-        <p class="description"><?php _e('Store the associated Bokun/Viator product ID for this tag.', 'bokun-bookings-manager'); ?></p>
-    </div>
     <?php
 }
 
@@ -3750,7 +3690,6 @@ function edit_product_tag_custom_fields($term, $taxonomy) {
     $statusok = get_term_meta($term->term_id, 'statusok', true);
     $statusattention = get_term_meta($term->term_id, 'statusattention', true);
     $statusalarm = get_term_meta($term->term_id, 'statusalarm', true);
-    $viator_product_id = get_term_meta($term->term_id, 'viatorProductID', true);
     $image_ids = get_term_meta($term->term_id, 'bokun_product_image_ids', true);
 
     if (!is_array($image_ids)) {
@@ -3781,13 +3720,6 @@ function edit_product_tag_custom_fields($term, $taxonomy) {
         </td>
     </tr>
     <tr class="form-field">
-        <th scope="row" valign="top"><label for="term_meta[viatorProductID]"><?php _e('Viator Product ID', 'bokun-bookings-manager'); ?></label></th>
-        <td>
-            <input type="text" name="term_meta[viatorProductID]" id="term_meta[viatorProductID]" value="<?php echo esc_attr($viator_product_id) ? esc_attr($viator_product_id) : ''; ?>">
-            <p class="description"><?php _e('Store the associated Bokun/Viator product ID for this tag.', 'bokun-bookings-manager'); ?></p>
-        </td>
-    </tr>
-    <tr class="form-field">
         <th scope="row" valign="top"><?php _e('Imported images', 'bokun-bookings-manager'); ?></th>
         <td>
             <?php if (!empty($image_ids)) : ?>
@@ -3814,13 +3746,7 @@ function save_product_tag_custom_fields($term_id) {
         $term_meta = $_POST['term_meta'];
 
         foreach ($term_meta as $key => $value) {
-            if ('viatorProductID' === $key || 'bokun_product_id' === $key) {
-                $value = absint($value);
-            } else {
-                $value = sanitize_text_field($value);
-            }
-
-            update_term_meta($term_id, $key, $value);
+            update_term_meta($term_id, $key, sanitize_text_field($value));
         }
     }
 }

@@ -997,7 +997,7 @@
 }
 
 .bokun-booking-dashboard__pre-toggle-note {
-  margin: -0.35rem 0 -0.3rem;
+  margin: 0;
   font-size: 0.75rem;
   color: #475569;
 }
@@ -1010,8 +1010,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.6rem;
-  margin: -0.15rem 0 -0.45rem;
-  padding: 0.45rem 0.85rem;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
   border-radius: 0.85rem;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
