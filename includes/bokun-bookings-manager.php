@@ -604,7 +604,7 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
             $stats['created']++;
         }
 
-        bokun_save_specific_fields($post_id, $booking);
+        bokun_save_specific_fields($post_id, $booking, $context);
         bokun_save_all_fields_as_meta($post_id, $booking);
         bokun_save_meeting_point_meta($post_id, $booking, $context);
         process_price_categories_and_save($post_id, $booking);
@@ -675,7 +675,7 @@ function bokun_check_for_changes($post_id, $booking) {
 }
 
 // Function to save specific fields of the booking
-function bokun_save_specific_fields($post_id, $booking) {
+function bokun_save_specific_fields($post_id, $booking, $context = 'default') {
     // Extract nested values
     $customer = $booking['customer'] ?? [];
     $productBooking = $booking['productBookings'][0] ?? [];
@@ -727,6 +727,7 @@ function bokun_save_specific_fields($post_id, $booking) {
     // Assign product title tag to the post
     if (!empty($product_title)) {
         bokun_assign_tag_to_post($post_id, $product_title, 'product_tags');
+        bokun_sync_product_tag_metadata_from_booking($productBooking, $context);
     }
 
     // Handle booking status
@@ -745,6 +746,48 @@ function bokun_save_specific_fields($post_id, $booking) {
     // Calculate and save custom status fields (Status OK, Attention, Alarm)
     if (!empty($productBooking['startDate'])) {
         bokun_calculate_booking_status($post_id, $product_title, $productBooking['startDate']);
+    }
+}
+
+/**
+ * Store metadata about the Bokun product on the associated taxonomy term.
+ *
+ * @param array  $product_booking Product booking payload from the API.
+ * @param string $context         Import context used when fetching the booking.
+ */
+function bokun_sync_product_tag_metadata_from_booking($product_booking, $context = 'default') {
+    if (!is_array($product_booking)) {
+        return;
+    }
+
+    $product      = $product_booking['product'] ?? [];
+    $product_id   = isset($product['id']) ? (int) $product['id'] : 0;
+    $product_name = isset($product['title']) ? sanitize_text_field($product['title']) : '';
+
+    if ($product_id <= 0 || '' === $product_name) {
+        return;
+    }
+
+    $term = get_term_by('name', $product_name, 'product_tags');
+
+    if (!$term || is_wp_error($term)) {
+        return;
+    }
+
+    $existing_id = (int) get_term_meta($term->term_id, 'bokun_product_id', true);
+
+    if ($existing_id !== $product_id) {
+        update_term_meta($term->term_id, 'bokun_product_id', $product_id);
+    }
+
+    $context = bokun_normalize_import_context($context);
+
+    if (!empty($context)) {
+        $stored_context = get_term_meta($term->term_id, 'bokun_product_import_context', true);
+
+        if ($stored_context !== $context) {
+            update_term_meta($term->term_id, 'bokun_product_import_context', $context);
+        }
     }
 }
 
@@ -1427,41 +1470,32 @@ function bokun_get_meeting_points_from_product_lists_for_ids($product_ids, $cont
  *
  * @return mixed Meeting-point data or null when unavailable.
  */
-function bokun_get_meeting_points_from_activity($product_id, $context = 'default') {
+/**
+ * Retrieve the full Bokun activity payload for a product.
+ *
+ * @param int    $product_id Bokun activity identifier.
+ * @param string $context    Import context used to determine API credentials.
+ *
+ * @return array|null Activity payload or null when unavailable.
+ */
+function bokun_fetch_activity_payload($product_id, $context = 'default') {
     $product_id = (int) $product_id;
 
     if ($product_id <= 0) {
         return null;
     }
 
-    $context    = bokun_normalize_import_context($context);
-    $cache_key  = sprintf('bokun_activity_start_points_%s_%d', $context, $product_id);
-    $cached     = get_transient($cache_key);
+    $context   = bokun_normalize_import_context($context);
+    $cache_key = sprintf('bokun_activity_payload_%s_%d', $context, $product_id);
+    $cached    = get_transient($cache_key);
 
     if (false !== $cached) {
-        bokun_log_meeting_point_step('Using cached activity meeting-point payload.', [
-            'bokun_id' => $product_id,
-            'context'  => $context,
-            'type'     => is_array($cached) ? 'array' : (is_null($cached) ? 'NULL' : gettype($cached)),
-            'count'    => is_array($cached) ? count($cached) : null,
-        ]);
-
-        return $cached;
+        return is_array($cached) ? $cached : null;
     }
-
-    bokun_log_meeting_point_step('Fetching activity for meeting-point lookup.', [
-        'bokun_id' => $product_id,
-        'context'  => $context,
-    ]);
 
     list($api_key, $secret_key) = bokun_get_api_credentials_for_context($context);
 
     if (empty($api_key) || empty($secret_key)) {
-        bokun_log_meeting_point_step('Missing API credentials for activity lookup.', [
-            'bokun_id' => $product_id,
-            'context'  => $context,
-        ]);
-
         return null;
     }
 
@@ -1484,24 +1518,12 @@ function bokun_get_meeting_points_from_activity($product_id, $context = 'default
     $response = wp_remote_get($url, $args);
 
     if (is_wp_error($response)) {
-        bokun_log_meeting_point_step('Activity request failed.', [
-            'bokun_id' => $product_id,
-            'context'  => $context,
-            'error'    => $response->get_error_message(),
-        ]);
-
         return null;
     }
 
     $code = wp_remote_retrieve_response_code($response);
 
     if (200 !== $code) {
-        bokun_log_meeting_point_step('Unexpected status code from activity request.', [
-            'bokun_id' => $product_id,
-            'context'  => $context,
-            'status'   => $code,
-        ]);
-
         return null;
     }
 
@@ -1509,11 +1531,6 @@ function bokun_get_meeting_points_from_activity($product_id, $context = 'default
     $data = json_decode($body, true);
 
     if (!is_array($data)) {
-        bokun_log_meeting_point_step('Invalid activity response payload.', [
-            'bokun_id' => $product_id,
-            'context'  => $context,
-        ]);
-
         return null;
     }
 
@@ -1525,9 +1542,51 @@ function bokun_get_meeting_points_from_activity($product_id, $context = 'default
         $activity = $data['item'];
     } elseif (isset($data['result']) && is_array($data['result'])) {
         $activity = $data['result'];
-    } elseif (is_array($data)) {
+    } else {
         $activity = $data;
     }
+
+    if (!is_array($activity)) {
+        return null;
+    }
+
+    $ttl = apply_filters('bokun_activity_payload_cache_ttl', HOUR_IN_SECONDS, $product_id, $context, $activity);
+
+    if ((int) $ttl > 0) {
+        set_transient($cache_key, $activity, (int) $ttl);
+    }
+
+    return $activity;
+}
+
+function bokun_get_meeting_points_from_activity($product_id, $context = 'default') {
+    $product_id = (int) $product_id;
+
+    if ($product_id <= 0) {
+        return null;
+    }
+
+    $context   = bokun_normalize_import_context($context);
+    $cache_key = sprintf('bokun_activity_start_points_%s_%d', $context, $product_id);
+    $cached    = get_transient($cache_key);
+
+    if (false !== $cached) {
+        bokun_log_meeting_point_step('Using cached activity meeting-point payload.', [
+            'bokun_id' => $product_id,
+            'context'  => $context,
+            'type'     => is_array($cached) ? 'array' : (is_null($cached) ? 'NULL' : gettype($cached)),
+            'count'    => is_array($cached) ? count($cached) : null,
+        ]);
+
+        return $cached;
+    }
+
+    bokun_log_meeting_point_step('Fetching activity for meeting-point lookup.', [
+        'bokun_id' => $product_id,
+        'context'  => $context,
+    ]);
+
+    $activity = bokun_fetch_activity_payload($product_id, $context);
 
     if (!is_array($activity)) {
         bokun_log_meeting_point_step('Unable to determine activity payload from response.', [
@@ -1571,6 +1630,482 @@ function bokun_get_meeting_points_from_activity($product_id, $context = 'default
     }
 
     return $start_points;
+}
+
+/**
+ * Import Bokun activity images for all product tags.
+ *
+ * @param array $args Optional arguments.
+ *
+ * @return array Summary of the import operation.
+ */
+function bokun_import_images_for_all_product_tags($args = []) {
+    $args = wp_parse_args(
+        $args,
+        [
+            'context'  => 'default',
+            'term_ids' => [],
+        ]
+    );
+
+    $context       = bokun_normalize_import_context($args['context']);
+    $requested_ids = array_filter(array_map('intval', (array) $args['term_ids']));
+
+    $term_query = [
+        'taxonomy'   => 'product_tags',
+        'hide_empty' => false,
+    ];
+
+    if (!empty($requested_ids)) {
+        $term_query['include'] = $requested_ids;
+    }
+
+    $terms = get_terms($term_query);
+
+    if (is_wp_error($terms)) {
+        return [
+            'total_terms'     => 0,
+            'processed_terms' => 0,
+            'updated_terms'   => 0,
+            'unchanged_terms' => 0,
+            'skipped_terms'   => 0,
+            'errors'          => 1,
+            'messages'        => [$terms->get_error_message()],
+            'context'         => $context,
+            'query_error'     => true,
+        ];
+    }
+
+    $summary = [
+        'total_terms'     => 0,
+        'processed_terms' => 0,
+        'updated_terms'   => 0,
+        'unchanged_terms' => 0,
+        'skipped_terms'   => 0,
+        'errors'          => 0,
+        'messages'        => [],
+        'context'         => $context,
+        'query_error'     => false,
+    ];
+
+    foreach ($terms as $term) {
+        $product_id = (int) get_term_meta($term->term_id, 'bokun_product_id', true);
+
+        if ($product_id <= 0) {
+            $term_name = wp_strip_all_tags($term->name);
+            $summary['skipped_terms']++;
+            $summary['messages'][] = sprintf(
+                /* translators: %s: Product tag name. */
+                __('Skipped product tag “%s” because no Bokun product ID is stored.', 'bokun-bookings-manager'),
+                $term_name
+            );
+            continue;
+        }
+
+        $summary['total_terms']++;
+
+        $result = bokun_import_product_tag_images_for_term($term, $context);
+
+        $summary['processed_terms']++;
+
+        if ('error' === $result['status']) {
+            $summary['errors']++;
+            if (!empty($result['message'])) {
+                $summary['messages'][] = $result['message'];
+            }
+        } elseif ('updated' === $result['status']) {
+            $summary['updated_terms']++;
+            if (!empty($result['message'])) {
+                $summary['messages'][] = $result['message'];
+            }
+        } elseif ('unchanged' === $result['status']) {
+            $summary['unchanged_terms']++;
+            if (!empty($result['message'])) {
+                $summary['messages'][] = $result['message'];
+            }
+        } elseif ('skipped' === $result['status']) {
+            $summary['skipped_terms']++;
+            if (!empty($result['message'])) {
+                $summary['messages'][] = $result['message'];
+            }
+        } else {
+            $summary['messages'][] = $result['message'];
+        }
+
+        if (!empty($result['errors']) && is_array($result['errors'])) {
+            foreach ($result['errors'] as $error_message) {
+                $summary['messages'][] = $error_message;
+            }
+        }
+    }
+
+    return $summary;
+}
+
+/**
+ * Import Bokun activity images for a single product tag term.
+ *
+ * @param WP_Term|int $term    Term object or ID.
+ * @param string      $context Preferred import context.
+ *
+ * @return array Result payload containing status details.
+ */
+function bokun_import_product_tag_images_for_term($term, $context = 'default') {
+    if (is_numeric($term)) {
+        $term = get_term((int) $term, 'product_tags');
+    }
+
+    if (!$term || is_wp_error($term)) {
+        return [
+            'status'   => 'error',
+            'message'  => __('Invalid product tag supplied for image import.', 'bokun-bookings-manager'),
+            'errors'   => [__('Invalid product tag supplied for image import.', 'bokun-bookings-manager')],
+            'term_id'  => is_object($term) ? $term->term_id : 0,
+            'term_name'=> is_object($term) ? $term->name : '',
+        ];
+    }
+
+    $term_name = wp_strip_all_tags($term->name);
+
+    $product_id = (int) get_term_meta($term->term_id, 'bokun_product_id', true);
+
+    if ($product_id <= 0) {
+        return [
+            'status'    => 'skipped',
+            'message'   => sprintf(
+                /* translators: %s: Product tag name. */
+                __('No Bokun product ID stored for product tag “%s”.', 'bokun-bookings-manager'),
+                $term_name
+            ),
+            'term_id'   => $term->term_id,
+            'term_name' => $term_name,
+            'errors'    => [],
+        ];
+    }
+
+    $stored_context = get_term_meta($term->term_id, 'bokun_product_import_context', true);
+
+    if (!empty($stored_context)) {
+        $context = $stored_context;
+    }
+
+    $context  = bokun_normalize_import_context($context);
+    $activity = bokun_fetch_activity_payload($product_id, $context);
+
+    if (!is_array($activity)) {
+        $fallback = ('upgrade' === $context) ? 'default' : 'upgrade';
+        if ($fallback !== $context) {
+            $fallback_activity = bokun_fetch_activity_payload($product_id, $fallback);
+            if (is_array($fallback_activity)) {
+                $activity = $fallback_activity;
+                $context  = $fallback;
+            }
+        }
+    }
+
+    if (!is_array($activity)) {
+        $message = sprintf(
+            /* translators: %s: Product tag name. */
+            __('Unable to fetch activity data for product tag “%s”.', 'bokun-bookings-manager'),
+            $term_name
+        );
+
+        return [
+            'status'    => 'error',
+            'message'   => $message,
+            'term_id'   => $term->term_id,
+            'term_name' => $term_name,
+            'errors'    => [$message],
+        ];
+    }
+
+    $photos = bokun_extract_activity_photos($activity);
+
+    if (empty($photos)) {
+        update_term_meta($term->term_id, 'bokun_product_image_ids', []);
+        update_term_meta($term->term_id, 'bokun_product_image_map', []);
+        delete_term_meta($term->term_id, 'bokun_product_key_photo_attachment');
+        delete_term_meta($term->term_id, 'bokun_product_key_photo_remote_id');
+        update_term_meta($term->term_id, 'bokun_product_last_image_import', current_time('mysql'));
+
+        return [
+            'status'    => 'skipped',
+            'message'   => sprintf(
+                /* translators: %s: Product tag name. */
+                __('No photos available for product tag “%s”.', 'bokun-bookings-manager'),
+                $term_name
+            ),
+            'term_id'   => $term->term_id,
+            'term_name' => $term_name,
+            'errors'    => [],
+        ];
+    }
+
+    $existing_map = get_term_meta($term->term_id, 'bokun_product_image_map', true);
+
+    if (!is_array($existing_map)) {
+        $existing_map = [];
+    }
+
+    $existing_map = array_filter(
+        $existing_map,
+        function ($attachment_id) {
+            return $attachment_id && get_post((int) $attachment_id);
+        }
+    );
+
+    $new_map       = [];
+    $errors        = [];
+    $downloaded    = 0;
+    $refreshed     = 0;
+
+    foreach ($photos as $photo) {
+        $remote_id     = $photo['remote_id'];
+        $attachment_id = isset($existing_map[$remote_id]) ? (int) $existing_map[$remote_id] : 0;
+
+        if ($attachment_id > 0 && get_post($attachment_id)) {
+            bokun_update_attachment_metadata($attachment_id, $photo, $context);
+            $new_map[$remote_id] = $attachment_id;
+            $refreshed++;
+            continue;
+        }
+
+        $attachment_id = bokun_download_product_tag_photo($term, $photo, $context);
+
+        if (is_wp_error($attachment_id)) {
+            $errors[] = sanitize_text_field($attachment_id->get_error_message());
+            continue;
+        }
+
+        if ($attachment_id > 0) {
+            $new_map[$remote_id] = $attachment_id;
+            $downloaded++;
+        }
+    }
+
+    $removed = [];
+
+    foreach ($existing_map as $remote_id => $attachment_id) {
+        if (!isset($new_map[$remote_id])) {
+            $removed[] = (int) $attachment_id;
+        }
+    }
+
+    if (!empty($removed)) {
+        bokun_ensure_media_dependencies_loaded();
+
+        foreach ($removed as $attachment_id) {
+            if ($attachment_id > 0 && get_post($attachment_id)) {
+                wp_delete_attachment($attachment_id, true);
+            }
+        }
+    }
+
+    $attachment_ids = array_map('intval', array_values($new_map));
+
+    update_term_meta($term->term_id, 'bokun_product_image_map', $new_map);
+    update_term_meta($term->term_id, 'bokun_product_image_ids', $attachment_ids);
+    update_term_meta($term->term_id, 'bokun_product_last_image_import', current_time('mysql'));
+    update_term_meta($term->term_id, 'bokun_product_image_import_context', $context);
+
+    $key_remote_id = null;
+    foreach ($photos as $photo) {
+        if (!empty($photo['is_key_photo'])) {
+            $key_remote_id = $photo['remote_id'];
+            break;
+        }
+    }
+
+    if ($key_remote_id && isset($new_map[$key_remote_id])) {
+        update_term_meta($term->term_id, 'bokun_product_key_photo_attachment', (int) $new_map[$key_remote_id]);
+        update_term_meta($term->term_id, 'bokun_product_key_photo_remote_id', $key_remote_id);
+    } else {
+        delete_term_meta($term->term_id, 'bokun_product_key_photo_attachment');
+        delete_term_meta($term->term_id, 'bokun_product_key_photo_remote_id');
+    }
+
+    if (!empty($errors)) {
+        return [
+            'status'    => 'error',
+            'message'   => sprintf(
+                /* translators: %s: Product tag name. */
+                __('Encountered errors while importing images for product tag “%s”.', 'bokun-bookings-manager'),
+                $term_name
+            ),
+            'term_id'   => $term->term_id,
+            'term_name' => $term_name,
+            'downloaded'=> $downloaded,
+            'refreshed' => $refreshed,
+            'removed'   => count($removed),
+            'errors'    => array_map('sanitize_text_field', $errors),
+        ];
+    }
+
+    $status = ($downloaded > 0 || !empty($removed)) ? 'updated' : 'unchanged';
+
+    return [
+        'status'     => $status,
+        'message'    => sprintf(
+            /* translators: 1: Product tag name, 2: number of downloaded images. */
+            __('Imported %2$d image(s) for product tag “%1$s”.', 'bokun-bookings-manager'),
+            $term_name,
+            $downloaded
+        ),
+        'term_id'    => $term->term_id,
+        'term_name'  => $term_name,
+        'downloaded' => $downloaded,
+        'refreshed'  => $refreshed,
+        'removed'    => count($removed),
+        'errors'     => [],
+    ];
+}
+
+/**
+ * Normalize photo entries from a Bokun activity payload.
+ *
+ * @param array $activity Activity payload.
+ *
+ * @return array Normalized photo information.
+ */
+function bokun_extract_activity_photos($activity) {
+    if (!is_array($activity)) {
+        return [];
+    }
+
+    $photo_entries = [];
+
+    if (!empty($activity['keyPhoto']) && is_array($activity['keyPhoto'])) {
+        $key_photo               = $activity['keyPhoto'];
+        $key_photo['is_key_photo'] = true;
+        $photo_entries[]         = $key_photo;
+    }
+
+    if (!empty($activity['photos']) && is_array($activity['photos'])) {
+        foreach ($activity['photos'] as $photo) {
+            if (!is_array($photo)) {
+                continue;
+            }
+            $photo_entries[] = $photo;
+        }
+    }
+
+    $normalized = [];
+
+    foreach ($photo_entries as $photo) {
+        $remote_id = '';
+
+        if (isset($photo['id']) && '' !== $photo['id']) {
+            $remote_id = (string) $photo['id'];
+        } elseif (!empty($photo['fileName'])) {
+            $remote_id = wp_basename($photo['fileName']);
+        } elseif (!empty($photo['originalUrl'])) {
+            $remote_id = md5($photo['originalUrl']);
+        }
+
+        $original_url = isset($photo['originalUrl']) ? esc_url_raw($photo['originalUrl']) : '';
+
+        if ('' === $remote_id || '' === $original_url) {
+            continue;
+        }
+
+        if (!isset($normalized[$remote_id])) {
+            $normalized[$remote_id] = [
+                'remote_id'   => $remote_id,
+                'original_url'=> $original_url,
+                'description' => isset($photo['description']) ? wp_strip_all_tags((string) $photo['description']) : '',
+                'alt_text'    => isset($photo['alternateText']) ? wp_strip_all_tags((string) $photo['alternateText']) : '',
+                'file_name'   => isset($photo['fileName']) ? wp_basename((string) $photo['fileName']) : '',
+                'is_key_photo'=> !empty($photo['is_key_photo']),
+            ];
+        } elseif (!empty($photo['is_key_photo'])) {
+            $normalized[$remote_id]['is_key_photo'] = true;
+        }
+    }
+
+    return array_values($normalized);
+}
+
+/**
+ * Ensure media helper functions are available.
+ */
+function bokun_ensure_media_dependencies_loaded() {
+    if (!function_exists('media_sideload_image')) {
+        require_once ABSPATH . 'wp-admin/includes/media.php';
+    }
+
+    if (!function_exists('download_url')) {
+        require_once ABSPATH . 'wp-admin/includes/file.php';
+    }
+
+    if (!function_exists('wp_generate_attachment_metadata')) {
+        require_once ABSPATH . 'wp-admin/includes/image.php';
+    }
+
+    if (!function_exists('wp_delete_attachment')) {
+        require_once ABSPATH . 'wp-admin/includes/post.php';
+    }
+}
+
+/**
+ * Download a Bokun activity photo and create a WordPress attachment.
+ *
+ * @param WP_Term $term   Product tag term.
+ * @param array   $photo  Normalized photo data.
+ * @param string  $context Import context.
+ *
+ * @return int|WP_Error Attachment ID on success or WP_Error on failure.
+ */
+function bokun_download_product_tag_photo($term, $photo, $context = 'default') {
+    bokun_ensure_media_dependencies_loaded();
+
+    $term_name  = is_object($term) ? wp_strip_all_tags($term->name) : '';
+    $description = sprintf(
+        /* translators: %s: Product tag name. */
+        __('Bokun image for product tag “%s”.', 'bokun-bookings-manager'),
+        $term_name
+    );
+
+    $attachment_id = media_sideload_image($photo['original_url'], 0, $description, 'id');
+
+    if (is_wp_error($attachment_id)) {
+        return $attachment_id;
+    }
+
+    bokun_update_attachment_metadata($attachment_id, $photo, $context);
+
+    return (int) $attachment_id;
+}
+
+/**
+ * Update attachment metadata with Bokun details.
+ *
+ * @param int    $attachment_id Attachment ID.
+ * @param array  $photo         Normalized photo data.
+ * @param string $context       Import context.
+ */
+function bokun_update_attachment_metadata($attachment_id, $photo, $context = 'default') {
+    $attachment_id = (int) $attachment_id;
+
+    if ($attachment_id <= 0) {
+        return;
+    }
+
+    $context = bokun_normalize_import_context($context);
+
+    if (!empty($photo['alt_text'])) {
+        update_post_meta($attachment_id, '_wp_attachment_image_alt', sanitize_text_field($photo['alt_text']));
+    }
+
+    $update = [
+        'ID'           => $attachment_id,
+        'post_excerpt' => sanitize_text_field($photo['description']),
+    ];
+
+    wp_update_post($update);
+
+    update_post_meta($attachment_id, '_bokun_remote_id', sanitize_text_field($photo['remote_id']));
+    update_post_meta($attachment_id, '_bokun_remote_url', esc_url_raw($photo['original_url']));
+    update_post_meta($attachment_id, '_bokun_remote_context', $context);
 }
 
 /**
@@ -3153,6 +3688,13 @@ function edit_product_tag_custom_fields($term, $taxonomy) {
     $statusok = get_term_meta($term->term_id, 'statusok', true);
     $statusattention = get_term_meta($term->term_id, 'statusattention', true);
     $statusalarm = get_term_meta($term->term_id, 'statusalarm', true);
+    $image_ids = get_term_meta($term->term_id, 'bokun_product_image_ids', true);
+
+    if (!is_array($image_ids)) {
+        $image_ids = [];
+    }
+
+    $image_ids = array_filter(array_map('intval', $image_ids));
     ?>
     <tr class="form-field">
         <th scope="row" valign="top"><label for="term_meta[statusok]"><?php _e('Status OK', 'bokun-bookings-manager'); ?></label></th>
@@ -3173,6 +3715,22 @@ function edit_product_tag_custom_fields($term, $taxonomy) {
         <td>
             <input type="number" name="term_meta[statusalarm]" id="term_meta[statusalarm]" value="<?php echo esc_attr($statusalarm) ? esc_attr($statusalarm) : ''; ?>">
             <p class="description"><?php _e('Enter the number of days for Status Alarm.', 'bokun-bookings-manager'); ?></p>
+        </td>
+    </tr>
+    <tr class="form-field">
+        <th scope="row" valign="top"><?php _e('Imported images', 'bokun-bookings-manager'); ?></th>
+        <td>
+            <?php if (!empty($image_ids)) : ?>
+                <ul class="bokun-product-tag-images" style="display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:0;padding:0;">
+                    <?php foreach ($image_ids as $attachment_id) : ?>
+                        <li>
+                            <?php echo wp_get_attachment_image($attachment_id, [80, 80], false, ['style' => 'max-width:80px;height:auto;']); ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php else : ?>
+                <p class="description"><?php _e('No images have been imported for this product tag yet.', 'bokun-bookings-manager'); ?></p>
+            <?php endif; ?>
         </td>
     </tr>
     <?php
