@@ -233,7 +233,7 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
                 $skipped
             );
 
-            if (0 === $total_terms && 0 === $processed) {
+            if (0 === $total_terms) {
                 $primary_message = __('No product tags with Bokun product IDs are available for import.', 'BOKUN_txt_domain');
             }
 
