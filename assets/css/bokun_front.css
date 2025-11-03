@@ -426,20 +426,21 @@
   color: #2563eb;
 }
 
+
 .bokun-booking-dashboard__copy-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  border: none;
+  display: inline;
+  border: 0;
   border-radius: 0;
-  background: none;
+  background: transparent;
   background-color: transparent;
   box-shadow: none;
   color: #2563eb;
   padding: 0;
+  margin: 0;
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+  line-height: inherit;
   cursor: pointer;
   text-decoration: none;
   transition: color 0.2s ease, text-decoration-color 0.2s ease;
@@ -448,9 +449,9 @@
 
 .bokun-booking-dashboard__copy-button:hover,
 .bokun-booking-dashboard__copy-button:focus {
-  color: #1d4ed8;
+  color: #1e3a8a;
   text-decoration: underline;
-  background: none;
+  background: transparent;
   background-color: transparent;
   box-shadow: none;
   outline: none;
