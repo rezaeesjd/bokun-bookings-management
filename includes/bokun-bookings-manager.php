@@ -729,7 +729,6 @@ function bokun_save_specific_fields($post_id, $booking, $context = 'default') {
     // Assign product title tag to the post
     if (!empty($product_title)) {
         bokun_assign_tag_to_post($post_id, $product_title, 'product_tags');
-        bokun_sync_product_tag_metadata_from_booking($productBooking, $context);
     }
 
     // Handle booking status
