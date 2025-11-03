@@ -1132,16 +1132,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             ob_start();
             ?>
             <div id="<?php echo esc_attr($dashboard_id); ?>" class="bokun-booking-dashboard" <?php echo $columns_style; ?>>
-                <div class="bokun-booking-dashboard__intro">
-                    <div class="bokun-booking-dashboard__intro-copy">
-                        <h2 class="bokun-booking-dashboard__heading"><?php esc_html_e('Booking Dashboard', 'BOKUN_txt_domain'); ?></h2>
-                        <p class="bokun-booking-dashboard__description"><?php esc_html_e('Manage and view all your bookings in one place.', 'BOKUN_txt_domain'); ?></p>
-                    </div>
-                    <div class="bokun-booking-dashboard__reminder" role="status" aria-live="polite">
-                        <span class="bokun-booking-dashboard__reminder-note"><?php esc_html_e('** double check - logged in with correct account on partner website?', 'BOKUN_txt_domain'); ?></span>
-                    </div>
-                </div>
-
                 <div class="bokun-booking-dashboard__controls" data-dashboard-controls>
                     <div class="bokun-booking-dashboard__search">
                         <?php
