@@ -396,19 +396,17 @@
 
 .bokun-booking-dashboard__title-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.6rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
   width: 100%;
 }
 
-.bokun-booking-dashboard__title-actions {
+.bokun-booking-dashboard__title-main {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-left: auto;
+  align-items: baseline;
+  gap: 0.5rem;
 }
 
 .bokun-booking-dashboard__title {
@@ -429,8 +427,11 @@
 }
 
 .bokun-booking-dashboard__copy-button {
-  border: 0;
-  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: none;
+  background: none;
   color: #2563eb;
   padding: 0;
   font-size: 0.75rem;
@@ -442,7 +443,7 @@
 
 .bokun-booking-dashboard__copy-button:hover,
 .bokun-booking-dashboard__copy-button:focus {
-  color: #1d4ed8;
+  color: #1e40af;
   text-decoration: underline;
   outline: none;
 }

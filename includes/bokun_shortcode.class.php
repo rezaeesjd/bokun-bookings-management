@@ -803,42 +803,40 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 >
                     <header class="bokun-booking-dashboard__header">
                         <div class="bokun-booking-dashboard__title-row">
-                            <h3 class="bokun-booking-dashboard__title">
-                                <?php if (!empty($permalink)) : ?>
-                                    <a href="<?php echo esc_url($permalink); ?>" target="_blank" rel="noopener noreferrer">
-                                        <?php echo esc_html(get_the_title($post_id)); ?>
-                                    </a>
-                                <?php else : ?>
-                                    <?php echo esc_html(get_the_title($post_id)); ?>
-                                <?php endif; ?>
-                            </h3>
-                            <?php if (!empty($partner_page_url) || !empty($title_copy_value)) : ?>
-                                <div class="bokun-booking-dashboard__title-actions">
-                                    <?php if (!empty($partner_page_url)) : ?>
-                                        <a
-                                            class="bokun-booking-dashboard__reserve-link"
-                                            href="<?php echo esc_url($partner_page_url); ?>"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            <?php esc_html_e('Reserve link', 'BOKUN_txt_domain'); ?>
+                            <div class="bokun-booking-dashboard__title-main">
+                                <h3 class="bokun-booking-dashboard__title">
+                                    <?php if (!empty($permalink)) : ?>
+                                        <a href="<?php echo esc_url($permalink); ?>" target="_blank" rel="noopener noreferrer">
+                                            <?php echo esc_html(get_the_title($post_id)); ?>
                                         </a>
+                                    <?php else : ?>
+                                        <?php echo esc_html(get_the_title($post_id)); ?>
                                     <?php endif; ?>
-                                    <?php if (!empty($title_copy_value)) : ?>
-                                        <button
-                                            type="button"
-                                            class="bokun-booking-dashboard__copy-button"
-                                            data-copy-value="<?php echo esc_attr($title_copy_value); ?>"
-                                            <?php if (!empty($title_copy_html)) : ?>data-copy-html="<?php echo esc_attr($title_copy_html); ?>"<?php endif; ?>
-                                            data-copy-label="<?php esc_attr_e('Copy title & link', 'BOKUN_txt_domain'); ?>"
-                                            data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
-                                            data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
-                                            data-copy-state="default"
-                                        >
-                                            <?php esc_html_e('Copy title & link', 'BOKUN_txt_domain'); ?>
-                                        </button>
-                                    <?php endif; ?>
-                                </div>
+                                </h3>
+                                <?php if (!empty($title_copy_value)) : ?>
+                                    <button
+                                        type="button"
+                                        class="bokun-booking-dashboard__copy-button"
+                                        data-copy-value="<?php echo esc_attr($title_copy_value); ?>"
+                                        <?php if (!empty($title_copy_html)) : ?>data-copy-html="<?php echo esc_attr($title_copy_html); ?>"<?php endif; ?>
+                                        data-copy-label="<?php esc_attr_e('Copy title & link', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-done="<?php esc_attr_e('Copied!', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-error="<?php esc_attr_e('Copy failed', 'BOKUN_txt_domain'); ?>"
+                                        data-copy-state="default"
+                                    >
+                                        <?php esc_html_e('Copy title & link', 'BOKUN_txt_domain'); ?>
+                                    </button>
+                                <?php endif; ?>
+                            </div>
+                            <?php if (!empty($partner_page_url)) : ?>
+                                <a
+                                    class="bokun-booking-dashboard__reserve-link"
+                                    href="<?php echo esc_url($partner_page_url); ?>"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    <?php esc_html_e('Reserve link', 'BOKUN_txt_domain'); ?>
+                                </a>
                             <?php endif; ?>
                         </div>
                         <?php if (!empty($vendor_title)) : ?>
