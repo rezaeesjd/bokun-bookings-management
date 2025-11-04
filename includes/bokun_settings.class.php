@@ -11,6 +11,8 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
             add_action('wp_ajax_bokun_save_api_auth_upgrade',array( $this, "bokun_save_api_auth_upgrade" ), 10 , 2 );
             add_action('wp_ajax_no_priv_bokun_save_api_auth_upgrade',array( $this, "bokun_save_api_auth_upgrade" ), 10 , 2 );
 
+            add_action('wp_ajax_bokun_save_api_credentials', array($this, 'bokun_save_api_credentials'));
+
             add_action('wp_ajax_bokun_bookings_manager_page',array( $this, "bokun_bookings_manager_page" ), 10  );
             add_action('wp_ajax_nopriv_bokun_bookings_manager_page',array( $this, "bokun_bookings_manager_page" ), 10  );
 
@@ -33,13 +35,35 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
             }
 
             $mode = isset($_POST['mode']) ? sanitize_key(wp_unslash($_POST['mode'])) : '';
-            $progress_context = ($mode === 'upgrade') ? 'upgrade' : 'fetch';
-            // If nonce check passes, proceed with your logic
-            if ($mode === 'upgrade') {
-                $bookings = bokun_fetch_bookings('upgrade'); // Replace with your actual function
-            } else {
-                $bookings = bokun_fetch_bookings(); // Replace with your actual function
+
+            $configured_credentials = bokun_get_configured_api_credentials();
+
+            if (empty($configured_credentials)) {
+                wp_send_json_error(array('msg' => __('Please configure at least one set of API credentials before running the import.', 'BOKUN_txt_domain')));
+                wp_die();
             }
+
+            $available_contexts = array_keys($configured_credentials);
+
+            if (empty($mode)) {
+                $mode = isset($available_contexts[0]) ? $available_contexts[0] : 'default';
+            }
+
+            if (!isset($configured_credentials[$mode])) {
+                if (in_array($mode, array('fetch', 'default'), true) && isset($available_contexts[0])) {
+                    $mode = $available_contexts[0];
+                } elseif ('upgrade' === $mode && isset($available_contexts[1])) {
+                    $mode = $available_contexts[1];
+                }
+            }
+
+            if (!isset($configured_credentials[$mode]) && isset($available_contexts[0])) {
+                $mode = $available_contexts[0];
+            }
+
+            $progress_context = bokun_normalize_import_context($mode);
+
+            $bookings = bokun_fetch_bookings($progress_context);
             // echo 'out';
             // echo '<pre>';
             // print_r($bookings);
@@ -118,43 +142,147 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
         }
        
         function bokun_save_api_auth() {
-            // Verify that the request is coming from an authenticated user
             if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
                 wp_send_json_error(array('msg' => 'Invalid nonce.'));
                 wp_die();
             }
 
-            // Sanitize the POST data
-            $api_key = sanitize_text_field($_POST['api_key']);
-            $secret_key = sanitize_text_field($_POST['secret_key']);
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error(array('msg' => __('You are not allowed to update these settings.', 'BOKUN_txt_domain')));
+                wp_die();
+            }
 
-            // Save the values in the WordPress options table
-            update_option('bokun_api_key', $api_key);
-            update_option('bokun_secret_key', $secret_key);
+            $api_key    = isset($_POST['api_key']) ? sanitize_text_field(wp_unslash($_POST['api_key'])) : '';
+            $secret_key = isset($_POST['secret_key']) ? sanitize_text_field(wp_unslash($_POST['secret_key'])) : '';
 
-            // Return a success response
-            wp_send_json_success(array('msg' => 'API keys saved successfully.', 'status' => false));
-            wp_die(); // Terminate the script to prevent WordPress from outputting any further content
+            $credentials = get_option('bokun_api_credentials', []);
+            if (!is_array($credentials)) {
+                $credentials = [];
+            }
+
+            $credentials[0] = array(
+                'api_key'    => $api_key,
+                'secret_key' => $secret_key,
+            );
+
+            $credentials = $this->filter_valid_api_credentials($credentials);
+            update_option('bokun_api_credentials', $credentials);
+
+            delete_option('bokun_api_key');
+            delete_option('bokun_secret_key');
+
+            wp_send_json_success(array('msg' => __('API keys saved successfully.', 'BOKUN_txt_domain'), 'status' => true));
+            wp_die();
         }
 
         function bokun_save_api_auth_upgrade() {
-            // Verify that the request is coming from an authenticated user
             if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
                 wp_send_json_error(array('msg' => 'Invalid nonce.'));
                 wp_die();
             }
 
-            // Sanitize the POST data
-            $api_key = sanitize_text_field($_POST['api_key_upgrade']);
-            $secret_key = sanitize_text_field($_POST['secret_key_upgrade']);
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error(array('msg' => __('You are not allowed to update these settings.', 'BOKUN_txt_domain')));
+                wp_die();
+            }
 
-            // Save the values in the WordPress options table
-            update_option('bokun_api_key_upgrade', $api_key);
-            update_option('bokun_secret_key_upgrade', $secret_key);
+            $api_key    = isset($_POST['api_key_upgrade']) ? sanitize_text_field(wp_unslash($_POST['api_key_upgrade'])) : '';
+            $secret_key = isset($_POST['secret_key_upgrade']) ? sanitize_text_field(wp_unslash($_POST['secret_key_upgrade'])) : '';
 
-            // Return a success response
-            wp_send_json_success(array('msg' => 'API keys saved successfully.', 'status' => false));
-            wp_die(); // Terminate the script to prevent WordPress from outputting any further content
+            $credentials = get_option('bokun_api_credentials', []);
+            if (!is_array($credentials)) {
+                $credentials = [];
+            }
+
+            $credentials[1] = array(
+                'api_key'    => $api_key,
+                'secret_key' => $secret_key,
+            );
+
+            $credentials = $this->filter_valid_api_credentials($credentials);
+            update_option('bokun_api_credentials', $credentials);
+
+            delete_option('bokun_api_key_upgrade');
+            delete_option('bokun_secret_key_upgrade');
+
+            wp_send_json_success(array('msg' => __('API keys saved successfully.', 'BOKUN_txt_domain'), 'status' => true));
+            wp_die();
+        }
+
+        protected function filter_valid_api_credentials($credentials) {
+            if (!is_array($credentials)) {
+                return [];
+            }
+
+            $filtered = [];
+
+            foreach ($credentials as $entry) {
+                if (!is_array($entry)) {
+                    continue;
+                }
+
+                $api_key    = isset($entry['api_key']) ? trim((string) $entry['api_key']) : '';
+                $secret_key = isset($entry['secret_key']) ? trim((string) $entry['secret_key']) : '';
+
+                if ('' === $api_key || '' === $secret_key) {
+                    continue;
+                }
+
+                $filtered[] = array(
+                    'api_key'    => $api_key,
+                    'secret_key' => $secret_key,
+                );
+            }
+
+            return array_values($filtered);
+        }
+
+        function bokun_save_api_credentials() {
+            if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
+                wp_send_json_error(array('msg' => __('Invalid nonce.', 'BOKUN_txt_domain')));
+                wp_die();
+            }
+
+            if (!current_user_can('manage_options')) {
+                wp_send_json_error(array('msg' => __('You are not allowed to update these settings.', 'BOKUN_txt_domain')));
+                wp_die();
+            }
+
+            $raw_credentials = isset($_POST['api_credentials']) ? wp_unslash($_POST['api_credentials']) : [];
+            $credentials = [];
+
+            if (is_array($raw_credentials)) {
+                foreach ($raw_credentials as $entry) {
+                    if (!is_array($entry)) {
+                        continue;
+                    }
+
+                    $api_key    = isset($entry['api_key']) ? sanitize_text_field($entry['api_key']) : '';
+                    $secret_key = isset($entry['secret_key']) ? sanitize_text_field($entry['secret_key']) : '';
+
+                    $api_key    = trim($api_key);
+                    $secret_key = trim($secret_key);
+
+                    if ('' === $api_key || '' === $secret_key) {
+                        continue;
+                    }
+
+                    $credentials[] = array(
+                        'api_key'    => $api_key,
+                        'secret_key' => $secret_key,
+                    );
+                }
+            }
+
+            update_option('bokun_api_credentials', $credentials);
+
+            delete_option('bokun_api_key');
+            delete_option('bokun_secret_key');
+            delete_option('bokun_api_key_upgrade');
+            delete_option('bokun_secret_key_upgrade');
+
+            wp_send_json_success(array('msg' => __('API keys saved successfully.', 'BOKUN_txt_domain')));
+            wp_die();
         }
 
         function bokun_save_dashboard_settings() {

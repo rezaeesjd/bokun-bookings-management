@@ -3,7 +3,83 @@ jQuery(function ($) {
         var ajaxUrl = (typeof bokun_api_auth_vars !== 'undefined' && bokun_api_auth_vars.ajax_url) ? bokun_api_auth_vars.ajax_url : (typeof ajaxurl !== 'undefined' ? ajaxurl : '');
         var importProgressPollers = {};
         var progressPollInterval = 1000;
-        var CONTEXT_DISPLAY_ORDER = ['fetch', 'upgrade'];
+        var apiContexts = Array.isArray(bokun_api_auth_vars && bokun_api_auth_vars.apiContexts) ? bokun_api_auth_vars.apiContexts : [];
+        var apiContextMap = {};
+
+        apiContexts = apiContexts.filter(function (context) {
+                return context && (typeof context === 'object');
+        }).map(function (context, index) {
+                var slug = context.slug ? String(context.slug) : 'api_' + (index + 1);
+                var normalizedIndex = typeof context.index === 'number' && !isNaN(context.index) ? context.index : index + 1;
+                var label = context.label ? String(context.label) : 'API #' + normalizedIndex;
+
+                var normalizedContext = {
+                        slug: slug,
+                        label: label,
+                        index: normalizedIndex
+                };
+
+                apiContextMap[slug] = normalizedContext;
+
+                return normalizedContext;
+        });
+
+        var CONTEXT_DISPLAY_ORDER = apiContexts.length ? apiContexts.map(function (context) {
+                return context.slug;
+        }) : [];
+
+        function getContextDefinition(slug, index) {
+                if (slug && apiContextMap[slug]) {
+                        return apiContextMap[slug];
+                }
+
+                if (typeof index === 'number' && index >= 0 && index < apiContexts.length) {
+                        return apiContexts[index];
+                }
+
+                if (slug && /^api_(\d+)$/.test(slug)) {
+                        var parsedIndex = parseInt(slug.replace('api_', ''), 10);
+
+                        if (!isNaN(parsedIndex) && parsedIndex > 0 && parsedIndex - 1 < apiContexts.length) {
+                                return apiContexts[parsedIndex - 1];
+                        }
+                }
+
+                return null;
+        }
+
+        function getContextLabel(slug, index) {
+                var definition = getContextDefinition(slug, index);
+
+                if (definition && definition.label) {
+                        return definition.label;
+                }
+
+                var fallbackIndex = index;
+
+                if (typeof fallbackIndex !== 'number' || fallbackIndex < 0) {
+                        if (slug && /^api_(\d+)$/.test(slug)) {
+                                fallbackIndex = parseInt(slug.replace('api_', ''), 10) - 1;
+                        } else if (slug) {
+                                fallbackIndex = CONTEXT_DISPLAY_ORDER.indexOf(slug);
+                        }
+                }
+
+                if (typeof fallbackIndex !== 'number' || fallbackIndex < 0) {
+                        fallbackIndex = 0;
+                }
+
+                var humanIndex = fallbackIndex + 1;
+                return 'API #' + humanIndex;
+        }
+
+        function getContextSlugByIndex(index) {
+                if (apiContexts[index]) {
+                        return apiContexts[index].slug;
+                }
+
+                return CONTEXT_DISPLAY_ORDER[index] || ('api_' + (index + 1));
+        }
 
         function startImportProgressPolling(mode, options) {
                 options = options || {};
@@ -137,7 +213,7 @@ jQuery(function ($) {
                 }
 
                 if (typeof window.bokunImportProgress.fallbackTotal !== 'number' || isNaN(window.bokunImportProgress.fallbackTotal)) {
-                        window.bokunImportProgress.fallbackTotal = 2;
+                        window.bokunImportProgress.fallbackTotal = Math.max(apiContexts.length, 2);
                 }
 
                 if (!window.bokunImportProgress.contextMessages || typeof window.bokunImportProgress.contextMessages !== 'object') {
@@ -151,7 +227,7 @@ jQuery(function ($) {
                 var state = getImportProgressState();
                 state.totalItems = typeof total === 'number' && total > 0 ? total : 0;
                 state.completedItems = 0;
-                state.fallbackTotal = 2;
+                state.fallbackTotal = Math.max(apiContexts.length, 2);
                 state.contextMessages = {};
         }
 
@@ -192,158 +268,135 @@ jQuery(function ($) {
                 });
         }
 
+        function runContextImportSequence(startIndex) {
+                var $button = $('.bokun_fetch_booking_data_front');
+
+                if (!Array.isArray(apiContexts) || !apiContexts.length) {
+                        $button.text('Fetch').prop('disabled', false);
+                        setImportProgress('error', { message: 'No API credentials configured.' });
+                        alert('No API credentials configured.');
+                        return;
+                }
+
+                var index = typeof startIndex === 'number' ? startIndex : 0;
+
+                if (index >= apiContexts.length) {
+                        setImportProgress('allComplete', { totalContexts: apiContexts.length });
+                        $button.text('Fetch').prop('disabled', false);
+                        return;
+                }
+
+                var context = apiContexts[index];
+                var contextSlug = context.slug;
+                var contextLabel = context.label;
+
+                setImportProgress('contextStart', {
+                        context: contextSlug,
+                        label: contextLabel,
+                        index: index,
+                        totalContexts: apiContexts.length
+                });
+
+                startImportProgressPolling(contextSlug);
+
+                $.ajax({
+                        type: 'POST',
+                        url: ajaxUrl,
+                        data: {
+                                action: 'bokun_bookings_manager_page',
+                                security: bokun_api_auth_vars.nonce,
+                                mode: contextSlug
+                        },
+                        dataType: 'json'
+                }).done(function (res) {
+                        stopImportProgressPolling(contextSlug);
+
+                        if (res && res.success) {
+                                if (res.data && res.data.import_summary) {
+                                        updateImportProgressFromSummary(res.data.import_summary, {
+                                                label: contextLabel,
+                                                isFinal: true,
+                                                context: contextSlug
+                                        });
+                                } else if (res.data && res.data.progress_message) {
+                                        var decodedMessage = decodeHTMLEntities(res.data.progress_message);
+                                        setImportProgress('summaryUpdate', {
+                                                summary: { total: 0, processed: 0, created: 0, updated: 0, skipped: 0 },
+                                                message: decodedMessage,
+                                                isFinal: true,
+                                                useAbsolute: true,
+                                                context: contextSlug,
+                                                totalItems: 0,
+                                                current: 0,
+                                                value: 100
+                                        });
+                                } else {
+                                        setImportProgress('contextComplete', {
+                                                context: contextSlug,
+                                                label: contextLabel,
+                                                index: index,
+                                                totalContexts: apiContexts.length
+                                        });
+                                }
+
+                                if (res.data && res.data.msg) {
+                                        alert(decodeHTMLEntities(res.data.msg));
+                                }
+
+                                runContextImportSequence(index + 1);
+                        } else {
+                                setImportProgress('error', {
+                                        context: contextSlug,
+                                        message: res && res.data && res.data.msg ? decodeHTMLEntities(res.data.msg) : ''
+                                });
+
+                                var errorMessage = res && res.data && res.data.msg ? decodeHTMLEntities(res.data.msg) : 'An unexpected error occurred.';
+                                alert(errorMessage);
+                                $button.text('Fetch').prop('disabled', false);
+                        }
+                }).fail(function (xhr, status, error) {
+                        stopImportProgressPolling(contextSlug);
+                        setImportProgress('error', { context: contextSlug });
+
+                        var responseText = xhr && xhr.responseText ? xhr.responseText : '';
+                        var formattedMessage;
+
+                        try {
+                                var parsedResponse = responseText ? JSON.parse(responseText) : null;
+                                formattedMessage = parsedResponse && parsedResponse.message ? 'Error: ' + parsedResponse.message : 'Error: ' + responseText;
+                        } catch (e) {
+                                formattedMessage = 'Error: Received unexpected response code ' + xhr.status + '. Response: ' + responseText;
+                        }
+
+                        alert(formattedMessage);
+                        console.error('Error:', error);
+                        $button.text('Fetch').prop('disabled', false);
+                });
+        }
+
         $(document).on('click', '.bokun_fetch_booking_data_front', function (e) {
                 e.preventDefault();
 
+                if (!ajaxUrl) {
+                        alert('AJAX endpoint is not available.');
+                        return;
+                }
+
+                if (!apiContexts.length) {
+                        alert('No API credentials configured.');
+                        return;
+                }
+
                 var $button = $('.bokun_fetch_booking_data_front');
 
-                $button.text('Processing…');
-                $('.msg_sec').hide();
+                $button.text('Processing…').prop('disabled', true);
+                $('.msg_sec, .msg_success, .msg_error').hide();
                 stopAllImportProgressPolling();
                 resetImportProgressState();
                 setImportProgress('reset');
-                setImportProgress('startApi1', {
-                        current: 0
-                });
-                startImportProgressPolling('fetch');
 
-                $.ajax({
-                        type: 'POST',
-                        url: ajaxUrl,
-                        data: {
-                                action: 'bokun_bookings_manager_page',
-                                security: bokun_api_auth_vars.nonce,
-                                mode: 'fetch'
-                        },
-                        dataType: 'json',
-                        success: function (res) {
-                                $button.text('Fetch');
-                                $('.msg_success, .msg_error').hide();
-
-                                        if (res.success) {
-                                                stopImportProgressPolling('fetch');
-                                                if (res.data && res.data.import_summary) {
-                                                        updateImportProgressFromSummary(res.data.import_summary, {
-                                                                label: 'Imported items from API 1',
-                                                                isFinal: true,
-                                                                context: 'fetch'
-                                                        });
-                                                } else if (res.data && res.data.progress_message) {
-                                                        var api1Message = decodeHTMLEntities(res.data.progress_message);
-                                                        setImportProgress('summaryUpdate', {
-                                                                summary: { total: 0, processed: 0, created: 0, updated: 0, skipped: 0 },
-                                                                message: api1Message,
-                                                                isFinal: true,
-                                                                useAbsolute: true,
-                                                                context: 'fetch',
-                                                                totalItems: 0,
-                                                                current: 0,
-                                                                value: 100
-                                                        });
-                                                } else {
-                                                        setImportProgress('api1Complete');
-                                                }
-                                        call_from_second_api_front();
-                                } else {
-                                        stopImportProgressPolling('fetch');
-                                        setImportProgress('error');
-                                        alert(res.data.msg);
-                                }
-                        },
-                        error: function (xhr, status, error) {
-                                $button.text('Fetch');
-                                stopImportProgressPolling('fetch');
-                                setImportProgress('error');
-
-                                var responseText = xhr.responseText;
-                                var formattedMessage;
-
-                                try {
-                                        var parsedResponse = JSON.parse(responseText);
-                                        formattedMessage = `Error: ${parsedResponse.message}`;
-                                } catch (e) {
-                                        formattedMessage = `Error: Received unexpected response code ${xhr.status}. Response: ${responseText}`;
-                                }
-
-                                alert(formattedMessage);
-                                console.error('Error:', error);
-                        }
-                });
+                runContextImportSequence(0);
         });
-
-        function call_from_second_api_front() {
-                var $button = $('.bokun_fetch_booking_data_front');
-
-                $button.text('Processing again…');
-                var progressState = getImportProgressState();
-                setImportProgress('startApi2', {
-                        current: progressState.completedItems,
-                        totalItems: progressState.totalItems
-                });
-                startImportProgressPolling('upgrade');
-
-                $.ajax({
-                        type: 'POST',
-                        url: ajaxUrl,
-                        data: {
-                                action: 'bokun_bookings_manager_page',
-                                security: bokun_api_auth_vars.nonce,
-                                mode: 'upgrade'
-                        },
-                        dataType: 'json',
-                        success: function (res) {
-                                $button.text('Fetch');
-                                stopImportProgressPolling('upgrade');
-
-                                        if (res.success) {
-                                                if (res.data && res.data.import_summary) {
-                                                        updateImportProgressFromSummary(res.data.import_summary, {
-                                                                label: 'Imported items from API 2',
-                                                                isFinal: true,
-                                                                context: 'upgrade'
-                                                        });
-                                                } else if (res.data && res.data.progress_message) {
-                                                        var api2Message = decodeHTMLEntities(res.data.progress_message);
-                                                        setImportProgress('summaryUpdate', {
-                                                                summary: { total: 0, processed: 0, created: 0, updated: 0, skipped: 0 },
-                                                                message: api2Message,
-                                                                isFinal: true,
-                                                                useAbsolute: true,
-                                                                context: 'upgrade',
-                                                                totalItems: 0,
-                                                                current: 0,
-                                                                value: 100
-                                                        });
-                                                } else {
-                                                        setImportProgress('api2Complete');
-                                                }
-                                        var msg_all = decodeHTMLEntities(res.data.msg);
-                                        alert(msg_all);
-                                } else {
-                                        setImportProgress('error');
-                                        alert(res.data.msg);
-                                }
-                        },
-                        error: function (xhr, status, error) {
-                                $button.text('Fetch');
-                                stopImportProgressPolling('upgrade');
-                                setImportProgress('error');
-
-                                var responseText = xhr.responseText;
-                                var formattedMessage;
-
-                                try {
-                                        var parsedResponse = JSON.parse(responseText);
-                                        formattedMessage = `Error: ${parsedResponse.message}`;
-                                } catch (e) {
-                                        formattedMessage = `Error: Received unexpected response code ${xhr.status}. Response: ${responseText}`;
-                                }
-
-                                alert(formattedMessage);
-                                console.error('Error:', error);
-                        }
-                });
-        }
 
         function decodeHTMLEntities(text) {
                 var tempElement = document.createElement('textarea');
@@ -546,7 +599,7 @@ jQuery(function ($) {
                         var resetTotal = toNumber(options.totalItems);
                         progressState.totalItems = resetTotal !== null && resetTotal > 0 ? resetTotal : 0;
                         progressState.completedItems = 0;
-                        progressState.fallbackTotal = 2;
+                        progressState.fallbackTotal = Math.max(apiContexts.length, 2);
                         progressState.contextMessages = {};
 
                         var resetMessage = progressState.totalItems > 0 ? 'Import progress (0/' + progressState.totalItems + ')' : 'Import progress';
@@ -564,8 +617,9 @@ jQuery(function ($) {
 
                 if (step === 'error') {
                         progressState.contextMessages = {};
+                        var errorText = options && options.message ? options.message : 'Import interrupted';
                         $progress.addClass('is-error').show();
-                        $message.text('Import interrupted');
+                        $message.text(errorText);
                         $value.text('Check the error message for details.');
                         setSpinnerVisible(false);
 
@@ -692,32 +746,25 @@ jQuery(function ($) {
                         var aggregatedMessage = buildAggregatedMessage(contextKey, message, isFinal);
 
                         renderProgress(aggregatedMessage, progressValue, isFinal);
-                        var shouldShowSpinner = !isFinal || contextKey === 'fetch';
+                        var shouldShowSpinner = !isFinal;
                         setSpinnerVisible(shouldShowSpinner);
                         return;
                 }
 
-                var stepMap = {
-                        startApi1: { context: 'fetch', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, message: 'Fetching items from API 1…' },
-                        api1Complete: { context: 'fetch', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, isFinal: true, message: 'Finished API 1' },
-                        startApi2: { context: 'upgrade', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, message: 'Fetching items from API 2… ({current} processed so far)' },
-                        api2Complete: { context: 'upgrade', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, isFinal: true, message: 'Finished API 2' }
-                };
-
-                if (stepMap[step]) {
-                        var state = stepMap[step];
-                        var stage = state.stage || 'complete';
-                        var fallbackTotal = state.fallbackTotal || progressState.fallbackTotal || 2;
-                        var fallbackCurrent = state.fallbackCurrent;
+                if (step === 'contextStart' || step === 'contextComplete') {
+                        var stage = step === 'contextStart' ? 'start' : 'complete';
+                        var contextSlug = typeof options.context === 'string' ? options.context : null;
+                        var fallbackTotal = progressState.fallbackTotal || Math.max(apiContexts.length, 2);
+                        var fallbackCurrent = typeof options.index === 'number' ? options.index + 1 : null;
                         var current = toNumber(options.current);
 
                         if (current === null) {
-                                if (totalImportItems > 0) {
-                                        current = progressState.completedItems;
-                                } else if (typeof fallbackCurrent === 'number') {
+                                if (typeof fallbackCurrent === 'number') {
                                         current = fallbackCurrent;
+                                } else if (totalImportItems > 0) {
+                                        current = progressState.completedItems;
                                 } else {
-                                        current = 0;
+                                        current = stage === 'start' ? 1 : 0;
                                 }
                         }
 
@@ -725,21 +772,153 @@ jQuery(function ($) {
                                 current = totalImportItems;
                         }
 
-                        var message = formatProgressMessage(current, totalImportItems, stage, !!state.isFinal, state.message, fallbackTotal, fallbackCurrent);
+                        var label = options.label || getContextLabel(contextSlug, typeof options.index === 'number' ? options.index : null);
+                        var template = options.message;
 
-                        if (options.message) {
-                                message = applyMessageTemplate(options.message, current, totalImportItems > 0 ? totalImportItems : fallbackTotal, !!state.isFinal);
+                        if (!template) {
+                                template = stage === 'start' ? label + ' — fetching items…' : label + ' — finished';
                         }
 
-                        var progressValue = computeProgressValue(current, totalImportItems, stage, state.value, fallbackTotal, fallbackCurrent);
+                        var totalForMessage = totalImportItems > 0 ? totalImportItems : fallbackTotal;
+                        var message = applyMessageTemplate(template, current, totalForMessage, stage === 'complete');
+                        var progressValue = computeProgressValue(current, totalImportItems, stage, options.value, fallbackTotal, fallbackCurrent);
+                        var aggregatedMessage = buildAggregatedMessage(contextSlug, message, stage === 'complete');
 
-                        var aggregatedMessage = buildAggregatedMessage(state.context || null, message, !!state.isFinal);
+                        renderProgress(aggregatedMessage, progressValue, stage === 'complete');
+                        setSpinnerVisible(stage !== 'complete');
+                        return;
+                }
 
-                        renderProgress(aggregatedMessage, progressValue, !!state.isFinal);
-                        var shouldShowSpinnerForStep = !state.isFinal || state.context === 'fetch';
-                        setSpinnerVisible(shouldShowSpinnerForStep);
+                if (step === 'allComplete') {
+                        var completionMessage = options && options.message ? options.message : 'Import complete';
+                        var finalMessage = buildAggregatedMessage(null, completionMessage, true);
+                        renderProgress(finalMessage, 100, true);
+                        setSpinnerVisible(false);
                 }
         }
+
+        function handlePartnerTagFormSubmission($form) {
+                if (!$form || !$form.length) {
+                        return;
+                }
+
+                if (!ajaxUrl) {
+                        alert('AJAX endpoint is not available.');
+                        return;
+                }
+
+                var termId = parseInt($form.attr('data-term-id'), 10);
+
+                if (!termId) {
+                        alert('Invalid product tag.');
+                        return;
+                }
+
+                var $input = $form.find('[data-partner-page-input]');
+                var $submit = $form.find('[data-partner-page-submit]');
+                var $feedback = $form.find('[data-partner-page-feedback]');
+                var partnerPageId = $input.length ? String($input.val()).trim() : '';
+
+                function showFeedback(type, message) {
+                        if (!$feedback.length) {
+                                if (message) {
+                                        alert(message);
+                                }
+
+                                return;
+                        }
+
+                        $feedback.removeClass('is-success is-error');
+
+                        if (!message) {
+                                $feedback
+                                        .text('')
+                                        .attr('hidden', 'hidden')
+                                        .attr('aria-hidden', 'true')
+                                        .attr('role', 'status')
+                                        .attr('aria-live', 'polite');
+                                return;
+                        }
+
+                        if (type === 'error') {
+                                $feedback
+                                        .addClass('is-error')
+                                        .attr('role', 'alert')
+                                        .attr('aria-live', 'assertive');
+                        } else {
+                                $feedback
+                                        .addClass('is-success')
+                                        .attr('role', 'status')
+                                        .attr('aria-live', 'polite');
+                        }
+
+                        $feedback
+                                .text(message)
+                                .removeAttr('hidden')
+                                .attr('aria-hidden', 'false');
+                }
+
+                showFeedback();
+                $submit.prop('disabled', true);
+                $input.prop('disabled', true);
+
+                $.ajax({
+                        type: 'POST',
+                        url: ajaxUrl,
+                        data: {
+                                action: 'bokun_update_partner_page_id',
+                                security: bokun_api_auth_vars.nonce,
+                                term_id: termId,
+                                partner_page_id: partnerPageId
+                        },
+                        dataType: 'json'
+                }).done(function (res) {
+                        if (res && res.success) {
+                                var successMessage = res.data && res.data.msg ? decodeHTMLEntities(res.data.msg) : 'Partner Page ID saved.';
+                                showFeedback('success', successMessage);
+
+                                var $item = $form.closest('[data-partner-tag-item]');
+
+                                if ($item.length) {
+                                        setTimeout(function () {
+                                                $item.fadeOut(200, function () {
+                                                        var $parentList = $item.parent();
+                                                        $item.remove();
+
+                                                        if ($parentList && !$parentList.children().length) {
+                                                                var $container = $parentList.closest('.bokun-booking-dashboard__missing-tags');
+
+                                                                if ($container.length) {
+                                                                        $container.fadeOut(200, function () {
+                                                                                $container.remove();
+                                                                        });
+                                                                }
+                                                        }
+                                                });
+                                        }, 400);
+                                }
+                        } else {
+                                var errorMessage = res && res.data && res.data.msg ? decodeHTMLEntities(res.data.msg) : 'Unable to save Partner Page ID.';
+                                showFeedback('error', errorMessage);
+                        }
+                }).fail(function (xhr) {
+                        var errorMessage = 'An unexpected error occurred.';
+
+                        if (xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.msg) {
+                                errorMessage = decodeHTMLEntities(xhr.responseJSON.data.msg);
+                        }
+
+                        showFeedback('error', errorMessage);
+                }).always(function () {
+                        $submit.prop('disabled', false);
+                        $input.prop('disabled', false);
+                });
+        }
+
+        $(document).on('submit', '[data-partner-tag-form]', function (e) {
+                e.preventDefault();
+                handlePartnerTagFormSubmission($(this));
+        });
 
         function toggleDualStatusSection(button) {
                 var $button = $(button);

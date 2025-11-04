@@ -14,16 +14,44 @@ Text Domain: BOKUN_text_domain
 // plugin definitions
 define( 'BOKUN_PLUGIN', '/bokun-bookings-management/');
 
-$api_key = get_option('bokun_api_key', '');
-$secret_key = get_option('bokun_secret_key', '');
-$api_key_upgrade = get_option('bokun_api_key_upgrade', '');
-$secret_key_upgrade = get_option('bokun_secret_key_upgrade', '');
+// Resolve stored API credentials.
+$stored_credentials = get_option('bokun_api_credentials', []);
+$primary_api_key = '';
+$primary_secret_key = '';
+$secondary_api_key = '';
+$secondary_secret_key = '';
+
+if (is_array($stored_credentials) && !empty($stored_credentials)) {
+    $stored_credentials = array_values(array_filter($stored_credentials, 'is_array'));
+
+    if (!empty($stored_credentials)) {
+        $first_credential = $stored_credentials[0];
+        $primary_api_key = isset($first_credential['api_key']) ? (string) $first_credential['api_key'] : '';
+        $primary_secret_key = isset($first_credential['secret_key']) ? (string) $first_credential['secret_key'] : '';
+    }
+
+    if (count($stored_credentials) > 1) {
+        $second_credential = $stored_credentials[1];
+        $secondary_api_key = isset($second_credential['api_key']) ? (string) $second_credential['api_key'] : '';
+        $secondary_secret_key = isset($second_credential['secret_key']) ? (string) $second_credential['secret_key'] : '';
+    }
+}
+
+if ('' === $primary_api_key && '' === $primary_secret_key) {
+    $primary_api_key = get_option('bokun_api_key', '');
+    $primary_secret_key = get_option('bokun_secret_key', '');
+}
+
+if ('' === $secondary_api_key && '' === $secondary_secret_key) {
+    $secondary_api_key = get_option('bokun_api_key_upgrade', '');
+    $secondary_secret_key = get_option('bokun_secret_key_upgrade', '');
+}
 // Define Bokun API constants
 define('BOKUN_API_BASE_URL', 'https://api.bokun.io');
-define('BOKUN_API_KEY', $api_key); 
-define('BOKUN_SECRET_KEY', $secret_key); 
-define('BOKUN_API_KEY_UPGRADE', $api_key_upgrade); 
-define('BOKUN_SECRET_KEY_UPGRADE', $secret_key_upgrade); 
+define('BOKUN_API_KEY', $primary_api_key);
+define('BOKUN_SECRET_KEY', $primary_secret_key);
+define('BOKUN_API_KEY_UPGRADE', $secondary_api_key);
+define('BOKUN_SECRET_KEY_UPGRADE', $secondary_secret_key);
 define('BOKUN_API_BOOKING_API', '/booking.json/booking-search');
 
 // directory define
@@ -382,6 +410,7 @@ class BokunBookingManagement {
                 array(
                     'nonce'    => wp_create_nonce('bokun_api_auth_nonce'),
                     'ajax_url' => admin_url( 'admin-ajax.php' ),
+                    'apiContexts' => bokun_get_api_context_definitions(),
                 )
             );
 
@@ -429,6 +458,7 @@ class BokunBookingManagement {
                 array(
                     'nonce'    => wp_create_nonce('bokun_api_auth_nonce'),
                     'ajax_url' => admin_url( 'admin-ajax.php' ),
+                    'apiContexts' => bokun_get_api_context_definitions(),
                 )
             );
         

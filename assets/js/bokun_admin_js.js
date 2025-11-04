@@ -3,7 +3,83 @@ jQuery(document).ready(function ($) {
 
         var importProgressPollers = {};
         var progressPollInterval = 1000;
-        var CONTEXT_DISPLAY_ORDER = ['fetch', 'upgrade'];
+        var apiContexts = Array.isArray(bokun_api_auth_vars && bokun_api_auth_vars.apiContexts) ? bokun_api_auth_vars.apiContexts : [];
+        var apiContextMap = {};
+
+        apiContexts = apiContexts.filter(function (context) {
+                return context && typeof context === 'object';
+        }).map(function (context, index) {
+                var slug = context.slug ? String(context.slug) : 'api_' + (index + 1);
+                var normalizedIndex = typeof context.index === 'number' && !isNaN(context.index) ? context.index : index + 1;
+                var label = context.label ? String(context.label) : 'API #' + normalizedIndex;
+
+                var normalizedContext = {
+                        slug: slug,
+                        label: label,
+                        index: normalizedIndex
+                };
+
+                apiContextMap[slug] = normalizedContext;
+
+                return normalizedContext;
+        });
+
+        var CONTEXT_DISPLAY_ORDER = apiContexts.length ? apiContexts.map(function (context) {
+                return context.slug;
+        }) : [];
+
+        function getContextDefinition(slug, index) {
+                if (slug && apiContextMap[slug]) {
+                        return apiContextMap[slug];
+                }
+
+                if (typeof index === 'number' && index >= 0 && index < apiContexts.length) {
+                        return apiContexts[index];
+                }
+
+                if (slug && /^api_(\d+)$/.test(slug)) {
+                        var parsedIndex = parseInt(slug.replace('api_', ''), 10);
+
+                        if (!isNaN(parsedIndex) && parsedIndex > 0 && parsedIndex - 1 < apiContexts.length) {
+                                return apiContexts[parsedIndex - 1];
+                        }
+                }
+
+                return null;
+        }
+
+        function getContextLabel(slug, index) {
+                var definition = getContextDefinition(slug, index);
+
+                if (definition && definition.label) {
+                        return definition.label;
+                }
+
+                var fallbackIndex = index;
+
+                if (typeof fallbackIndex !== 'number' || fallbackIndex < 0) {
+                        if (slug && /^api_(\d+)$/.test(slug)) {
+                                fallbackIndex = parseInt(slug.replace('api_', ''), 10) - 1;
+                        } else if (slug) {
+                                fallbackIndex = CONTEXT_DISPLAY_ORDER.indexOf(slug);
+                        }
+                }
+
+                if (typeof fallbackIndex !== 'number' || fallbackIndex < 0) {
+                        fallbackIndex = 0;
+                }
+
+                var humanIndex = fallbackIndex + 1;
+                return 'API #' + humanIndex;
+        }
+
+        function getContextSlugByIndex(index) {
+                if (apiContexts[index]) {
+                        return apiContexts[index].slug;
+                }
+
+                return CONTEXT_DISPLAY_ORDER[index] || ('api_' + (index + 1));
+        }
 
         function startImportProgressPolling(mode, options) {
                 options = options || {};
@@ -137,7 +213,7 @@ jQuery(document).ready(function ($) {
 		}
 
                 if (typeof window.bokunImportProgress.fallbackTotal !== 'number' || isNaN(window.bokunImportProgress.fallbackTotal)) {
-                        window.bokunImportProgress.fallbackTotal = 2;
+                        window.bokunImportProgress.fallbackTotal = Math.max(apiContexts.length, 2);
                 }
 
                 if (!window.bokunImportProgress.contextMessages || typeof window.bokunImportProgress.contextMessages !== 'object') {
@@ -151,7 +227,7 @@ jQuery(document).ready(function ($) {
                 var state = getImportProgressState();
                 state.totalItems = typeof total === 'number' && total > 0 ? total : 0;
                 state.completedItems = 0;
-                state.fallbackTotal = 2;
+                state.fallbackTotal = Math.max(apiContexts.length, 2);
                 state.contextMessages = {};
         }
 
@@ -192,71 +268,187 @@ jQuery(document).ready(function ($) {
                 });
         }
 
-	jQuery(document).on('click', '.bokun_api_auth_save', function () {
-		var form = jQuery('#bokun_api_auth_form')[0];
-		var formData = new FormData(form);
-		formData.append('action', 'bokun_save_api_auth');
-		formData.append('security', bokun_api_auth_vars.nonce);
+        function getApiCredentialsList() {
+                return jQuery('[data-api-credentials-list]');
+        }
 
-		jQuery.ajax({
-			type: 'POST',
-			url: ajaxurl,
-			data: formData,
-			processData: false,
-			contentType: false,
-			dataType: 'json',
-			success: function (res) {
-				
-				jQuery('.msg_success_apis, .msg_error_apis').hide();
-				
-				if (res.success) {
-					var msg_all = decodeHTMLEntities(res.data.msg);
-					jQuery('.msg_success_apis p').html(`<strong>Success:</strong> ${msg_all}`);
-					jQuery('.msg_success_apis').show();
-				} else {
-					jQuery('.msg_error_apis p').html(`<strong>Error:</strong> ${res.data.msg}`);
-					jQuery('.msg_error_apis').show(); // Show error notice
-				}
-			},
-			error: function (xhr, status, error) {
-				console.error('Error:', error);
-				alert('An error occurred. Please try again.');
-			}
-		});
-	});
-	
-        jQuery(document).on('click', '.bokun_api_auth_save_upgrade', function () {
-                var form = jQuery('#bokun_api_auth_form_upgrade')[0];
+        function getNextCredentialIndex($list) {
+                var nextIndex = parseInt($list.attr('data-next-index'), 10);
+
+                if (isNaN(nextIndex) || nextIndex < 0) {
+                        nextIndex = $list.children('[data-api-credentials-item]').length;
+                }
+
+                return nextIndex;
+        }
+
+        function setNextCredentialIndex($list, value) {
+                $list.attr('data-next-index', value);
+        }
+
+        function toggleCredentialRemoveButtons($list) {
+                var $items = $list.children('[data-api-credentials-item]');
+                var shouldDisable = $items.length <= 1;
+
+                $items.find('[data-api-credentials-remove]').prop('disabled', shouldDisable);
+        }
+
+        function renumberApiCredentialItems($list) {
+                var $items = $list.children('[data-api-credentials-item]');
+
+                $items.each(function (index) {
+                        var $item = jQuery(this);
+                        $item.attr('data-index', index);
+
+                        $item.find('.bokun_api_credentials__item-title').each(function () {
+                                jQuery(this).text('API #' + (index + 1));
+                        });
+
+                        $item.find('input[name]').each(function () {
+                                var $input = jQuery(this);
+                                var name = $input.attr('name');
+
+                                if (!name) {
+                                        return;
+                                }
+
+                                var updatedName = name.replace(/api_credentials\[[^\]]*\]/, 'api_credentials[' + index + ']');
+                                $input.attr('name', updatedName);
+                        });
+                });
+
+                setNextCredentialIndex($list, $items.length);
+                toggleCredentialRemoveButtons($list);
+                refreshApiContextsFromForm();
+        }
+
+        function buildCredentialItem(index) {
+                var template = document.getElementById('bokun-api-credential-template');
+
+                if (!template) {
+                        return null;
+                }
+
+                var html = template.innerHTML.replace(/__index__/g, index).replace(/__number__/g, index + 1);
+
+                return jQuery(html);
+        }
+
+        function refreshApiContextsFromForm() {
+                var $list = getApiCredentialsList();
+                var $items = $list.children('[data-api-credentials-item]');
+
+                apiContexts = [];
+                apiContextMap = {};
+
+                $items.each(function (index) {
+                        var $item = jQuery(this);
+                        var apiKeyValue = $item.find('input[name$="[api_key]"]').val();
+                        var secretValue = $item.find('input[name$="[secret_key]"]').val();
+
+                        apiKeyValue = typeof apiKeyValue === 'string' ? apiKeyValue.trim() : '';
+                        secretValue = typeof secretValue === 'string' ? secretValue.trim() : '';
+
+                        if (!apiKeyValue || !secretValue) {
+                                return;
+                        }
+
+                        var slug = 'api_' + (apiContexts.length + 1);
+                        var label = 'API #' + (apiContexts.length + 1);
+                        var definition = {
+                                slug: slug,
+                                label: label,
+                                index: apiContexts.length + 1
+                        };
+
+                        apiContexts.push(definition);
+                        apiContextMap[slug] = definition;
+                });
+
+                CONTEXT_DISPLAY_ORDER = apiContexts.length ? apiContexts.map(function (context) {
+                        return context.slug;
+                }) : [];
+        }
+
+        jQuery(document).on('click', '[data-api-credentials-add]', function (event) {
+                event.preventDefault();
+
+                var $list = getApiCredentialsList();
+                var nextIndex = getNextCredentialIndex($list);
+                var $item = buildCredentialItem(nextIndex);
+
+                if (!$item || !$item.length) {
+                        alert('Unable to add another API field.');
+                        return;
+                }
+
+                $list.append($item);
+                renumberApiCredentialItems($list);
+        });
+
+        jQuery(document).on('click', '[data-api-credentials-remove]', function (event) {
+                event.preventDefault();
+
+                var $button = jQuery(this);
+                var $list = getApiCredentialsList();
+                var $item = $button.closest('[data-api-credentials-item]');
+
+                if (!$item.length) {
+                        return;
+                }
+
+                $item.remove();
+
+                if (!$list.children('[data-api-credentials-item]').length) {
+                        var $newItem = buildCredentialItem(0);
+
+                        if ($newItem && $newItem.length) {
+                                $list.append($newItem);
+                        }
+                }
+
+                renumberApiCredentialItems($list);
+        });
+
+        jQuery(document).on('submit', '#bokun_api_credentials_form', function (event) {
+                event.preventDefault();
+
+                var form = this;
                 var formData = new FormData(form);
-                formData.append('action', 'bokun_save_api_auth_upgrade');
+                formData.append('action', 'bokun_save_api_credentials');
                 formData.append('security', bokun_api_auth_vars.nonce);
+
+                var $successNotice = jQuery('.msg_success_apis');
+                var $errorNotice = jQuery('.msg_error_apis');
+
+                $successNotice.hide();
+                $errorNotice.hide();
 
                 jQuery.ajax({
                         type: 'POST',
                         url: ajaxurl,
-			data: formData,
-			processData: false,
-			contentType: false,
-			dataType: 'json',
-			success: function (res) {
-				
-				jQuery('.msg_success_apis_upgrade, .msg_error_apis_upgrade').hide();
-				
-				if (res.success) {
-					var msg_all = decodeHTMLEntities(res.data.msg);
-					jQuery('.msg_success_apis_upgrade p').html(`<strong>Success:</strong> ${msg_all}`);
-					jQuery('.msg_success_apis_upgrade').show(); // Show success notice
-				} else {
-					jQuery('.msg_error_apis_upgrade p').html(`<strong>Error:</strong> ${res.data.msg}`);
-					jQuery('.msg_error_apis_upgrade').show(); // Show error notice
-				}
-			},
-			error: function (xhr, status, error) {
-				console.error('Error:', error);
-				alert('An error occurred. Please try again.');
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        dataType: 'json'
+                }).done(function (res) {
+                        if (res && res.success) {
+                                var message = res.data && res.data.msg ? decodeHTMLEntities(res.data.msg) : 'API keys saved successfully.';
+                                $successNotice.find('p').html('<strong>Success:</strong> ' + message);
+                                $successNotice.show();
+                                refreshApiContextsFromForm();
+                        } else {
+                                var errorMessage = res && res.data && res.data.msg ? decodeHTMLEntities(res.data.msg) : 'An unexpected error occurred.';
+                                $errorNotice.find('p').html('<strong>Error:</strong> ' + errorMessage);
+                                $errorNotice.show();
                         }
+                }).fail(function () {
+                        $errorNotice.find('p').html('<strong>Error:</strong> An unexpected error occurred.');
+                        $errorNotice.show();
                 });
         });
+
+        renumberApiCredentialItems(getApiCredentialsList());
 
         jQuery(document).on('click', '.bokun_dashboard_settings_save', function () {
                 var form = jQuery('#bokun_dashboard_settings_form')[0];
@@ -310,153 +502,134 @@ jQuery(document).ready(function ($) {
                 });
         });
 
-        jQuery(document).on('click', '.bokun_fetch_booking_data', function (e) {
-                e.preventDefault();
-                jQuery('.msg_sec').hide();
-                stopAllImportProgressPolling();
-                resetImportProgressState();
-                setImportProgress('reset');
-                setImportProgress('startApi1', {
-                        current: 0
+        function runAdminImportSequence(startIndex) {
+                var $button = jQuery('.bokun_fetch_booking_data');
+
+                if (!Array.isArray(apiContexts) || !apiContexts.length) {
+                        $button.prop('disabled', false).val('Fetch');
+                        setImportProgress('error', { message: 'No API credentials configured.' });
+                        alert('No API credentials configured.');
+                        return;
+                }
+
+                var index = typeof startIndex === 'number' ? startIndex : 0;
+
+                if (index >= apiContexts.length) {
+                        setImportProgress('allComplete', { totalContexts: apiContexts.length });
+                        $button.prop('disabled', false).val('Fetch');
+                        return;
+                }
+
+                var context = apiContexts[index];
+                var contextSlug = context.slug;
+                var contextLabel = context.label;
+
+                setImportProgress('contextStart', {
+                        context: contextSlug,
+                        label: contextLabel,
+                        index: index,
+                        totalContexts: apiContexts.length
                 });
-                startImportProgressPolling('fetch');
-                jQuery.ajax({
-                        type: 'POST',
-                        url: ajaxurl,
-                        data: {
-                                action: 'bokun_bookings_manager_page',
-				security: bokun_api_auth_vars.nonce,
-				mode: 'fetch'
-			},
-			dataType: 'json',
-			success: function (res) {
 
-                                jQuery('.msg_success, .msg_error').hide();
-                                if (res.success) {
-                                        stopImportProgressPolling('fetch');
-                                        if (res.data && res.data.import_summary) {
-                                                updateImportProgressFromSummary(res.data.import_summary, {
-                                                        label: 'Imported items from API 1',
-                                                        isFinal: true,
-                                                        context: 'fetch'
-                                                });
-                                        } else if (res.data && res.data.progress_message) {
-                                                var api1Message = decodeHTMLEntities(res.data.progress_message);
-                                                setImportProgress('summaryUpdate', {
-                                                        summary: { total: 0, processed: 0, created: 0, updated: 0, skipped: 0 },
-                                                        message: api1Message,
-                                                        isFinal: true,
-                                                        useAbsolute: true,
-                                                        context: 'fetch',
-                                                        totalItems: 0,
-                                                        current: 0,
-                                                        value: 100
-                                                });
-                                        } else {
-                                                setImportProgress('api1Complete');
-                                        }
-                                        call_from_secound_api();
-                                        var msg_all = decodeHTMLEntities(res.data.msg);
-                                        jQuery('.msg_success p').html(`<strong>Success:</strong> ${msg_all}`);
-                                        jQuery('.msg_success').show();
-                                } else {
-                                        stopImportProgressPolling('fetch');
-                                        setImportProgress('error');
-                                        jQuery('.msg_error p').html(`<strong>Error:</strong> ${res.data.msg}`);
-                                        jQuery('.msg_error').show();
-                                }
-                        },
-                        error: function (xhr, status, error) {
-                                stopImportProgressPolling('fetch');
-                                setImportProgress('error');
+                startImportProgressPolling(contextSlug);
 
-                                var responseText = xhr.responseText;
-                                try {
-                                        var parsedResponse = JSON.parse(responseText);
-					var formattedMessage = `Error: ${parsedResponse.message}`;
-				} catch (e) {
-					// If parsing fails, use the raw response text
-					var formattedMessage = `Error: Received unexpected response code ${xhr.status}. Response: ${responseText}`;
-				}
-
-				alert(formattedMessage);
-				console.error('Error:', error);
-			}
-		});
-	});
-
-
-        function call_from_secound_api() {
-
-                var progressState = getImportProgressState();
-                setImportProgress('startApi2', {
-                        current: progressState.completedItems,
-                        totalItems: progressState.totalItems
-                });
-                startImportProgressPolling('upgrade');
                 jQuery.ajax({
                         type: 'POST',
                         url: ajaxurl,
                         data: {
                                 action: 'bokun_bookings_manager_page',
                                 security: bokun_api_auth_vars.nonce,
-                                mode: 'upgrade'
+                                mode: contextSlug
                         },
-                        dataType: 'json',
-                        success: function (res) {
+                        dataType: 'json'
+                }).done(function (res) {
+                        stopImportProgressPolling(contextSlug);
 
-                                jQuery('.msg_success_upgrade, .msg_error_upgrade').hide();
-
-                                if (res.success) {
-                                        stopImportProgressPolling('upgrade');
-                                        if (res.data && res.data.import_summary) {
-                                                updateImportProgressFromSummary(res.data.import_summary, {
-                                                        label: 'Imported items from API 2',
-                                                        isFinal: true,
-                                                        context: 'upgrade'
-                                                });
-                                        } else if (res.data && res.data.progress_message) {
-                                                var api2Message = decodeHTMLEntities(res.data.progress_message);
-                                                setImportProgress('summaryUpdate', {
-                                                        summary: { total: 0, processed: 0, created: 0, updated: 0, skipped: 0 },
-                                                        message: api2Message,
-                                                        isFinal: true,
-                                                        useAbsolute: true,
-                                                        context: 'upgrade',
-                                                        totalItems: 0,
-                                                        current: 0,
-                                                        value: 100
-                                                });
-                                        } else {
-                                                setImportProgress('api2Complete');
-                                        }
-                                        var msg_all = decodeHTMLEntities(res.data.msg);
-                                        jQuery('.msg_success_upgrade p').html(`<strong>Success:</strong> ${msg_all}`);
-                                        jQuery('.msg_success_upgrade').show();
+                        if (res && res.success) {
+                                if (res.data && res.data.import_summary) {
+                                        updateImportProgressFromSummary(res.data.import_summary, {
+                                                label: contextLabel,
+                                                isFinal: true,
+                                                context: contextSlug
+                                        });
+                                } else if (res.data && res.data.progress_message) {
+                                        var decoded = decodeHTMLEntities(res.data.progress_message);
+                                        setImportProgress('summaryUpdate', {
+                                                summary: { total: 0, processed: 0, created: 0, updated: 0, skipped: 0 },
+                                                message: decoded,
+                                                isFinal: true,
+                                                useAbsolute: true,
+                                                context: contextSlug,
+                                                totalItems: 0,
+                                                current: 0,
+                                                value: 100
+                                        });
                                 } else {
-                                        stopImportProgressPolling('upgrade');
-                                        setImportProgress('error');
-                                        jQuery('.msg_error_upgrade p').html(`<strong>Error:</strong> ${res.data.msg}`);
-                                        jQuery('.msg_error_upgrade').show();
-                                }
-                        },
-                        error: function (xhr, status, error) {
-                                stopImportProgressPolling('upgrade');
-                                setImportProgress('error');
-                                var responseText = xhr.responseText;
-                                try {
-                                        var parsedResponse = JSON.parse(responseText);
-                                        var formattedMessage = `Error: ${parsedResponse.message}`;
-                                } catch (e) {
-                                        // If parsing fails, use the raw response text
-                                        var formattedMessage = `Error: Received unexpected response code ${xhr.status}. Response: ${responseText}`;
+                                        setImportProgress('contextComplete', {
+                                                context: contextSlug,
+                                                label: contextLabel,
+                                                index: index,
+                                                totalContexts: apiContexts.length
+                                        });
                                 }
 
-                                alert(formattedMessage);
-                                console.error('Error:', error);
+                                if (res.data && res.data.msg) {
+                                        alert(decodeHTMLEntities(res.data.msg));
+                                }
+
+                                runAdminImportSequence(index + 1);
+                        } else {
+                                setImportProgress('error', {
+                                        context: contextSlug,
+                                        message: res && res.data && res.data.msg ? decodeHTMLEntities(res.data.msg) : ''
+                                });
+
+                                var errorMessage = res && res.data && res.data.msg ? decodeHTMLEntities(res.data.msg) : 'An unexpected error occurred.';
+                                alert(errorMessage);
+                                $button.prop('disabled', false).val('Fetch');
                         }
+                }).fail(function (xhr) {
+                        stopImportProgressPolling(contextSlug);
+                        setImportProgress('error', { context: contextSlug });
+
+                        var responseText = xhr && xhr.responseText ? xhr.responseText : '';
+                        var formattedMessage;
+
+                        try {
+                                var parsed = responseText ? JSON.parse(responseText) : null;
+                                formattedMessage = parsed && parsed.message ? 'Error: ' + parsed.message : 'Error: ' + responseText;
+                        } catch (e) {
+                                formattedMessage = 'Error: Received unexpected response code ' + (xhr ? xhr.status : '') + '. Response: ' + responseText;
+                        }
+
+                        alert(formattedMessage);
+                        $button.prop('disabled', false).val('Fetch');
                 });
         }
+
+        jQuery(document).on('click', '.bokun_fetch_booking_data', function (e) {
+                e.preventDefault();
+
+                if (typeof ajaxurl === 'undefined' || !ajaxurl) {
+                        alert('AJAX endpoint is not available.');
+                        return;
+                }
+
+                if (!apiContexts.length) {
+                        alert('No API credentials configured.');
+                        return;
+                }
+
+                var $button = jQuery('.bokun_fetch_booking_data');
+
+                $button.prop('disabled', true).val('Processing…');
+                jQuery('.msg_sec, .msg_success, .msg_error').hide();
+                stopAllImportProgressPolling();
+                resetImportProgressState();
+                setImportProgress('reset');
+
+                runAdminImportSequence(0);
+        });
 
         function appendMessageList($container, messages) {
                 if (!$container || !$container.length || !messages || !messages.length) {
@@ -749,7 +922,7 @@ jQuery(document).ready(function ($) {
                         var resetTotal = toNumber(options.totalItems);
                         progressState.totalItems = resetTotal !== null && resetTotal > 0 ? resetTotal : 0;
                         progressState.completedItems = 0;
-                        progressState.fallbackTotal = 2;
+                        progressState.fallbackTotal = Math.max(apiContexts.length, 2);
                         progressState.contextMessages = {};
 
                         var resetMessage = progressState.totalItems > 0 ? 'Import progress (0/' + progressState.totalItems + ')' : 'Import progress';
@@ -767,8 +940,9 @@ jQuery(document).ready(function ($) {
 
                 if (step === 'error') {
                         progressState.contextMessages = {};
+                        var errorText = options && options.message ? options.message : 'Import interrupted';
                         $progress.addClass('is-error').show();
-                        $message.text('Import interrupted');
+                        $message.text(errorText);
                         $value.text('Check the error message for details.');
                         setSpinnerVisible(false);
 
@@ -895,32 +1069,25 @@ jQuery(document).ready(function ($) {
                         var aggregatedMessage = buildAggregatedMessage(contextKey, message, isFinal);
 
                         renderProgress(aggregatedMessage, progressValue, isFinal);
-                        var shouldShowSpinner = !isFinal || contextKey === 'fetch';
+                        var shouldShowSpinner = !isFinal;
                         setSpinnerVisible(shouldShowSpinner);
                         return;
                 }
 
-                var stepMap = {
-                        startApi1: { context: 'fetch', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, message: 'Fetching items from API 1…' },
-                        api1Complete: { context: 'fetch', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 1, isFinal: true, message: 'Finished API 1' },
-                        startApi2: { context: 'upgrade', stage: 'start', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, message: 'Fetching items from API 2… ({current} processed so far)' },
-                        api2Complete: { context: 'upgrade', stage: 'complete', fallbackTotal: progressState.fallbackTotal || 2, fallbackCurrent: 2, isFinal: true, message: 'Finished API 2' }
-                };
-
-                if (stepMap[step]) {
-                        var state = stepMap[step];
-                        var stage = state.stage || 'complete';
-                        var fallbackTotal = state.fallbackTotal || progressState.fallbackTotal || 2;
-                        var fallbackCurrent = state.fallbackCurrent;
+                if (step === 'contextStart' || step === 'contextComplete') {
+                        var stage = step === 'contextStart' ? 'start' : 'complete';
+                        var contextSlug = typeof options.context === 'string' ? options.context : null;
+                        var fallbackTotal = progressState.fallbackTotal || Math.max(apiContexts.length, 2);
+                        var fallbackCurrent = typeof options.index === 'number' ? options.index + 1 : null;
                         var current = toNumber(options.current);
 
                         if (current === null) {
-                                if (totalImportItems > 0) {
-                                        current = progressState.completedItems;
-                                } else if (typeof fallbackCurrent === 'number') {
+                                if (typeof fallbackCurrent === 'number') {
                                         current = fallbackCurrent;
+                                } else if (totalImportItems > 0) {
+                                        current = progressState.completedItems;
                                 } else {
-                                        current = 0;
+                                        current = stage === 'start' ? 1 : 0;
                                 }
                         }
 
@@ -928,19 +1095,28 @@ jQuery(document).ready(function ($) {
                                 current = totalImportItems;
                         }
 
-                        var message = formatProgressMessage(current, totalImportItems, stage, !!state.isFinal, state.message, fallbackTotal, fallbackCurrent);
+                        var label = options.label || getContextLabel(contextSlug, typeof options.index === 'number' ? options.index : null);
+                        var template = options.message;
 
-                        if (options.message) {
-                                message = applyMessageTemplate(options.message, current, totalImportItems > 0 ? totalImportItems : fallbackTotal, !!state.isFinal);
+                        if (!template) {
+                                template = stage === 'start' ? label + ' — fetching items…' : label + ' — finished';
                         }
 
-                        var progressValue = computeProgressValue(current, totalImportItems, stage, state.value, fallbackTotal, fallbackCurrent);
+                        var totalForMessage = totalImportItems > 0 ? totalImportItems : fallbackTotal;
+                        var message = applyMessageTemplate(template, current, totalForMessage, stage === 'complete');
+                        var progressValue = computeProgressValue(current, totalImportItems, stage, options.value, fallbackTotal, fallbackCurrent);
+                        var aggregatedMessage = buildAggregatedMessage(contextSlug, message, stage === 'complete');
 
-                        var aggregatedMessage = buildAggregatedMessage(state.context || null, message, !!state.isFinal);
+                        renderProgress(aggregatedMessage, progressValue, stage === 'complete');
+                        setSpinnerVisible(stage !== 'complete');
+                        return;
+                }
 
-                        renderProgress(aggregatedMessage, progressValue, !!state.isFinal);
-                        var shouldShowSpinnerForStep = !state.isFinal || state.context === 'fetch';
-                        setSpinnerVisible(shouldShowSpinnerForStep);
+                if (step === 'allComplete') {
+                        var completionMessage = options && options.message ? options.message : 'Import complete';
+                        var finalMessage = buildAggregatedMessage(null, completionMessage, true);
+                        renderProgress(finalMessage, 100, true);
+                        setSpinnerVisible(false);
                 }
         }
 
