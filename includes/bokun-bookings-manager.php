@@ -64,16 +64,104 @@ function bokun_generate_signature($date, $apiKey, $method, $endpoint, $secretKey
     return base64_encode($signature);
 }
 
-// Fetch bookings from Bokun API
-function bokun_fetch_bookings($upgrade = '') {
-    if ($upgrade) {        
-        $api_key = get_option('bokun_api_key_upgrade', '');
-        $secret_key = get_option('bokun_secret_key_upgrade', '');
-    } else {
-        $api_key = get_option('bokun_api_key', '');
-        $secret_key = get_option('bokun_secret_key', '');
+function bokun_get_configured_api_credentials() {
+    $stored_credentials = get_option('bokun_api_credentials', []);
+    $credentials = [];
+
+    if (is_array($stored_credentials)) {
+        foreach ($stored_credentials as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            $api_key    = isset($entry['api_key']) ? trim((string) $entry['api_key']) : '';
+            $secret_key = isset($entry['secret_key']) ? trim((string) $entry['secret_key']) : '';
+
+            if ('' === $api_key || '' === $secret_key) {
+                continue;
+            }
+
+            $credentials[] = [
+                'api_key'    => $api_key,
+                'secret_key' => $secret_key,
+            ];
+        }
     }
-    
+
+    if (empty($credentials)) {
+        $legacy_credentials = [
+            [
+                'api_key'    => (string) get_option('bokun_api_key', ''),
+                'secret_key' => (string) get_option('bokun_secret_key', ''),
+            ],
+            [
+                'api_key'    => (string) get_option('bokun_api_key_upgrade', ''),
+                'secret_key' => (string) get_option('bokun_secret_key_upgrade', ''),
+            ],
+        ];
+
+        foreach ($legacy_credentials as $entry) {
+            $api_key    = trim($entry['api_key']);
+            $secret_key = trim($entry['secret_key']);
+
+            if ('' === $api_key || '' === $secret_key) {
+                continue;
+            }
+
+            $credentials[] = [
+                'api_key'    => $api_key,
+                'secret_key' => $secret_key,
+            ];
+        }
+    }
+
+    $normalized = [];
+    $index = 1;
+
+    foreach ($credentials as $entry) {
+        $context = 'api_' . $index;
+
+        /* translators: %d: API index. */
+        $label = sprintf(__('API %d import', 'bokun-bookings-manager'), $index);
+
+        $normalized[$context] = [
+            'api_key'    => $entry['api_key'],
+            'secret_key' => $entry['secret_key'],
+            'label'      => $label,
+            'index'      => $index,
+        ];
+
+        $index++;
+    }
+
+    return $normalized;
+}
+
+function bokun_get_api_context_definitions() {
+    $credentials = bokun_get_configured_api_credentials();
+    $contexts = [];
+
+    foreach ($credentials as $slug => $data) {
+        $contexts[] = [
+            'slug'  => $slug,
+            'label' => isset($data['label']) ? $data['label'] : $slug,
+            'index' => isset($data['index']) ? (int) $data['index'] : (count($contexts) + 1),
+        ];
+    }
+
+    return $contexts;
+}
+
+// Fetch bookings from Bokun API
+function bokun_fetch_bookings($context = 'default') {
+    $context = bokun_normalize_import_context($context);
+
+    list($api_key, $secret_key) = bokun_get_api_credentials_for_context($context);
+
+    if ('' === $api_key || '' === $secret_key) {
+        return __('Error: No API credentials available for this import.', 'bokun-bookings-manager');
+    }
+
     $url = BOKUN_API_BASE_URL . BOKUN_API_BOOKING_API;
     $method = 'POST';
     $date = bokun_format_date();
@@ -235,15 +323,44 @@ function bokun_get_import_progress_key($context) {
 
 function bokun_get_import_progress_label($context) {
     $context = bokun_normalize_import_context($context);
+    $credentials = bokun_get_configured_api_credentials();
 
-    switch ($context) {
-        case 'upgrade':
-            return __('API 2 import', 'bokun-bookings-manager');
-        case 'fetch':
-            return __('API 1 import', 'bokun-bookings-manager');
-        default:
-            return __('Import', 'bokun-bookings-manager');
+    if (isset($credentials[$context])) {
+        return isset($credentials[$context]['label']) ? $credentials[$context]['label'] : __('Import', 'bokun-bookings-manager');
     }
+
+    $ordered_credentials = array_values($credentials);
+
+    if ('default' === $context && isset($ordered_credentials[0])) {
+        return isset($ordered_credentials[0]['label']) ? $ordered_credentials[0]['label'] : __('Import', 'bokun-bookings-manager');
+    }
+
+    if ('fetch' === $context && isset($ordered_credentials[0])) {
+        return isset($ordered_credentials[0]['label']) ? $ordered_credentials[0]['label'] : __('Import', 'bokun-bookings-manager');
+    }
+
+    if ('upgrade' === $context && isset($ordered_credentials[1])) {
+        return isset($ordered_credentials[1]['label']) ? $ordered_credentials[1]['label'] : __('Import', 'bokun-bookings-manager');
+    }
+
+    if ('upgrade' === $context) {
+        return __('API 2 import', 'bokun-bookings-manager');
+    }
+
+    if ('fetch' === $context) {
+        return __('API 1 import', 'bokun-bookings-manager');
+    }
+
+    if (preg_match('/^api_(\d+)$/', $context, $matches)) {
+        $index = (int) $matches[1];
+
+        if ($index > 0) {
+            /* translators: %d: API index. */
+            return sprintf(__('API %d import', 'bokun-bookings-manager'), $index);
+        }
+    }
+
+    return __('Import', 'bokun-bookings-manager');
 }
 
 function bokun_get_import_progress_message($context, $status) {
@@ -2697,15 +2814,44 @@ function bokun_normalize_product_list_payload($payload) {
 function bokun_get_api_credentials_for_context($context = 'default') {
     $context = bokun_normalize_import_context($context);
 
-    if ('upgrade' === $context) {
-        $api_key    = get_option('bokun_api_key_upgrade', '');
-        $secret_key = get_option('bokun_secret_key_upgrade', '');
-    } else {
-        $api_key    = get_option('bokun_api_key', '');
-        $secret_key = get_option('bokun_secret_key', '');
+    $credentials = bokun_get_configured_api_credentials();
+
+    if (isset($credentials[$context])) {
+        return [
+            $credentials[$context]['api_key'],
+            $credentials[$context]['secret_key'],
+        ];
     }
 
-    return [$api_key, $secret_key];
+    $ordered_credentials = array_values($credentials);
+
+    if (('default' === $context || 'fetch' === $context) && isset($ordered_credentials[0])) {
+        return [
+            $ordered_credentials[0]['api_key'],
+            $ordered_credentials[0]['secret_key'],
+        ];
+    }
+
+    if ('upgrade' === $context && isset($ordered_credentials[1])) {
+        return [
+            $ordered_credentials[1]['api_key'],
+            $ordered_credentials[1]['secret_key'],
+        ];
+    }
+
+    if (preg_match('/^api_(\d+)$/', $context, $matches)) {
+        $index = (int) $matches[1];
+        $position = $index - 1;
+
+        if ($position >= 0 && isset($ordered_credentials[$position])) {
+            return [
+                $ordered_credentials[$position]['api_key'],
+                $ordered_credentials[$position]['secret_key'],
+            ];
+        }
+    }
+
+    return ['', ''];
 }
 
 // Register Alarm Status taxonomy and create default terms
@@ -2966,6 +3112,59 @@ function bokun_handle_add_team_member() {
 
 add_action('wp_ajax_add_team_member', 'bokun_handle_add_team_member');
 add_action('wp_ajax_nopriv_add_team_member', 'bokun_handle_add_team_member');
+
+add_action('wp_ajax_bokun_update_partner_page_id', 'bokun_update_partner_page_id');
+
+function bokun_update_partner_page_id() {
+    if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
+        wp_send_json_error(array('msg' => __('Invalid nonce.', 'bokun-bookings-manager')));
+        wp_die();
+    }
+
+    $term_id = isset($_POST['term_id']) ? absint($_POST['term_id']) : 0;
+    $partner_page_id = isset($_POST['partner_page_id']) ? sanitize_text_field(wp_unslash($_POST['partner_page_id'])) : '';
+
+    if ($term_id <= 0) {
+        wp_send_json_error(array('msg' => __('Invalid product tag.', 'bokun-bookings-manager')));
+        wp_die();
+    }
+
+    $term = get_term($term_id, 'product_tags');
+
+    if (!$term || is_wp_error($term)) {
+        wp_send_json_error(array('msg' => __('Product tag not found.', 'bokun-bookings-manager')));
+        wp_die();
+    }
+
+    $taxonomy = get_taxonomy($term->taxonomy);
+    $required_capability = 'manage_categories';
+
+    if ($taxonomy && isset($taxonomy->cap) && isset($taxonomy->cap->edit_terms)) {
+        $required_capability = $taxonomy->cap->edit_terms;
+    }
+
+    $has_capability = current_user_can('edit_term', $term_id);
+
+    if (!$has_capability && !current_user_can($required_capability)) {
+        wp_send_json_error(array('msg' => __('You are not allowed to update this product tag.', 'bokun-bookings-manager')));
+        wp_die();
+    }
+
+    if ('' === $partner_page_id) {
+        delete_term_meta($term_id, 'partnerpageid');
+    } else {
+        update_term_meta($term_id, 'partnerpageid', $partner_page_id);
+    }
+
+    $message = sprintf(
+        /* translators: %s: Product tag name. */
+        __('Partner Page ID saved for %s.', 'bokun-bookings-manager'),
+        $term->name
+    );
+
+    wp_send_json_success(array('msg' => $message));
+    wp_die();
+}
 
 // Function to process price categories and save to fixed fields
 function process_price_categories_and_save($post_id, $booking_data) {

@@ -817,6 +817,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             if ($term_partner_id === '') {
                                 $edit_link = get_edit_term_link($term, 'product_tags');
                                 $product_tags_without_partner[$term->term_id] = [
+                                    'term_id'  => $term->term_id,
                                     'name'      => $term->name,
                                     'edit_link' => (!is_wp_error($edit_link) && !empty($edit_link)) ? $edit_link : '',
                                 ];
@@ -1556,14 +1557,41 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     <div class="bokun-booking-dashboard__missing-tags">
                         <h3><?php esc_html_e('Product tags without link to partner website:', 'BOKUN_txt_domain'); ?></h3>
                         <ul class="bokun-booking-dashboard__missing-tags-list">
-                            <?php foreach ($product_tags_without_partner as $term_data) : ?>
-                                <li class="bokun-booking-dashboard__missing-tags-item">
+                            <?php foreach ($product_tags_without_partner as $term_data) :
+                                $term_id = isset($term_data['term_id']) ? (int) $term_data['term_id'] : 0;
+                                $input_id = $term_id > 0 ? sprintf('partner-page-id-%d', $term_id) : uniqid('partner-page-id-');
+                            ?>
+                                <li class="bokun-booking-dashboard__missing-tags-item" data-partner-tag-item>
                                     <span class="bokun-booking-dashboard__missing-tag-name"><?php echo esc_html($term_data['name']); ?></span>
-                                    <?php if (!empty($term_data['edit_link'])) : ?>
-                                        <a href="<?php echo esc_url($term_data['edit_link']); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__missing-tag-link">
-                                            <?php esc_html_e('Edit tag', 'BOKUN_txt_domain'); ?>
-                                        </a>
-                                    <?php endif; ?>
+                                    <div class="bokun-booking-dashboard__missing-tag-actions">
+                                        <?php if (!empty($term_data['edit_link'])) : ?>
+                                            <a href="<?php echo esc_url($term_data['edit_link']); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__missing-tag-link">
+                                                <?php esc_html_e('Edit tag', 'BOKUN_txt_domain'); ?>
+                                            </a>
+                                        <?php endif; ?>
+                                        <form class="bokun-booking-dashboard__missing-tag-form" data-partner-tag-form data-term-id="<?php echo esc_attr($term_id); ?>">
+                                            <label class="screen-reader-text" for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Partner Page ID', 'BOKUN_txt_domain'); ?></label>
+                                            <input
+                                                type="text"
+                                                id="<?php echo esc_attr($input_id); ?>"
+                                                name="partner_page_id"
+                                                class="bokun-booking-dashboard__missing-tag-input"
+                                                placeholder="<?php esc_attr_e('Enter Partner Page ID', 'BOKUN_txt_domain'); ?>"
+                                                data-partner-page-input
+                                            >
+                                            <button type="submit" class="bokun-booking-dashboard__missing-tag-save" data-partner-page-submit>
+                                                <?php esc_html_e('Save', 'BOKUN_txt_domain'); ?>
+                                            </button>
+                                            <span
+                                                class="bokun-booking-dashboard__missing-tag-feedback"
+                                                data-partner-page-feedback
+                                                role="status"
+                                                aria-live="polite"
+                                                aria-hidden="true"
+                                                hidden
+                                            ></span>
+                                        </form>
+                                    </div>
                                 </li>
                             <?php endforeach; ?>
                         </ul>
