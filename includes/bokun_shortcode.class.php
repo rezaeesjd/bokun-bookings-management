@@ -577,6 +577,47 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 );
             }
 
+            $color_priority_map = [
+                'alarm'     => 0,
+                'attention' => 1,
+            ];
+
+            if (!empty($query->posts) && is_array($query->posts)) {
+                $default_priority = count($color_priority_map);
+
+                usort(
+                    $query->posts,
+                    static function ($a, $b) use ($color_priority_map, $default_priority) {
+                        $a_id = ($a instanceof WP_Post) ? $a->ID : (int) $a;
+                        $b_id = ($b instanceof WP_Post) ? $b->ID : (int) $b;
+
+                        $a_alarm_meta = get_post_meta($a_id, 'alarmstatus', true);
+                        $b_alarm_meta = get_post_meta($b_id, 'alarmstatus', true);
+
+                        $a_alarm = is_scalar($a_alarm_meta) ? strtolower((string) $a_alarm_meta) : '';
+                        $b_alarm = is_scalar($b_alarm_meta) ? strtolower((string) $b_alarm_meta) : '';
+
+                        $a_priority = $color_priority_map[$a_alarm] ?? $default_priority;
+                        $b_priority = $color_priority_map[$b_alarm] ?? $default_priority;
+
+                        if ($a_priority !== $b_priority) {
+                            return $a_priority <=> $b_priority;
+                        }
+
+                        $a_timestamp = (int) get_post_time('U', true, $a);
+                        $b_timestamp = (int) get_post_time('U', true, $b);
+
+                        if ($a_timestamp === $b_timestamp) {
+                            return 0;
+                        }
+
+                        return ($a_timestamp < $b_timestamp) ? -1 : 1;
+                    }
+                );
+
+                $query->rewind_posts();
+            }
+
             $dashboard_id = 'bokun-booking-dashboard-' . uniqid();
             $columns_style = sprintf('style="--bokun-booking-dashboard-columns: %d"', $columns);
 
