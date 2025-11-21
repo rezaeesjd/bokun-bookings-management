@@ -660,11 +660,13 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
         $confirmationCode = $booking['confirmationCode'];
         $post_title = $confirmationCode;
 
-        $startDateTime = !empty($booking['productBookings'][0]['startDateTime'])
+        $startDateTimeRaw = !empty($booking['productBookings'][0]['startDateTime'])
                             ? $booking['productBookings'][0]['startDateTime']
                             : (!empty($booking['productBookings'][0]['startDate'])
                                 ? $booking['productBookings'][0]['startDate']
                                 : '');
+
+        $startDateTime = $startDateTimeRaw;
 
         if (empty($startDateTime)) {
             $stats['skipped']++;
@@ -701,7 +703,7 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
 
         if (!empty($existing_post)) {
             $post_id = $existing_post[0];
-            $has_changes = bokun_check_for_changes($post_id, $booking);
+            $has_changes = bokun_check_for_changes($post_id, $booking, $startDateTimeRaw);
             if ($has_changes) {
                 $update_result = wp_update_post(array_merge(['ID' => $post_id], $post_data));
                 if (is_wp_error($update_result) || 0 === $update_result) {
@@ -761,12 +763,14 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
 }
 
 // Function to check if fields have changed, excluding 'bookingmade'
-function bokun_check_for_changes($post_id, $booking) {
+function bokun_check_for_changes($post_id, $booking, $startDateTimeRaw = '') {
     // Extract relevant fields to compare
     $customer = $booking['customer'] ?? [];
     $productBooking = $booking['productBookings'][0] ?? [];
 
     // Fields to compare
+    $startDateTimeValue = $startDateTimeRaw ?: ($productBooking['startDateTime'] ?? ($productBooking['startDate'] ?? 'N/A'));
+
     $fields_to_compare = [
         '_confirmation_code' => $booking['confirmationCode'] ?? 'N/A',
         '_first_name' => $customer['firstName'] ?? 'N/A',
@@ -779,6 +783,7 @@ function bokun_check_for_changes($post_id, $booking) {
         '_productBookings_0_status' => $productBooking['status'] ?? 'N/A',
         '_original_creation_date' => $booking['creationDate'] ?? 'N/A',
         '_original_start_date' => $productBooking['startDate'] ?? 'N/A',
+        '_original_start_datetime' => $startDateTimeValue,
     ];
 
     // Loop through each field to check if any have changed
@@ -838,6 +843,12 @@ function bokun_save_specific_fields($post_id, $booking, $context = 'default') {
     $original_start_date = get_post_meta($post_id, '_original_start_date', true);
     if ($original_start_date !== $productBooking['startDate']) {
         update_post_meta($post_id, '_original_start_date', sanitize_text_field($productBooking['startDate']));
+    }
+
+    $original_start_datetime_meta = get_post_meta($post_id, '_original_start_datetime', true);
+    $start_datetime_value = $productBooking['startDateTime'] ?? ($productBooking['startDate'] ?? '');
+    if ($original_start_datetime_meta !== $start_datetime_value) {
+        update_post_meta($post_id, '_original_start_datetime', sanitize_text_field($start_datetime_value));
     }
 
     // Handle product tags (product_id and product_title)
