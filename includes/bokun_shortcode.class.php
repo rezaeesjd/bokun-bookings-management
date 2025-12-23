@@ -189,6 +189,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             foreach ($logs as $log) {
                 $timestamp = strtotime($log['created_at']);
                 $formatted_date = $timestamp ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $timestamp) : $log['created_at'];
+                $sortable_date  = $timestamp ? $timestamp : 0;
                 $action_label = ucwords(str_replace('-', ' ', $log['action_type']));
                 $status_label = !empty($log['is_checked']) ? __('Checked', 'BOKUN_txt_domain') : __('Unchecked', 'BOKUN_txt_domain');
                 $actor_label  = $log['user_name'];
@@ -261,6 +262,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     'actor_value'    => $actor_value,
                     'source_label'   => $source_label,
                     'source_value'   => $source_value,
+                    'sort_date'      => $sortable_date,
                 ];
             }
 
@@ -492,7 +494,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     <tbody>
                         <?php foreach ($processed_logs as $log) : ?>
                             <tr data-action="<?php echo esc_attr($log['action_value']); ?>" data-status="<?php echo esc_attr($log['status_value']); ?>" data-actor="<?php echo esc_attr($log['actor_value']); ?>" data-source="<?php echo esc_attr($log['source_value']); ?>">
-                                <td data-title="<?php esc_attr_e('Date', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($log['date']); ?></td>
+                                <td data-title="<?php esc_attr_e('Date', 'BOKUN_txt_domain'); ?>" data-order="<?php echo esc_attr($log['sort_date']); ?>"><?php echo esc_html($log['date']); ?></td>
                                 <td data-title="<?php esc_attr_e('Booking ID', 'BOKUN_txt_domain'); ?>"><?php echo wp_kses_post($log['booking_display']); ?></td>
                                 <td data-title="<?php esc_attr_e('Action', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($log['action_label']); ?></td>
                                 <td data-title="<?php esc_attr_e('Status', 'BOKUN_txt_domain'); ?>"><?php echo esc_html($log['status_label']); ?></td>
