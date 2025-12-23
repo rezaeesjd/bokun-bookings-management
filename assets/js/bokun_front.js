@@ -5,6 +5,7 @@ jQuery(function ($) {
         var progressPollInterval = 1000;
         var apiContexts = Array.isArray(bokun_api_auth_vars && bokun_api_auth_vars.apiContexts) ? bokun_api_auth_vars.apiContexts : [];
         var apiContextMap = {};
+        var importNotificationMessages = [];
 
         apiContexts = apiContexts.filter(function (context) {
                 return context && (typeof context === 'object');
@@ -283,6 +284,7 @@ jQuery(function ($) {
                 if (index >= apiContexts.length) {
                         setImportProgress('allComplete', { totalContexts: apiContexts.length });
                         $button.text('Fetch').prop('disabled', false);
+                        showFinalImportNotification();
                         return;
                 }
 
@@ -340,7 +342,7 @@ jQuery(function ($) {
                                 }
 
                                 if (res.data && res.data.msg) {
-                                        alert(decodeHTMLEntities(res.data.msg));
+                                        recordImportNotification(contextLabel, res.data.msg);
                                 }
 
                                 runContextImportSequence(index + 1);
@@ -394,6 +396,7 @@ jQuery(function ($) {
                 stopAllImportProgressPolling();
                 resetImportProgressState();
                 setImportProgress('reset');
+                resetImportNotifications();
 
                 runContextImportSequence(0);
         });
@@ -402,6 +405,33 @@ jQuery(function ($) {
                 var tempElement = document.createElement('textarea');
                 tempElement.innerHTML = text;
                 return tempElement.value;
+        }
+
+        function resetImportNotifications() {
+                importNotificationMessages = [];
+        }
+
+        function recordImportNotification(contextLabel, message) {
+                if (!message) {
+                        return;
+                }
+
+                var normalized = decodeHTMLEntities(message);
+                var labeledMessage = contextLabel ? (contextLabel + ': ' + normalized) : normalized;
+
+                importNotificationMessages.push(labeledMessage);
+        }
+
+        function showFinalImportNotification() {
+                var message;
+
+                if (importNotificationMessages.length) {
+                        message = importNotificationMessages.join('\n');
+                } else {
+                        message = 'Import complete.';
+                }
+
+                alert(message);
         }
 
         function setImportProgress(step, options) {

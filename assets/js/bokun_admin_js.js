@@ -5,6 +5,7 @@ jQuery(document).ready(function ($) {
         var progressPollInterval = 1000;
         var apiContexts = Array.isArray(bokun_api_auth_vars && bokun_api_auth_vars.apiContexts) ? bokun_api_auth_vars.apiContexts : [];
         var apiContextMap = {};
+        var importNotificationMessages = [];
 
         apiContexts = apiContexts.filter(function (context) {
                 return context && typeof context === 'object';
@@ -517,6 +518,7 @@ jQuery(document).ready(function ($) {
                 if (index >= apiContexts.length) {
                         setImportProgress('allComplete', { totalContexts: apiContexts.length });
                         $button.prop('disabled', false).val('Fetch');
+                        showFinalImportNotification();
                         return;
                 }
 
@@ -574,7 +576,7 @@ jQuery(document).ready(function ($) {
                                 }
 
                                 if (res.data && res.data.msg) {
-                                        alert(decodeHTMLEntities(res.data.msg));
+                                        recordImportNotification(contextLabel, res.data.msg);
                                 }
 
                                 runAdminImportSequence(index + 1);
@@ -627,6 +629,7 @@ jQuery(document).ready(function ($) {
                 stopAllImportProgressPolling();
                 resetImportProgressState();
                 setImportProgress('reset');
+                resetImportNotifications();
 
                 runAdminImportSequence(0);
         });
@@ -724,6 +727,33 @@ jQuery(document).ready(function ($) {
                 var tempElement = document.createElement('textarea');
                 tempElement.innerHTML = text;
                 return tempElement.value;
+        }
+
+        function resetImportNotifications() {
+                importNotificationMessages = [];
+        }
+
+        function recordImportNotification(contextLabel, message) {
+                if (!message) {
+                        return;
+                }
+
+                var normalized = decodeHTMLEntities(message);
+                var labeledMessage = contextLabel ? (contextLabel + ': ' + normalized) : normalized;
+
+                importNotificationMessages.push(labeledMessage);
+        }
+
+        function showFinalImportNotification() {
+                var message;
+
+                if (importNotificationMessages.length) {
+                        message = importNotificationMessages.join('\n');
+                } else {
+                        message = 'Import complete.';
+                }
+
+                alert(message);
         }
 
         function setImportProgress(step, options) {
