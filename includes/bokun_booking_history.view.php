@@ -43,6 +43,7 @@ if (!empty($logs)) {
     foreach ($logs as $log) {
         $timestamp      = strtotime($log['created_at']);
         $formatted_date = $timestamp ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $timestamp) : $log['created_at'];
+        $sortable_date  = $timestamp ? $timestamp : 0;
         $action_label   = ucwords(str_replace('-', ' ', $log['action_type']));
         $status_label   = $log['is_checked'] ? __('Checked', 'BOKUN_txt_domain') : __('Unchecked', 'BOKUN_txt_domain');
         $actor_label    = $log['user_name'];
@@ -111,6 +112,7 @@ if (!empty($logs)) {
             'actor_value'  => $actor_value,
             'source_label' => $source_label,
             'source_value' => $source_value,
+            'sort_date'    => $sortable_date,
         ];
     }
 
@@ -363,7 +365,7 @@ if (!empty($logs)) {
                         data-status="<?php echo esc_attr($log['status_value']); ?>"
                         data-actor="<?php echo esc_attr($log['actor_value']); ?>"
                         data-source="<?php echo esc_attr($log['source_value']); ?>">
-                        <td><?php echo esc_html($log['date']); ?></td>
+                        <td data-order="<?php echo esc_attr($log['sort_date']); ?>"><?php echo esc_html($log['date']); ?></td>
                         <td>
                             <?php if (!empty($log['booking_link'])) : ?>
                                 <a href="<?php echo esc_url($log['booking_link']); ?>"><?php echo esc_html($log['booking_id']); ?></a>
