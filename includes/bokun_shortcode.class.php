@@ -905,6 +905,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
 
                 $show_refund_toggle = $requires_refund_followup;
+                $vendor_class = !empty($vendor_title) && stripos($vendor_title, 'Florence Adventures') !== false
+                    ? 'bokun-booking-dashboard__vendor--highlight'
+                    : 'bokun-booking-dashboard__vendor--accent';
+                $reserve_link_class = $vendor_class === 'bokun-booking-dashboard__vendor--highlight'
+                    ? 'bokun-booking-dashboard__reserve-link bokun-booking-dashboard__reserve-link--highlight'
+                    : 'bokun-booking-dashboard__reserve-link bokun-booking-dashboard__reserve-link--accent';
 
                 ob_start();
                 ?>
@@ -945,7 +951,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             </div>
                             <?php if (!empty($partner_page_url)) : ?>
                                 <a
-                                    class="bokun-booking-dashboard__reserve-link"
+                                    class="<?php echo esc_attr($reserve_link_class); ?>"
                                     href="<?php echo esc_url($partner_page_url); ?>"
                                     target="_blank"
                                     rel="noopener noreferrer"
@@ -955,11 +961,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             <?php endif; ?>
                         </div>
                         <?php if (!empty($vendor_title)) : ?>
-                            <?php
-                            $vendor_class = (stripos($vendor_title, 'Florence Adventures') !== false)
-                                ? 'bokun-booking-dashboard__vendor--highlight'
-                                : 'bokun-booking-dashboard__vendor--accent';
-                            ?>
                             <p class="bokun-booking-dashboard__vendor <?php echo esc_attr($vendor_class); ?>">
                                 <?php echo esc_html($vendor_title); ?>
                             </p>

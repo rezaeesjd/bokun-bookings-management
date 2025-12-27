@@ -522,10 +522,14 @@
 }
 
 .bokun-booking-dashboard__reserve-link {
+  --bokun-booking-dashboard-reserve-link-bg: var(--bokun-booking-dashboard-accent);
+  --bokun-booking-dashboard-reserve-link-bg-hover: var(--bokun-booking-dashboard-accent-dark);
+  --bokun-booking-dashboard-reserve-link-shadow: 0 10px 20px rgba(123, 30, 58, 0.25);
+  --bokun-booking-dashboard-reserve-link-shadow-hover: 0 12px 28px rgba(95, 21, 44, 0.35);
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  background: var(--bokun-booking-dashboard-accent);
+  background: var(--bokun-booking-dashboard-reserve-link-bg);
   color: #ffffff;
   padding: 0.4rem 1rem;
   font-size: 0.75rem;
@@ -533,16 +537,30 @@
   letter-spacing: 0.02em;
   text-decoration: none;
   transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 10px 20px rgba(123, 30, 58, 0.25);
+  box-shadow: var(--bokun-booking-dashboard-reserve-link-shadow);
+}
+
+.bokun-booking-dashboard__reserve-link--accent {
+  --bokun-booking-dashboard-reserve-link-bg: var(--bokun-booking-dashboard-accent);
+  --bokun-booking-dashboard-reserve-link-bg-hover: var(--bokun-booking-dashboard-accent-dark);
+  --bokun-booking-dashboard-reserve-link-shadow: 0 10px 20px rgba(123, 30, 58, 0.25);
+  --bokun-booking-dashboard-reserve-link-shadow-hover: 0 12px 28px rgba(95, 21, 44, 0.35);
+}
+
+.bokun-booking-dashboard__reserve-link--highlight {
+  --bokun-booking-dashboard-reserve-link-bg: #2563eb;
+  --bokun-booking-dashboard-reserve-link-bg-hover: #1d4ed8;
+  --bokun-booking-dashboard-reserve-link-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
+  --bokun-booking-dashboard-reserve-link-shadow-hover: 0 12px 28px rgba(30, 64, 175, 0.35);
 }
 
 .bokun-booking-dashboard__reserve-link:hover,
 .bokun-booking-dashboard__reserve-link:focus {
-  background: var(--bokun-booking-dashboard-accent-dark);
+  background: var(--bokun-booking-dashboard-reserve-link-bg-hover);
   color: #ffffff;
   transform: translateY(-1px);
   outline: none;
-  box-shadow: 0 12px 28px rgba(95, 21, 44, 0.35);
+  box-shadow: var(--bokun-booking-dashboard-reserve-link-shadow-hover);
 }
 
 .bokun-booking-dashboard__vendor {
