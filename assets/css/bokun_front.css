@@ -120,6 +120,8 @@
 
 .bokun-booking-dashboard {
   --bokun-booking-dashboard-columns: 3;
+  --bokun-booking-dashboard-accent: #7b1e3a;
+  --bokun-booking-dashboard-accent-dark: #5f152c;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -523,7 +525,7 @@
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
-  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  background: var(--bokun-booking-dashboard-accent);
   color: #ffffff;
   padding: 0.4rem 1rem;
   font-size: 0.75rem;
@@ -531,20 +533,20 @@
   letter-spacing: 0.02em;
   text-decoration: none;
   transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 10px 20px rgba(123, 30, 58, 0.25);
 }
 
 .bokun-booking-dashboard__reserve-link:hover,
 .bokun-booking-dashboard__reserve-link:focus {
-  background: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%);
+  background: var(--bokun-booking-dashboard-accent-dark);
   color: #ffffff;
   transform: translateY(-1px);
   outline: none;
-  box-shadow: 0 12px 28px rgba(29, 78, 216, 0.35);
+  box-shadow: 0 12px 28px rgba(95, 21, 44, 0.35);
 }
 
 .bokun-booking-dashboard__vendor {
-  margin: 0.25rem 0 0;
+  margin: -0.1rem 0 0;
   font-size: 1rem;
   font-weight: 700;
 }
@@ -554,7 +556,7 @@
 }
 
 .bokun-booking-dashboard__vendor--accent {
-  color: #7b1e3a;
+  color: var(--bokun-booking-dashboard-accent);
 }
 
 
