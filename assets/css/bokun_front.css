@@ -473,7 +473,7 @@
 
 .bokun-booking-dashboard__title a {
   color: inherit;
-  text-decoration: none;
+  text-decoration: underline;
 }
 
 .bokun-booking-dashboard__title a:hover,
@@ -1025,10 +1025,9 @@
 .bokun-booking-dashboard__toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.1rem;
   font-size: 0.85rem;
   color: #0f172a;
-  cursor: pointer;
 }
 
 .bokun-booking-dashboard__toggle input[type="checkbox"] {
@@ -1316,4 +1315,3 @@
 .bokun-booking-dashboard__card.alarm_status-ok {
   border-color: #0f172a;
 }
-
