@@ -972,23 +972,23 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                     <div class="bokun-booking-dashboard__toggles" role="group" aria-label="<?php esc_attr_e('Booking status toggles', 'BOKUN_txt_domain'); ?>">
                         <span class="bokun-booking-dashboard__toggle-label"><?php esc_html_e('Result:', 'BOKUN_txt_domain'); ?></span>
-                        <label class="bokun-booking-dashboard__toggle">
-                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="full" <?php echo checked($checkbox_states['full'], true, false); ?> />
+                        <div class="bokun-booking-dashboard__toggle">
+                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="full" aria-label="<?php esc_attr_e('Full', 'BOKUN_txt_domain'); ?>" <?php echo checked($checkbox_states['full'], true, false); ?> />
                             <span><?php esc_html_e('Full', 'BOKUN_txt_domain'); ?></span>
-                        </label>
-                        <label class="bokun-booking-dashboard__toggle">
-                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="partial" <?php echo checked($checkbox_states['partial'], true, false); ?> />
+                        </div>
+                        <div class="bokun-booking-dashboard__toggle">
+                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="partial" aria-label="<?php esc_attr_e('Partial', 'BOKUN_txt_domain'); ?>" <?php echo checked($checkbox_states['partial'], true, false); ?> />
                             <span><?php esc_html_e('Partial', 'BOKUN_txt_domain'); ?></span>
-                        </label>
-                        <label class="bokun-booking-dashboard__toggle">
-                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="not-available" <?php echo checked($checkbox_states['not-available'], true, false); ?> />
+                        </div>
+                        <div class="bokun-booking-dashboard__toggle">
+                            <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="not-available" aria-label="<?php esc_attr_e('Not available', 'BOKUN_txt_domain'); ?>" <?php echo checked($checkbox_states['not-available'], true, false); ?> />
                             <span><?php esc_html_e('Not available', 'BOKUN_txt_domain'); ?></span>
-                        </label>
+                        </div>
                         <?php if ($show_refund_toggle) : ?>
-                            <label class="bokun-booking-dashboard__toggle">
-                                <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refund-partner" <?php echo checked($checkbox_states['refund-partner'], true, false); ?> />
+                            <div class="bokun-booking-dashboard__toggle">
+                                <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refund-partner" aria-label="<?php esc_attr_e('Refund requested', 'BOKUN_txt_domain'); ?>" <?php echo checked($checkbox_states['refund-partner'], true, false); ?> />
                                 <span><?php esc_html_e('Refund requested', 'BOKUN_txt_domain'); ?></span>
-                            </label>
+                            </div>
                         <?php endif; ?>
                     </div>
 
