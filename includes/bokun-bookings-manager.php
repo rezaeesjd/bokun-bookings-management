@@ -515,6 +515,52 @@ function bokun_reset_import_progress_state($context) {
     delete_transient($key);
 }
 
+function bokun_run_daily_import() {
+    $configured_credentials = bokun_get_configured_api_credentials();
+
+    if (empty($configured_credentials)) {
+        error_log(__('Bokun import skipped: no API credentials configured.', 'bokun-bookings-manager'));
+        return;
+    }
+
+    foreach ($configured_credentials as $context => $config) {
+        $progress_context = bokun_normalize_import_context($context);
+
+        bokun_reset_import_progress_state($progress_context);
+
+        $bookings = bokun_fetch_bookings($progress_context);
+
+        if (is_string($bookings)) {
+            $normalized_message = trim($bookings);
+            $is_error_message = stripos($normalized_message, 'error') === 0;
+
+            if ($is_error_message) {
+                $progress_message = bokun_get_import_progress_message($progress_context, 'error');
+            } else {
+                $progress_label = bokun_get_import_progress_label($progress_context);
+                /* translators: %s: API label. */
+                $progress_message = sprintf(__('%s — no bookings found; continuing with remaining imports.', 'bokun-bookings-manager'), $progress_label);
+            }
+
+            bokun_set_import_progress_state($progress_context, array(
+                'status'    => $is_error_message ? 'error' : 'completed',
+                'total'     => 0,
+                'processed' => 0,
+                'created'   => 0,
+                'updated'   => 0,
+                'skipped'   => 0,
+                'message'   => $progress_message,
+            ));
+
+            continue;
+        }
+
+        bokun_save_bookings_as_posts($bookings, $progress_context);
+    }
+}
+
+add_action(BOKUN_DAILY_IMPORT_HOOK, 'bokun_run_daily_import');
+
 /**
  * Ensure the Bokun booking custom post type is registered before attempting to
  * create or update posts.

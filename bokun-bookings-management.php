@@ -73,6 +73,7 @@ define( 'BOKUN_IMAGES_URL', BOKUN_ASSETS_URL.'images/');
 define( 'BOKUN_CSS_URL', BOKUN_ASSETS_URL.'css/');
 define( 'BOKUN_JS_URL', BOKUN_ASSETS_URL.'js/');
 define( 'BOKUN_AUTH_URL', '');
+define( 'BOKUN_DAILY_IMPORT_HOOK', 'bokun_daily_booking_import' );
 
 // define text domain
 define( 'BOKUN_txt_domain', 'BOKUN_text_domain' );
@@ -278,10 +279,13 @@ class BokunBookingManagement {
 
         dbDelta($sql);
 
+        bokun_schedule_daily_import();
+
         }
 
     static function bokun_deactivation() {
         // deactivation process here
+        bokun_clear_daily_import_schedule();
     }
 
     public function bokun_add_settings_link( $links ) {
@@ -509,10 +513,32 @@ class BokunBookingManagement {
     
 }
 
+function bokun_get_next_midnight_timestamp() {
+    $timezone = wp_timezone();
+    $now = new DateTime('now', $timezone);
+    $next_midnight = (clone $now)->modify('tomorrow')->setTime(0, 0, 0);
+
+    return $next_midnight->getTimestamp();
+}
+
+function bokun_schedule_daily_import() {
+    if (wp_next_scheduled(BOKUN_DAILY_IMPORT_HOOK)) {
+        return;
+    }
+
+    wp_schedule_event(bokun_get_next_midnight_timestamp(), 'daily', BOKUN_DAILY_IMPORT_HOOK);
+}
+
+function bokun_clear_daily_import_schedule() {
+    wp_clear_scheduled_hook(BOKUN_DAILY_IMPORT_HOOK);
+}
+
 
 // begin!
 global $rb;
 $rb = new BokunBookingManagement();
+
+add_action('init', 'bokun_schedule_daily_import');
 
 if( $rb->bokun_is_activate() && file_exists( BOKUN_INCLUDES_DIR . "bokun_settings.class.php" ) ) {
     include_once( BOKUN_INCLUDES_DIR . "bokun_settings.class.php" );
