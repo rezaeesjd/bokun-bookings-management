@@ -847,22 +847,27 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $title_copy_value = $title_copy_text;
                 $title_copy_html  = '';
 
-                $partner_page_id = '';
-                $partner_terms   = wp_get_post_terms($post_id, 'product_tags');
+                $partner_page_id  = '';
+                $tag_editor_link  = '';
+                $partner_terms    = wp_get_post_terms($post_id, 'product_tags');
                 if (!empty($partner_terms) && !is_wp_error($partner_terms)) {
                     foreach ($partner_terms as $term) {
                         $term_partner_meta = get_term_meta($term->term_id, 'partnerpageid', true);
                         $term_partner_id   = is_scalar($term_partner_meta) ? (string) $term_partner_meta : '';
+                        $term_edit_link    = get_edit_term_link($term, 'product_tags');
+
+                        if ('' === $tag_editor_link && !is_wp_error($term_edit_link) && !empty($term_edit_link)) {
+                            $tag_editor_link = $term_edit_link;
+                        }
 
                         if (!isset($processed_product_tag_ids[$term->term_id])) {
                             $processed_product_tag_ids[$term->term_id] = true;
 
                             if ($term_partner_id === '') {
-                                $edit_link = get_edit_term_link($term, 'product_tags');
                                 $product_tags_without_partner[$term->term_id] = [
                                     'term_id'  => $term->term_id,
                                     'name'      => $term->name,
-                                    'edit_link' => (!is_wp_error($edit_link) && !empty($edit_link)) ? $edit_link : '',
+                                    'edit_link' => (!is_wp_error($term_edit_link) && !empty($term_edit_link)) ? $term_edit_link : '',
                                 ];
                             }
                         }
@@ -1182,7 +1187,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         <?php endif; ?>
                     </div>
 
-                    <?php if (!empty($status_labels) || !empty($viator_url) || !empty($bokun_url)) : ?>
+                    <?php if (!empty($status_labels) || !empty($tag_editor_link) || !empty($viator_url) || !empty($bokun_url)) : ?>
                         <div class="bokun-booking-dashboard__meta-line">
                             <?php if (!empty($status_labels)) : ?>
                                 <ul class="bokun-booking-dashboard__status-list">
@@ -1190,6 +1195,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                         <li class="bokun-booking-dashboard__status-item"><?php echo esc_html($status_label); ?></li>
                                     <?php endforeach; ?>
                                 </ul>
+                            <?php endif; ?>
+
+                            <?php if (!empty($tag_editor_link)) : ?>
+                                <a href="<?php echo esc_url($tag_editor_link); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link bokun-booking-dashboard__tag-editor-link">
+                                    <?php esc_html_e('Tag Editor', 'BOKUN_txt_domain'); ?>
+                                </a>
                             <?php endif; ?>
 
                             <?php if (!empty($viator_url) || !empty($bokun_url)) : ?>
