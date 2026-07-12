@@ -848,6 +848,7 @@ jQuery(function ($) {
                 var $submit = $form.find('[data-partner-page-submit]');
                 var $feedback = $form.find('[data-partner-page-feedback]');
                 var partnerPageId = $input.length ? String($input.val()).trim() : '';
+                var dashboardDays = parseInt($form.attr('data-dashboard-days'), 10) || 30;
 
                 function showFeedback(type, message) {
                         if (!$feedback.length) {
@@ -899,6 +900,7 @@ jQuery(function ($) {
                                 action: 'bokun_update_partner_page_id',
                                 security: bokun_api_auth_vars.nonce,
                                 term_id: termId,
+                                dashboard_days: dashboardDays,
                                 partner_page_id: partnerPageId
                         },
                         dataType: 'json'
