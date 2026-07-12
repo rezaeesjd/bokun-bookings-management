@@ -1624,7 +1624,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                 <?php esc_html_e('Edit tag', 'BOKUN_txt_domain'); ?>
                                             </a>
                                         <?php endif; ?>
-                                        <form class="bokun-booking-dashboard__missing-tag-form" data-partner-tag-form data-term-id="<?php echo esc_attr($term_id); ?>" data-dashboard-days="<?php echo esc_attr($days); ?>">
+                                        <form class="bokun-booking-dashboard__missing-tag-form" data-partner-tag-form data-term-id="<?php echo esc_attr($term_id); ?>">
                                             <label class="screen-reader-text" for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Partner Page ID', 'BOKUN_txt_domain'); ?></label>
                                             <input
                                                 type="text"

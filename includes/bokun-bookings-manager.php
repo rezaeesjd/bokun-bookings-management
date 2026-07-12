@@ -3131,86 +3131,6 @@ function update_booking_status() {
 add_action('wp_ajax_update_booking_status', 'update_booking_status');
 add_action('wp_ajax_nopriv_update_booking_status', 'update_booking_status');
 
-function bokun_team_member_verified_cookie_name() {
-    return 'bokunTeamMemberVerified_sitewide';
-}
-
-function bokun_create_team_member_verified_cookie_value($team_member_name, $expiration) {
-    $payload = wp_json_encode(
-        [
-            'name' => sanitize_text_field($team_member_name),
-            'exp'  => (int) $expiration,
-        ]
-    );
-
-    if (false === $payload) {
-        return '';
-    }
-
-    $payload = rtrim(strtr(base64_encode($payload), '+/', '-_'), '=');
-    $signature = hash_hmac('sha256', $payload, wp_salt('auth'));
-
-    return $payload . '.' . $signature;
-}
-
-function bokun_set_team_member_verified_cookie($team_member_name) {
-    $expiration = time() + (defined('YEAR_IN_SECONDS') ? YEAR_IN_SECONDS : 31536000);
-    $cookie_name = bokun_team_member_verified_cookie_name();
-    $cookie_value = bokun_create_team_member_verified_cookie_value($team_member_name, $expiration);
-
-    if ('' === $cookie_value) {
-        return;
-    }
-
-    if (!headers_sent()) {
-        setcookie($cookie_name, $cookie_value, $expiration, '/', '', is_ssl(), true);
-    }
-
-    $_COOKIE[$cookie_name] = $cookie_value;
-}
-
-function bokun_team_member_has_verified_grant() {
-    $cookie_name = bokun_team_member_verified_cookie_name();
-
-    if (empty($_COOKIE[$cookie_name])) {
-        return false;
-    }
-
-    $cookie_value = sanitize_text_field(wp_unslash($_COOKIE[$cookie_name]));
-    $parts = explode('.', $cookie_value, 2);
-
-    if (2 !== count($parts)) {
-        return false;
-    }
-
-    list($payload, $signature) = $parts;
-    $expected_signature = hash_hmac('sha256', $payload, wp_salt('auth'));
-
-    if (!hash_equals($expected_signature, $signature)) {
-        return false;
-    }
-
-    $base64_payload = strtr($payload, '-_', '+/');
-    $base64_payload .= str_repeat('=', (4 - strlen($base64_payload) % 4) % 4);
-    $decoded_payload = base64_decode($base64_payload, true);
-
-    if (false === $decoded_payload) {
-        return false;
-    }
-
-    $grant = json_decode($decoded_payload, true);
-
-    if (!is_array($grant) || empty($grant['name']) || empty($grant['exp'])) {
-        return false;
-    }
-
-    if ((int) $grant['exp'] < time()) {
-        return false;
-    }
-
-    return (bool) term_exists(sanitize_text_field($grant['name']), 'team_member');
-}
-
 // Handle AJAX request to create Team Member taxonomy terms
 function bokun_handle_add_team_member() {
     check_ajax_referer('add_team_member_nonce', 'security');
@@ -3227,8 +3147,6 @@ function bokun_handle_add_team_member() {
     $existing_term = term_exists($team_member_name, 'team_member');
 
     if ($existing_term) {
-        bokun_set_team_member_verified_cookie($team_member_name);
-
         wp_send_json_success([
             'message' => __('This team member already exists.', 'bokun-bookings-manager'),
             'created' => false,
@@ -3243,8 +3161,6 @@ function bokun_handle_add_team_member() {
         ]);
     }
 
-    bokun_set_team_member_verified_cookie($team_member_name);
-
     wp_send_json_success([
         'message' => __('Team member added successfully.', 'bokun-bookings-manager'),
         'created' => true,
@@ -3255,61 +3171,6 @@ add_action('wp_ajax_add_team_member', 'bokun_handle_add_team_member');
 add_action('wp_ajax_nopriv_add_team_member', 'bokun_handle_add_team_member');
 
 add_action('wp_ajax_bokun_update_partner_page_id', 'bokun_update_partner_page_id');
-add_action('wp_ajax_nopriv_bokun_update_partner_page_id', 'bokun_update_partner_page_id');
-
-function bokun_product_tag_can_be_updated_from_dashboard($term_id, $days = 30) {
-    $term_id = absint($term_id);
-
-    if ($term_id <= 0) {
-        return false;
-    }
-
-    $partner_page_id = get_term_meta($term_id, 'partnerpageid', true);
-    $partner_page_id = is_scalar($partner_page_id) ? trim((string) $partner_page_id) : '';
-
-    if ('' !== $partner_page_id) {
-        return false;
-    }
-
-    $days = max(1, absint($days));
-    $now_timestamp = current_time('timestamp');
-    $range_end = strtotime('+' . $days . ' days', $now_timestamp);
-
-    if (false === $range_end) {
-        $range_end = $now_timestamp;
-    }
-
-    $query = new WP_Query(
-        [
-            'post_type'           => 'bokun_booking',
-            'post_status'         => 'publish',
-            'posts_per_page'      => 1,
-            'ignore_sticky_posts' => true,
-            'no_found_rows'       => true,
-            'fields'              => 'ids',
-            'date_query'          => [
-                [
-                    'column'    => 'post_date_gmt',
-                    'after'     => current_time('mysql', true),
-                    'before'    => gmdate('Y-m-d H:i:s', $range_end),
-                    'inclusive' => true,
-                ],
-            ],
-            'tax_query'           => [
-                [
-                    'taxonomy' => 'product_tags',
-                    'field'    => 'term_id',
-                    'terms'    => [$term_id],
-                ],
-            ],
-        ]
-    );
-
-    $can_update = $query->have_posts();
-    wp_reset_postdata();
-
-    return $can_update;
-}
 
 function bokun_update_partner_page_id() {
     if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
@@ -3319,7 +3180,6 @@ function bokun_update_partner_page_id() {
 
     $term_id = isset($_POST['term_id']) ? absint($_POST['term_id']) : 0;
     $partner_page_id = isset($_POST['partner_page_id']) ? sanitize_text_field(wp_unslash($_POST['partner_page_id'])) : '';
-    $dashboard_days = isset($_POST['dashboard_days']) ? absint($_POST['dashboard_days']) : 30;
 
     if ($term_id <= 0) {
         wp_send_json_error(array('msg' => __('Invalid product tag.', 'bokun-bookings-manager')));
@@ -3342,14 +3202,7 @@ function bokun_update_partner_page_id() {
 
     $has_capability = current_user_can('edit_term', $term_id);
 
-    if (
-        !$has_capability
-        && !current_user_can($required_capability)
-        && !(
-            bokun_team_member_has_verified_grant()
-            && bokun_product_tag_can_be_updated_from_dashboard($term_id, $dashboard_days)
-        )
-    ) {
+    if (!$has_capability && !current_user_can($required_capability)) {
         wp_send_json_error(array('msg' => __('You are not allowed to update this product tag.', 'bokun-bookings-manager')));
         wp_die();
     }
