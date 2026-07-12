@@ -6,6 +6,8 @@ jQuery(function ($) {
         var apiContexts = Array.isArray(bokun_api_auth_vars && bokun_api_auth_vars.apiContexts) ? bokun_api_auth_vars.apiContexts : [];
         var apiContextMap = {};
         var importNotificationMessages = [];
+        var TEAM_MEMBER_STORAGE_PREFIX = 'bokunTeamMemberAuthorized_';
+        var TEAM_MEMBER_SITEWIDE_STORAGE_KEY = TEAM_MEMBER_STORAGE_PREFIX + 'sitewide';
 
         apiContexts = apiContexts.filter(function (context) {
                 return context && (typeof context === 'object');
@@ -47,6 +49,99 @@ jQuery(function ($) {
                 }
 
                 return null;
+        }
+
+        function getCookieValue(name) {
+                var cookies = document.cookie ? document.cookie.split(';') : [];
+
+                for (var i = 0; i < cookies.length; i++) {
+                        var cookie = cookies[i].trim();
+
+                        if (cookie.indexOf(encodeURIComponent(name) + '=') === 0 || cookie.indexOf(name + '=') === 0) {
+                                return decodeURIComponent(cookie.substring(cookie.indexOf('=') + 1));
+                        }
+                }
+
+                return '';
+        }
+
+        function getStoredTeamMemberName() {
+                var storageKeys = [TEAM_MEMBER_SITEWIDE_STORAGE_KEY];
+
+                try {
+                        for (var localIndex = 0; localIndex < window.localStorage.length; localIndex++) {
+                                var localKey = window.localStorage.key(localIndex);
+
+                                if (localKey && localKey.indexOf(TEAM_MEMBER_STORAGE_PREFIX) === 0 && storageKeys.indexOf(localKey) === -1) {
+                                        storageKeys.push(localKey);
+                                }
+                        }
+                } catch (error) {}
+
+                try {
+                        for (var sessionIndex = 0; sessionIndex < window.sessionStorage.length; sessionIndex++) {
+                                var sessionKey = window.sessionStorage.key(sessionIndex);
+
+                                if (sessionKey && sessionKey.indexOf(TEAM_MEMBER_STORAGE_PREFIX) === 0 && storageKeys.indexOf(sessionKey) === -1) {
+                                        storageKeys.push(sessionKey);
+                                }
+                        }
+                } catch (error) {}
+
+                for (var index = 0; index < storageKeys.length; index++) {
+                        var key = storageKeys[index];
+                        var value = '';
+
+                        try {
+                                value = window.localStorage.getItem(key) || '';
+                        } catch (error) {
+                                value = '';
+                        }
+
+                        if (!value) {
+                                try {
+                                        value = window.sessionStorage.getItem(key) || '';
+                                } catch (error) {
+                                        value = '';
+                                }
+                        }
+
+                        if (!value) {
+                                value = getCookieValue(key);
+                        }
+
+                        if (value) {
+                                return String(value).trim();
+                        }
+                }
+
+                return '';
+        }
+
+        function ensureTeamMemberServerGrant() {
+                var teamMemberName = getStoredTeamMemberName();
+                var teamMemberNonce = '';
+
+                if (typeof bbm_ajax !== 'undefined' && bbm_ajax.team_member_nonce) {
+                        teamMemberNonce = bbm_ajax.team_member_nonce;
+                } else if (typeof bokun_api_auth_vars !== 'undefined' && bokun_api_auth_vars.team_member_nonce) {
+                        teamMemberNonce = bokun_api_auth_vars.team_member_nonce;
+                }
+
+                if (!teamMemberName || !teamMemberNonce) {
+                        return $.Deferred().resolve().promise();
+                }
+
+                return $.ajax({
+                        type: 'POST',
+                        url: ajaxUrl,
+                        data: {
+                                action: 'add_team_member',
+                                security: teamMemberNonce,
+                                team_member_name: teamMemberName
+                        },
+                        dataType: 'json'
+                });
         }
 
         function getContextLabel(slug, index) {
@@ -848,6 +943,7 @@ jQuery(function ($) {
                 var $submit = $form.find('[data-partner-page-submit]');
                 var $feedback = $form.find('[data-partner-page-feedback]');
                 var partnerPageId = $input.length ? String($input.val()).trim() : '';
+                var dashboardDays = parseInt($form.attr('data-dashboard-days'), 10) || 30;
 
                 function showFeedback(type, message) {
                         if (!$feedback.length) {
@@ -892,16 +988,19 @@ jQuery(function ($) {
                 $submit.prop('disabled', true);
                 $input.prop('disabled', true);
 
-                $.ajax({
-                        type: 'POST',
-                        url: ajaxUrl,
-                        data: {
-                                action: 'bokun_update_partner_page_id',
-                                security: bokun_api_auth_vars.nonce,
-                                term_id: termId,
-                                partner_page_id: partnerPageId
-                        },
-                        dataType: 'json'
+                ensureTeamMemberServerGrant().then(function () {
+                        return $.ajax({
+                                type: 'POST',
+                                url: ajaxUrl,
+                                data: {
+                                        action: 'bokun_update_partner_page_id',
+                                        security: bokun_api_auth_vars.nonce,
+                                        term_id: termId,
+                                        dashboard_days: dashboardDays,
+                                        partner_page_id: partnerPageId
+                                },
+                                dataType: 'json'
+                        });
                 }).done(function (res) {
                         if (res && res.success) {
                                 var successMessage = res.data && res.data.msg ? decodeHTMLEntities(res.data.msg) : 'Partner Page ID saved.';
@@ -936,6 +1035,8 @@ jQuery(function ($) {
 
                         if (xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.msg) {
                                 errorMessage = decodeHTMLEntities(xhr.responseJSON.data.msg);
+                        } else if (xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+                                errorMessage = decodeHTMLEntities(xhr.responseJSON.data.message);
                         }
 
                         showFeedback('error', errorMessage);
