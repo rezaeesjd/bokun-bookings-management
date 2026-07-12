@@ -414,6 +414,7 @@ class BokunBookingManagement {
                 array(
                     'nonce'    => wp_create_nonce('bokun_api_auth_nonce'),
                     'ajax_url' => admin_url( 'admin-ajax.php' ),
+                    'team_member_nonce' => wp_create_nonce('add_team_member_nonce'),
                     'apiContexts' => bokun_get_api_context_definitions(),
                 )
             );
