@@ -78,6 +78,26 @@ define( 'BOKUN_DAILY_IMPORT_HOOK', 'bokun_daily_booking_import' );
 // define text domain
 define( 'BOKUN_txt_domain', 'BOKUN_text_domain' );
 
+/**
+ * Keep common client-message copy polished without changing dashboard behavior.
+ *
+ * Some dashboard strings use the legacy literal text domain `BOKUN_txt_domain`,
+ * while the plugin constant resolves to `BOKUN_text_domain`, so support both.
+ */
+function bokun_polish_common_conversation_copy($translated_text, $text, $domain) {
+    if (!in_array($domain, [BOKUN_txt_domain, 'BOKUN_txt_domain'], true)) {
+        return $translated_text;
+    }
+
+    $replacements = [
+        'Unfortunately this tour is not available for Day and Month. We apologize for the inconvenience but we have to cancel the reservation with a full refund.' => 'Unfortunately, the tour will not be available on Day and Month. We sincerely apologize for the inconvenience, but we will need to cancel your reservation and issue a full refund.',
+        'Thank you for understanding and patience.' => 'Thank you very much for your understanding and patience.',
+    ];
+
+    return isset($replacements[$text]) ? $replacements[$text] : $translated_text;
+}
+add_filter('gettext', 'bokun_polish_common_conversation_copy', 10, 3);
+
 global $bokun_version;
 $bokun_version = '1.0.0';
 
