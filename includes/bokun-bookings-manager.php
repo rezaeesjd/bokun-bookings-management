@@ -3370,6 +3370,114 @@ function bokun_update_partner_page_id() {
     wp_die();
 }
 
+add_action('wp_ajax_bokun_send_booking_message', 'bokun_send_booking_message');
+add_action('wp_ajax_nopriv_bokun_send_booking_message', 'bokun_send_booking_message');
+
+/**
+ * Whether the current requester may send a client message from the dashboard.
+ *
+ * Mirrors the partner-page-id handler: signed-in editors/admins are allowed,
+ * and verified team members acting from the front-end dashboard are allowed.
+ */
+function bokun_can_send_booking_message() {
+    if (current_user_can('manage_options') || current_user_can('edit_posts')) {
+        return true;
+    }
+
+    return bokun_team_member_has_verified_grant();
+}
+
+// Handle AJAX request to send a message to the booking's stored contact email.
+function bokun_send_booking_message() {
+    if (!check_ajax_referer('bokun_send_message_nonce', 'security', false)) {
+        wp_send_json_error(array('message' => __('Your session has expired. Please refresh the page and try again.', 'bokun-bookings-manager')));
+        wp_die();
+    }
+
+    if (!bokun_can_send_booking_message()) {
+        wp_send_json_error(array('message' => __('You are not allowed to send messages for this booking.', 'bokun-bookings-manager')));
+        wp_die();
+    }
+
+    $booking_id   = isset($_POST['booking_id']) ? sanitize_text_field(wp_unslash($_POST['booking_id'])) : '';
+    $message_type = isset($_POST['message_type']) ? sanitize_key(wp_unslash($_POST['message_type'])) : '';
+    $subject      = isset($_POST['subject']) ? sanitize_text_field(wp_unslash($_POST['subject'])) : '';
+    $message_body = isset($_POST['message']) ? sanitize_textarea_field(wp_unslash($_POST['message'])) : '';
+
+    if ('' === $booking_id) {
+        wp_send_json_error(array('message' => __('Invalid booking reference.', 'bokun-bookings-manager')));
+        wp_die();
+    }
+
+    $allowed_types = array('meeting-point', 'alternative-date', 'tour-not-available', 'custom');
+    if (!in_array($message_type, $allowed_types, true)) {
+        $message_type = 'custom';
+    }
+
+    if ('' === trim($message_body)) {
+        wp_send_json_error(array('message' => __('Please write a message before sending.', 'bokun-bookings-manager')));
+        wp_die();
+    }
+
+    $query = new WP_Query(array(
+        'post_type'      => 'bokun_booking',
+        'post_status'    => 'publish',
+        'posts_per_page' => 1,
+        'no_found_rows'  => true,
+        'meta_query'     => array(
+            array(
+                'key'     => '_confirmation_code',
+                'value'   => $booking_id,
+                'compare' => '=',
+            ),
+        ),
+    ));
+
+    if (!$query->have_posts()) {
+        wp_reset_postdata();
+        wp_send_json_error(array('message' => __('Booking not found.', 'bokun-bookings-manager')));
+        wp_die();
+    }
+
+    $query->the_post();
+    $post_id = get_the_ID();
+    wp_reset_postdata();
+
+    // Recipient is always resolved server-side from the stored booking meta so the
+    // request cannot be used to send mail to an arbitrary address.
+    $recipient = get_post_meta($post_id, '_email', true);
+    $recipient = is_scalar($recipient) ? trim((string) $recipient) : '';
+
+    if ('' === $recipient || !is_email($recipient)) {
+        wp_send_json_error(array('message' => __('No valid contact email is stored for this booking.', 'bokun-bookings-manager')));
+        wp_die();
+    }
+
+    if ('' === $subject) {
+        $subject = sprintf(
+            /* translators: %s: booking confirmation code. */
+            __('Regarding your booking %s', 'bokun-bookings-manager'),
+            $booking_id
+        );
+    }
+
+    $headers = array('Content-Type: text/plain; charset=UTF-8');
+    $sent    = wp_mail($recipient, $subject, $message_body, $headers);
+
+    if (!$sent) {
+        wp_send_json_error(array('message' => __('The message could not be sent. Please try again.', 'bokun-bookings-manager')));
+        wp_die();
+    }
+
+    bokun_record_booking_history($post_id, $booking_id, 'message-sent', true);
+
+    wp_send_json_success(array(
+        'message'   => __('Message sent to the client.', 'bokun-bookings-manager'),
+        'recipient' => $recipient,
+    ));
+    wp_die();
+}
+
 // Function to process price categories and save to fixed fields
 function process_price_categories_and_save($post_id, $booking_data) {
     $category_counts = [];

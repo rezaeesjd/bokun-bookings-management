@@ -506,6 +506,7 @@ class BokunBookingManagement {
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('update_booking_nonce'),
             'team_member_nonce' => wp_create_nonce('add_team_member_nonce'),
+            'send_message_nonce' => wp_create_nonce('bokun_send_message_nonce'),
         ]);
     }
 
