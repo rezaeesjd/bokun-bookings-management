@@ -3370,21 +3370,21 @@ function bokun_update_partner_page_id() {
     wp_die();
 }
 
+// Intentionally not registered for `nopriv`: sending mail is an external side
+// effect that must never be reachable by unauthenticated visitors.
 add_action('wp_ajax_bokun_send_booking_message', 'bokun_send_booking_message');
-add_action('wp_ajax_nopriv_bokun_send_booking_message', 'bokun_send_booking_message');
 
 /**
  * Whether the current requester may send a client message from the dashboard.
  *
- * Mirrors the partner-page-id handler: signed-in editors/admins are allowed,
- * and verified team members acting from the front-end dashboard are allowed.
+ * Requires a real authenticated capability. The team-member verified grant is
+ * deliberately NOT accepted here: the `nopriv` add-team-member handler lets an
+ * anonymous visitor self-issue that signed cookie for any name, so it is not a
+ * trustworthy authorization boundary for an external side effect like sending
+ * email to a stored customer address.
  */
 function bokun_can_send_booking_message() {
-    if (current_user_can('manage_options') || current_user_can('edit_posts')) {
-        return true;
-    }
-
-    return bokun_team_member_has_verified_grant();
+    return current_user_can('manage_options') || current_user_can('edit_posts');
 }
 
 // Handle AJAX request to send a message to the booking's stored contact email.
