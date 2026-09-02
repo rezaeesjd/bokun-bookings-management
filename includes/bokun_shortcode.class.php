@@ -191,7 +191,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $formatted_date = $timestamp ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $timestamp) : $log['created_at'];
                 $sortable_date  = $timestamp ? $timestamp : 0;
                 $action_label = ucwords(str_replace('-', ' ', $log['action_type']));
-                $status_label = !empty($log['is_checked']) ? __('Checked', 'BOKUN_txt_domain') : __('Unchecked', 'BOKUN_txt_domain');
+                // Sending a message is a one-off action, not a checkbox transition,
+                // so report it as "Sent" instead of the generic Checked/Unchecked.
+                if ('message-sent' === $log['action_type']) {
+                    $status_label = __('Sent', 'BOKUN_txt_domain');
+                } else {
+                    $status_label = !empty($log['is_checked']) ? __('Checked', 'BOKUN_txt_domain') : __('Unchecked', 'BOKUN_txt_domain');
+                }
                 $actor_label  = $log['user_name'];
 
                 if (empty($actor_label) && !empty($log['user_id'])) {
