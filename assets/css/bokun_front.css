@@ -1389,9 +1389,11 @@
 }
 
 /* The author-level display:flex above overrides the browser's default styling
-   for the hidden attribute, so restore it explicitly when hidden. */
+   for the hidden attribute, so restore it explicitly when hidden. The Viator
+   fallback link carries the reference-link display too, so restore it as well. */
 .bokun-booking-dashboard__message[hidden],
-.bokun-booking-dashboard__message-overlay[hidden] {
+.bokun-booking-dashboard__message-overlay[hidden],
+.bokun-booking-dashboard__message-viator[hidden] {
   display: none;
 }
 

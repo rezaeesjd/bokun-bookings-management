@@ -2381,6 +2381,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                     var messageLastFocus = null;
                     var messageCurrent = {};
+                    // Guards against a close/reopen race while a send is in flight:
+                    // messageSendPending keeps Send disabled across reopen, and
+                    // messageSendSession lets a resolving request ignore a composer
+                    // that has since been reopened for a different booking.
+                    var messageSendPending = false;
+                    var messageSendSession = 0;
 
                     function setMessageStatus(text, state) {
                         if (!messageStatus) {
@@ -2428,6 +2434,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         };
 
                         messageLastFocus = button;
+                        // A new open supersedes any in-flight send's UI effects.
+                        messageSendSession++;
                         setMessageStatus('', 'default');
 
                         var hasEmail = !!messageCurrent.email;
@@ -2447,7 +2455,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         }
 
                         if (messageSendButton) {
-                            messageSendButton.disabled = !hasEmail;
+                            // Stay disabled while a previous send is still in flight.
+                            messageSendButton.disabled = !hasEmail || messageSendPending;
                         }
 
                         if (messageViatorLink) {
@@ -2498,6 +2507,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             return;
                         }
 
+                        // A send is already in flight (possibly for a composer that was
+                        // since closed); never start a second one.
+                        if (messageSendPending) {
+                            return;
+                        }
+
                         var ajax = window.bbm_ajax || {};
                         if (!ajax.ajax_url || !ajax.send_message_nonce) {
                             setMessageStatus(messageTexts.error, 'error');
@@ -2521,8 +2536,25 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         var subject = messageSubjectInput ? messageSubjectInput.value : '';
                         var type = messageTypeSelect ? messageTypeSelect.value : '';
 
+                        // Capture the session so a resolving request only touches the
+                        // composer if it has not been reopened in the meantime.
+                        var session = messageSendSession;
+                        messageSendPending = true;
                         messageSendButton.disabled = true;
                         setMessageStatus(messageTexts.sending, 'pending');
+
+                        // Re-enable Send for whatever composer is open now that the
+                        // request has settled — the current one if still open on this
+                        // session, otherwise a composer reopened for another booking.
+                        var releasePending = function () {
+                            messageSendPending = false;
+                            if (session === messageSendSession) {
+                                return;
+                            }
+                            if (messageDialog && !messageDialog.hasAttribute('hidden') && messageSendButton) {
+                                messageSendButton.disabled = !messageCurrent.email;
+                            }
+                        };
 
                         var params = [
                             'action=bokun_send_booking_message',
@@ -2541,16 +2573,28 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         }).then(function (response) {
                             return response.json();
                         }).then(function (result) {
+                            releasePending();
+                            if (session !== messageSendSession) {
+                                return;
+                            }
                             if (result && result.success) {
                                 var sentText = (result.data && result.data.message) ? result.data.message : messageTexts.sent;
                                 setMessageStatus(sentText, 'success');
-                                window.setTimeout(closeMessageModal, 1200);
+                                window.setTimeout(function () {
+                                    if (session === messageSendSession) {
+                                        closeMessageModal();
+                                    }
+                                }, 1200);
                             } else {
                                 var errText = (result && result.data && result.data.message) ? result.data.message : messageTexts.error;
                                 setMessageStatus(errText, 'error');
                                 messageSendButton.disabled = false;
                             }
                         }).catch(function () {
+                            releasePending();
+                            if (session !== messageSendSession) {
+                                return;
+                            }
                             setMessageStatus(messageTexts.error, 'error');
                             messageSendButton.disabled = false;
                         });
