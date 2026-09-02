@@ -3377,14 +3377,19 @@ add_action('wp_ajax_bokun_send_booking_message', 'bokun_send_booking_message');
 /**
  * Whether the current requester may send a client message from the dashboard.
  *
- * Requires a real authenticated capability. The team-member verified grant is
+ * Requires a trusted-staff capability. The team-member verified grant is
  * deliberately NOT accepted here: the `nopriv` add-team-member handler lets an
  * anonymous visitor self-issue that signed cookie for any name, so it is not a
  * trustworthy authorization boundary for an external side effect like sending
  * email to a stored customer address.
+ *
+ * The boundary is `edit_others_posts` (Editors and Administrators), not the
+ * broader `edit_posts`: the latter is also granted to Contributors and Authors,
+ * who are not the intended operators of the booking dashboard and must not be
+ * able to email a customer for any booking whose confirmation code they obtain.
  */
 function bokun_can_send_booking_message() {
-    return current_user_can('manage_options') || current_user_can('edit_posts');
+    return current_user_can('manage_options') || current_user_can('edit_others_posts');
 }
 
 // Handle AJAX request to send a message to the booking's stored contact email.

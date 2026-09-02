@@ -669,7 +669,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             // always fail. The standalone Viator link is rendered independently.
             $user_can_send_message = function_exists('bokun_can_send_booking_message')
                 ? bokun_can_send_booking_message()
-                : (current_user_can('edit_posts') || current_user_can('manage_options'));
+                : (current_user_can('edit_others_posts') || current_user_can('manage_options'));
 
             while ($query->have_posts()) {
                 $query->the_post();
