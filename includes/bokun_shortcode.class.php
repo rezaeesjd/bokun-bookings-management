@@ -191,7 +191,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $formatted_date = $timestamp ? date_i18n(get_option('date_format') . ' ' . get_option('time_format'), $timestamp) : $log['created_at'];
                 $sortable_date  = $timestamp ? $timestamp : 0;
                 $action_label = ucwords(str_replace('-', ' ', $log['action_type']));
-                $status_label = !empty($log['is_checked']) ? __('Checked', 'BOKUN_txt_domain') : __('Unchecked', 'BOKUN_txt_domain');
+                // Sending a message is a one-off action, not a checkbox transition,
+                // so report it as "Sent" instead of the generic Checked/Unchecked.
+                if ('message-sent' === $log['action_type']) {
+                    $status_label = __('Sent', 'BOKUN_txt_domain');
+                } else {
+                    $status_label = !empty($log['is_checked']) ? __('Checked', 'BOKUN_txt_domain') : __('Unchecked', 'BOKUN_txt_domain');
+                }
                 $actor_label  = $log['user_name'];
 
                 if (empty($actor_label) && !empty($log['user_id'])) {
@@ -663,6 +669,14 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             $product_tags_without_partner = [];
             $processed_product_tag_ids    = [];
 
+            // Only offer the "Message client" composer to viewers who can actually
+            // send: it uses the same authorization predicate as the AJAX handler,
+            // so unauthorized dashboard viewers are not shown an action that would
+            // always fail. The standalone Viator link is rendered independently.
+            $user_can_send_message = function_exists('bokun_can_send_booking_message')
+                ? bokun_can_send_booking_message()
+                : (current_user_can('edit_others_posts') || current_user_can('manage_options'));
+
             while ($query->have_posts()) {
                 $query->the_post();
 
@@ -676,6 +690,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $parent_booking_id_meta = get_post_meta($post_id, 'productBookings_0_parentBookingId', true);
                 $customer_first = get_post_meta($post_id, '_first_name', true);
                 $customer_last  = get_post_meta($post_id, '_last_name', true);
+                $customer_email = get_post_meta($post_id, '_email', true);
                 $phone_prefix   = get_post_meta($post_id, '_phone_prefix', true);
                 $phone_number   = get_post_meta($post_id, '_phone_number', true);
                 $created_at     = get_post_meta($post_id, 'bookingcreationdate', true);
@@ -704,6 +719,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         rawurlencode($parent_booking_id)
                     );
                 }
+
+                $customer_email = is_scalar($customer_email) ? trim((string) $customer_email) : '';
+                $recipient_email = ('' !== $customer_email && is_email($customer_email)) ? $customer_email : '';
+                $show_message_button = $user_can_send_message && ('' !== $recipient_email || '' !== $viator_url);
 
                 $participants = [];
                 foreach (range(1, 5) as $index) {
@@ -1187,8 +1206,25 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         <?php endif; ?>
                     </div>
 
-                    <?php if (!empty($status_labels) || !empty($tag_editor_link) || !empty($viator_url) || !empty($bokun_url)) : ?>
+                    <?php if (!empty($status_labels) || !empty($tag_editor_link) || !empty($viator_url) || !empty($bokun_url) || $show_message_button) : ?>
                         <div class="bokun-booking-dashboard__meta-line">
+                            <?php if ($show_message_button) : ?>
+                                <button
+                                    type="button"
+                                    class="bokun-booking-dashboard__message-button"
+                                    data-dashboard-message-button
+                                    data-message-booking="<?php echo esc_attr($booking_code); ?>"
+                                    data-message-email="<?php echo esc_attr($recipient_email); ?>"
+                                    data-message-name="<?php echo esc_attr($customer_first); ?>"
+                                    data-message-date="<?php echo esc_attr($start_date_display); ?>"
+                                    data-message-product="<?php echo esc_attr($product_title); ?>"
+                                    data-message-reference="<?php echo esc_attr($external_ref); ?>"
+                                    data-message-viator="<?php echo esc_url($viator_url); ?>"
+                                >
+                                    <?php esc_html_e('Message client', 'BOKUN_txt_domain'); ?>
+                                </button>
+                            <?php endif; ?>
+
                             <?php if (!empty($status_labels)) : ?>
                                 <ul class="bokun-booking-dashboard__status-list">
                                     <?php foreach ($status_labels as $status_label) : ?>
@@ -1551,6 +1587,133 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             <p><?php esc_html_e('Thank you for understanding and patience.', 'BOKUN_txt_domain'); ?></p>
                             <p><?php esc_html_e('Best regards', 'BOKUN_txt_domain'); ?></p>
                         </section>
+                    </div>
+                </div>
+
+                <?php
+                $message_greeting = __('Hello, we hope this message finds you well.', 'BOKUN_txt_domain');
+                $message_signoff  = __('Best regards', 'BOKUN_txt_domain');
+
+                $message_templates = [
+                    'meeting-point' => [
+                        'label'   => __('Meeting point', 'BOKUN_txt_domain'),
+                        'subject' => __('Meeting point for your tour', 'BOKUN_txt_domain'),
+                        'body'    => implode("\n", [
+                            $message_greeting,
+                            '',
+                            __('Here is the exact meeting point for your tour:', 'BOKUN_txt_domain'),
+                            '',
+                            __('Piazzale Montelungo', 'BOKUN_txt_domain'),
+                            $meeting_point_map_url,
+                            '',
+                            __('You will find us in fuchsia shirts.', 'BOKUN_txt_domain'),
+                            __('Please make sure to be there at least 15 minutes before the tour starts.', 'BOKUN_txt_domain'),
+                            '',
+                            $message_signoff,
+                        ]),
+                    ],
+                    'alternative-date' => [
+                        'label'   => __('Alternative date', 'BOKUN_txt_domain'),
+                        'subject' => __('Alternative date for your booking', 'BOKUN_txt_domain'),
+                        'body'    => implode("\n", [
+                            $message_greeting,
+                            '',
+                            __('Unfortunately this tour is not available for Day and Month. We apologize for any inconvenience caused by this. The first available date will be Day and Month.', 'BOKUN_txt_domain'),
+                            '',
+                            __('Let us know if that works for you. If not, we have to cancel the reservation with a full refund.', 'BOKUN_txt_domain'),
+                            '',
+                            __('Thank you for understanding and patience.', 'BOKUN_txt_domain'),
+                            '',
+                            $message_signoff,
+                        ]),
+                    ],
+                    'tour-not-available' => [
+                        'label'   => __('Tour not available', 'BOKUN_txt_domain'),
+                        'subject' => __('Update about your booking', 'BOKUN_txt_domain'),
+                        'body'    => implode("\n", [
+                            $message_greeting,
+                            '',
+                            __('Unfortunately this tour is not available for Day and Month. We apologize for the inconvenience but we have to cancel the reservation with a full refund.', 'BOKUN_txt_domain'),
+                            '',
+                            __('Thank you for understanding and patience.', 'BOKUN_txt_domain'),
+                            '',
+                            $message_signoff,
+                        ]),
+                    ],
+                    'custom' => [
+                        'label'   => __('Custom message', 'BOKUN_txt_domain'),
+                        'subject' => '',
+                        'body'    => '',
+                    ],
+                ];
+
+                $message_dialog_id  = $dashboard_id . '-message-dialog';
+                $message_title_id   = $dashboard_id . '-message-title';
+                $message_type_id    = $dashboard_id . '-message-type';
+                $message_subject_id = $dashboard_id . '-message-subject';
+                $message_body_id    = $dashboard_id . '-message-body';
+                ?>
+                <div
+                    class="bokun-booking-dashboard__message-overlay"
+                    data-dashboard-message-overlay
+                    hidden
+                    aria-hidden="true"
+                ></div>
+                <div
+                    class="bokun-booking-dashboard__message"
+                    id="<?php echo esc_attr($message_dialog_id); ?>"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="<?php echo esc_attr($message_title_id); ?>"
+                    data-dashboard-message
+                    data-message-templates="<?php echo esc_attr(wp_json_encode($message_templates)); ?>"
+                    data-text-placeholder-date="<?php esc_attr_e('Day and Month', 'BOKUN_txt_domain'); ?>"
+                    data-text-sending="<?php esc_attr_e('Sending…', 'BOKUN_txt_domain'); ?>"
+                    data-text-sent="<?php esc_attr_e('Message sent.', 'BOKUN_txt_domain'); ?>"
+                    data-text-error="<?php esc_attr_e('The message could not be sent. Please try again.', 'BOKUN_txt_domain'); ?>"
+                    data-text-empty="<?php esc_attr_e('Please write a message before sending.', 'BOKUN_txt_domain'); ?>"
+                    data-text-no-email="<?php esc_attr_e('No contact email is stored for this booking. Use the Viator conversation link instead.', 'BOKUN_txt_domain'); ?>"
+                    hidden
+                    aria-hidden="true"
+                    tabindex="-1"
+                >
+                    <div class="bokun-booking-dashboard__message-header">
+                        <h3 id="<?php echo esc_attr($message_title_id); ?>"><?php esc_html_e('Message client', 'BOKUN_txt_domain'); ?></h3>
+                        <button type="button" class="bokun-booking-dashboard__message-close" data-dashboard-message-close aria-label="<?php esc_attr_e('Close message composer', 'BOKUN_txt_domain'); ?>">
+                            &times;
+                        </button>
+                    </div>
+                    <div class="bokun-booking-dashboard__message-body">
+                        <p class="bokun-booking-dashboard__message-recipient">
+                            <span class="bokun-booking-dashboard__message-recipient-label"><?php esc_html_e('To:', 'BOKUN_txt_domain'); ?></span>
+                            <span class="bokun-booking-dashboard__message-recipient-value" data-dashboard-message-recipient></span>
+                        </p>
+                        <p class="bokun-booking-dashboard__message-no-email" data-dashboard-message-no-email hidden role="alert"></p>
+                        <div class="bokun-booking-dashboard__message-field">
+                            <label for="<?php echo esc_attr($message_type_id); ?>"><?php esc_html_e('Type of message', 'BOKUN_txt_domain'); ?></label>
+                            <select id="<?php echo esc_attr($message_type_id); ?>" class="bokun-booking-dashboard__message-select" data-dashboard-message-type>
+                                <?php foreach ($message_templates as $template_key => $template) : ?>
+                                    <option value="<?php echo esc_attr($template_key); ?>"><?php echo esc_html($template['label']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="bokun-booking-dashboard__message-field">
+                            <label for="<?php echo esc_attr($message_subject_id); ?>"><?php esc_html_e('Subject', 'BOKUN_txt_domain'); ?></label>
+                            <input type="text" id="<?php echo esc_attr($message_subject_id); ?>" class="bokun-booking-dashboard__message-subject" data-dashboard-message-subject />
+                        </div>
+                        <div class="bokun-booking-dashboard__message-field">
+                            <label for="<?php echo esc_attr($message_body_id); ?>"><?php esc_html_e('Draft of message', 'BOKUN_txt_domain'); ?></label>
+                            <textarea id="<?php echo esc_attr($message_body_id); ?>" class="bokun-booking-dashboard__message-textarea" rows="12" data-dashboard-message-textarea></textarea>
+                        </div>
+                    </div>
+                    <div class="bokun-booking-dashboard__message-actions">
+                        <span class="bokun-booking-dashboard__message-status" data-dashboard-message-status role="status" aria-live="polite"></span>
+                        <a href="#" class="bokun-booking-dashboard__reference-link bokun-booking-dashboard__message-viator" data-dashboard-message-viator target="_blank" rel="noopener noreferrer" hidden>
+                            <?php esc_html_e('Open Viator conversation', 'BOKUN_txt_domain'); ?>
+                        </a>
+                        <button type="button" class="bokun-booking-dashboard__message-send" data-dashboard-message-send>
+                            <?php esc_html_e('Send message', 'BOKUN_txt_domain'); ?>
+                        </button>
                     </div>
                 </div>
 
@@ -2186,6 +2349,303 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 if (conversationToggle) {
                                     conversationToggle.focus();
                                 }
+                            }
+                        });
+                    }
+
+                    // Per-booking "Message client" composer modal.
+                    var messageDialog = dashboard.querySelector('[data-dashboard-message]');
+                    var messageOverlay = dashboard.querySelector('[data-dashboard-message-overlay]');
+                    var messageClose = dashboard.querySelector('[data-dashboard-message-close]');
+                    var messageButtons = Array.prototype.slice.call(dashboard.querySelectorAll('[data-dashboard-message-button]'));
+                    var messageTypeSelect = messageDialog ? messageDialog.querySelector('[data-dashboard-message-type]') : null;
+                    var messageSubjectInput = messageDialog ? messageDialog.querySelector('[data-dashboard-message-subject]') : null;
+                    var messageTextarea = messageDialog ? messageDialog.querySelector('[data-dashboard-message-textarea]') : null;
+                    var messageRecipient = messageDialog ? messageDialog.querySelector('[data-dashboard-message-recipient]') : null;
+                    var messageNoEmail = messageDialog ? messageDialog.querySelector('[data-dashboard-message-no-email]') : null;
+                    var messageStatus = messageDialog ? messageDialog.querySelector('[data-dashboard-message-status]') : null;
+                    var messageSendButton = messageDialog ? messageDialog.querySelector('[data-dashboard-message-send]') : null;
+                    var messageViatorLink = messageDialog ? messageDialog.querySelector('[data-dashboard-message-viator]') : null;
+
+                    var messageTemplates = {};
+                    if (messageDialog) {
+                        try {
+                            messageTemplates = JSON.parse(messageDialog.getAttribute('data-message-templates') || '{}');
+                        } catch (error) {
+                            messageTemplates = {};
+                        }
+                    }
+
+                    var messageTexts = messageDialog ? {
+                        date: messageDialog.getAttribute('data-text-placeholder-date') || 'Day and Month',
+                        sending: messageDialog.getAttribute('data-text-sending') || 'Sending…',
+                        sent: messageDialog.getAttribute('data-text-sent') || 'Message sent.',
+                        error: messageDialog.getAttribute('data-text-error') || 'The message could not be sent.',
+                        empty: messageDialog.getAttribute('data-text-empty') || 'Please write a message before sending.',
+                        noEmail: messageDialog.getAttribute('data-text-no-email') || 'No contact email is stored for this booking.'
+                    } : {};
+
+                    var messageLastFocus = null;
+                    var messageCurrent = {};
+                    // Guards against a close/reopen race while a send is in flight:
+                    // messageSendPending keeps Send disabled across reopen, and
+                    // messageSendSession lets a resolving request ignore a composer
+                    // that has since been reopened for a different booking.
+                    var messageSendPending = false;
+                    var messageSendSession = 0;
+
+                    function setMessageStatus(text, state) {
+                        if (!messageStatus) {
+                            return;
+                        }
+                        messageStatus.textContent = text || '';
+                        messageStatus.setAttribute('data-state', state || 'default');
+                    }
+
+                    function applyMessageTemplate(typeKey) {
+                        var template = messageTemplates[typeKey];
+                        if (!template) {
+                            return;
+                        }
+
+                        var subject = template.subject || '';
+                        var body = template.body || '';
+                        var dateValue = messageCurrent.date || '';
+
+                        if (dateValue && messageTexts.date && body.indexOf(messageTexts.date) !== -1) {
+                            body = body.replace(messageTexts.date, dateValue);
+                        }
+
+                        if (messageSubjectInput) {
+                            messageSubjectInput.value = subject;
+                        }
+                        if (messageTextarea) {
+                            messageTextarea.value = body;
+                        }
+                    }
+
+                    function openMessageModal(button) {
+                        if (!messageDialog) {
+                            return;
+                        }
+
+                        messageCurrent = {
+                            booking: button.getAttribute('data-message-booking') || '',
+                            email: button.getAttribute('data-message-email') || '',
+                            name: button.getAttribute('data-message-name') || '',
+                            date: button.getAttribute('data-message-date') || '',
+                            product: button.getAttribute('data-message-product') || '',
+                            reference: button.getAttribute('data-message-reference') || '',
+                            viator: button.getAttribute('data-message-viator') || ''
+                        };
+
+                        messageLastFocus = button;
+                        // A new open supersedes any in-flight send's UI effects.
+                        messageSendSession++;
+                        setMessageStatus('', 'default');
+
+                        var hasEmail = !!messageCurrent.email;
+
+                        if (messageRecipient) {
+                            messageRecipient.textContent = hasEmail ? messageCurrent.email : '';
+                        }
+
+                        if (messageNoEmail) {
+                            if (hasEmail) {
+                                messageNoEmail.setAttribute('hidden', '');
+                                messageNoEmail.textContent = '';
+                            } else {
+                                messageNoEmail.textContent = messageTexts.noEmail;
+                                messageNoEmail.removeAttribute('hidden');
+                            }
+                        }
+
+                        if (messageSendButton) {
+                            // Stay disabled while a previous send is still in flight.
+                            messageSendButton.disabled = !hasEmail || messageSendPending;
+                        }
+
+                        if (messageViatorLink) {
+                            if (messageCurrent.viator) {
+                                messageViatorLink.setAttribute('href', messageCurrent.viator);
+                                messageViatorLink.removeAttribute('hidden');
+                            } else {
+                                messageViatorLink.setAttribute('hidden', '');
+                            }
+                        }
+
+                        if (messageTypeSelect && !messageTypeSelect.value) {
+                            messageTypeSelect.selectedIndex = 0;
+                        }
+                        applyMessageTemplate(messageTypeSelect ? messageTypeSelect.value : '');
+
+                        messageDialog.removeAttribute('hidden');
+                        messageDialog.setAttribute('aria-hidden', 'false');
+
+                        if (messageOverlay) {
+                            messageOverlay.removeAttribute('hidden');
+                            messageOverlay.setAttribute('aria-hidden', 'false');
+                        }
+
+                        messageDialog.focus();
+                    }
+
+                    function closeMessageModal() {
+                        if (!messageDialog) {
+                            return;
+                        }
+
+                        messageDialog.setAttribute('hidden', '');
+                        messageDialog.setAttribute('aria-hidden', 'true');
+
+                        if (messageOverlay) {
+                            messageOverlay.setAttribute('hidden', '');
+                            messageOverlay.setAttribute('aria-hidden', 'true');
+                        }
+
+                        if (messageLastFocus && typeof messageLastFocus.focus === 'function') {
+                            messageLastFocus.focus();
+                        }
+                    }
+
+                    function sendMessage() {
+                        if (!messageDialog || !messageSendButton) {
+                            return;
+                        }
+
+                        // A send is already in flight (possibly for a composer that was
+                        // since closed); never start a second one.
+                        if (messageSendPending) {
+                            return;
+                        }
+
+                        var ajax = window.bbm_ajax || {};
+                        if (!ajax.ajax_url || !ajax.send_message_nonce) {
+                            setMessageStatus(messageTexts.error, 'error');
+                            return;
+                        }
+
+                        if (!messageCurrent.email) {
+                            setMessageStatus(messageTexts.noEmail, 'error');
+                            return;
+                        }
+
+                        var body = messageTextarea ? messageTextarea.value.replace(/^\s+|\s+$/g, '') : '';
+                        if (!body) {
+                            setMessageStatus(messageTexts.empty, 'error');
+                            if (messageTextarea) {
+                                messageTextarea.focus();
+                            }
+                            return;
+                        }
+
+                        var subject = messageSubjectInput ? messageSubjectInput.value : '';
+                        var type = messageTypeSelect ? messageTypeSelect.value : '';
+
+                        // Capture the session so a resolving request only touches the
+                        // composer if it has not been reopened in the meantime.
+                        var session = messageSendSession;
+                        messageSendPending = true;
+                        messageSendButton.disabled = true;
+                        setMessageStatus(messageTexts.sending, 'pending');
+
+                        // Re-enable Send for whatever composer is open now that the
+                        // request has settled — the current one if still open on this
+                        // session, otherwise a composer reopened for another booking.
+                        var releasePending = function () {
+                            messageSendPending = false;
+                            if (session === messageSendSession) {
+                                return;
+                            }
+                            if (messageDialog && !messageDialog.hasAttribute('hidden') && messageSendButton) {
+                                messageSendButton.disabled = !messageCurrent.email;
+                            }
+                        };
+
+                        var params = [
+                            'action=bokun_send_booking_message',
+                            'security=' + encodeURIComponent(ajax.send_message_nonce),
+                            'booking_id=' + encodeURIComponent(messageCurrent.booking),
+                            'message_type=' + encodeURIComponent(type),
+                            'subject=' + encodeURIComponent(subject),
+                            'message=' + encodeURIComponent(messageTextarea ? messageTextarea.value : '')
+                        ].join('&');
+
+                        fetch(ajax.ajax_url, {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                            body: params
+                        }).then(function (response) {
+                            return response.json();
+                        }).then(function (result) {
+                            releasePending();
+                            if (session !== messageSendSession) {
+                                return;
+                            }
+                            if (result && result.success) {
+                                var sentText = (result.data && result.data.message) ? result.data.message : messageTexts.sent;
+                                setMessageStatus(sentText, 'success');
+                                window.setTimeout(function () {
+                                    if (session === messageSendSession) {
+                                        closeMessageModal();
+                                    }
+                                }, 1200);
+                            } else {
+                                var errText = (result && result.data && result.data.message) ? result.data.message : messageTexts.error;
+                                setMessageStatus(errText, 'error');
+                                messageSendButton.disabled = false;
+                            }
+                        }).catch(function () {
+                            releasePending();
+                            if (session !== messageSendSession) {
+                                return;
+                            }
+                            setMessageStatus(messageTexts.error, 'error');
+                            messageSendButton.disabled = false;
+                        });
+                    }
+
+                    messageButtons.forEach(function (button) {
+                        button.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            openMessageModal(button);
+                        });
+                    });
+
+                    if (messageTypeSelect) {
+                        messageTypeSelect.addEventListener('change', function () {
+                            applyMessageTemplate(messageTypeSelect.value);
+                            setMessageStatus('', 'default');
+                        });
+                    }
+
+                    if (messageClose) {
+                        messageClose.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            closeMessageModal();
+                        });
+                    }
+
+                    if (messageOverlay) {
+                        messageOverlay.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            closeMessageModal();
+                        });
+                    }
+
+                    if (messageSendButton) {
+                        messageSendButton.addEventListener('click', function (event) {
+                            event.preventDefault();
+                            sendMessage();
+                        });
+                    }
+
+                    if (messageDialog) {
+                        messageDialog.addEventListener('keydown', function (event) {
+                            if (event.key === 'Escape') {
+                                event.preventDefault();
+                                closeMessageModal();
                             }
                         });
                     }
