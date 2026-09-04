@@ -940,9 +940,12 @@ jQuery(function ($) {
                 }
 
                 var $input = $form.find('[data-partner-page-input]');
+                var $source = $form.find('[data-partner-tag-source]');
+                var $copyOptions = $form.find('[data-partner-tag-copy-options]');
                 var $submit = $form.find('[data-partner-page-submit]');
                 var $feedback = $form.find('[data-partner-page-feedback]');
                 var partnerPageId = $input.length ? String($input.val()).trim() : '';
+                var sourceTermId = parseInt($source.find(':selected').attr('data-source-term-id'), 10) || 0;
                 var dashboardDays = parseInt($form.attr('data-dashboard-days'), 10) || 30;
 
                 function showFeedback(type, message) {
@@ -987,6 +990,8 @@ jQuery(function ($) {
                 showFeedback();
                 $submit.prop('disabled', true);
                 $input.prop('disabled', true);
+                $source.prop('disabled', true);
+                $copyOptions.prop('disabled', true);
 
                 ensureTeamMemberServerGrant().then(function () {
                         return $.ajax({
@@ -997,7 +1002,12 @@ jQuery(function ($) {
                                         security: bokun_api_auth_vars.nonce,
                                         term_id: termId,
                                         dashboard_days: dashboardDays,
-                                        partner_page_id: partnerPageId
+                                        partner_page_id: partnerPageId,
+                                        source_term_id: sourceTermId,
+                                        copy_partner_page_id: sourceTermId && $form.find('[name="copy_partner_page_id"]').is(':checked') ? 1 : 0,
+                                        copy_status_ok: $form.find('[name="copy_status_ok"]').is(':checked') ? 1 : 0,
+                                        copy_status_attention: $form.find('[name="copy_status_attention"]').is(':checked') ? 1 : 0,
+                                        copy_status_alarm: $form.find('[name="copy_status_alarm"]').is(':checked') ? 1 : 0
                                 },
                                 dataType: 'json'
                         });
@@ -1043,8 +1053,72 @@ jQuery(function ($) {
                 }).always(function () {
                         $submit.prop('disabled', false);
                         $input.prop('disabled', false);
+                        $source.prop('disabled', false);
+                        $copyOptions.prop('disabled', !$source.val());
                 });
         }
+
+        $(document).on('change', '[data-partner-tag-source]', function () {
+                var $source = $(this);
+                var partnerPageId = String($source.val() || '').trim();
+                var $form = $source.closest('[data-partner-tag-form]');
+                var $copyOptions = $form.find('[data-partner-tag-copy-options]').first();
+
+                if (!partnerPageId) {
+                        $copyOptions.prop('disabled', true).find('[data-partner-tag-copy-field]').prop('checked', false);
+                        $copyOptions.find('[data-partner-tag-copy-id]').prop('checked', true);
+                        return;
+                }
+
+                var $input = $form.find('[data-partner-page-input]').first();
+                var $feedback = $form.find('[data-partner-page-feedback]').first();
+                var shouldCopyPartnerId = $form.find('[name="copy_partner_page_id"]').is(':checked');
+
+                $copyOptions.prop('disabled', false);
+
+                if (shouldCopyPartnerId) {
+                        $input.val(partnerPageId).trigger('input').focus();
+                }
+
+                $feedback
+                        .text(shouldCopyPartnerId ? 'Partner Page ID copied. Review it, then save.' : 'Source tag selected. Choose the settings to copy, then save.')
+                        .removeClass('is-error')
+                        .addClass('is-success')
+                        .removeAttr('hidden')
+                        .attr('aria-hidden', 'false');
+        });
+
+        $(document).on('change', '[data-partner-tag-copy-id]', function () {
+                var $checkbox = $(this);
+                var $form = $checkbox.closest('[data-partner-tag-form]');
+                var sourcePartnerId = String($form.find('[data-partner-tag-source]').val() || '').trim();
+                var $input = $form.find('[data-partner-page-input]').first();
+
+                if (!sourcePartnerId) {
+                        return;
+                }
+
+                if ($checkbox.is(':checked')) {
+                        $input.val(sourcePartnerId).trigger('input').focus();
+                } else if (String($input.val() || '').trim() === sourcePartnerId) {
+                        $input.val('').trigger('input');
+                }
+        });
+
+        $(document).on('input', '[data-partner-page-input]', function () {
+                var $input = $(this);
+                var $form = $input.closest('[data-partner-tag-form]');
+                var sourcePartnerId = String($form.find('[data-partner-tag-source]').val() || '').trim();
+                var $copyPartnerId = $form.find('[data-partner-tag-copy-id]').first();
+
+                if (
+                        sourcePartnerId
+                        && $copyPartnerId.is(':checked')
+                        && String($input.val() || '').trim() !== sourcePartnerId
+                ) {
+                        $copyPartnerId.prop('checked', false);
+                }
+        });
 
         $(document).on('submit', '[data-partner-tag-form]', function (e) {
                 e.preventDefault();

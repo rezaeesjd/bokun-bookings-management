@@ -3320,6 +3320,20 @@ function bokun_update_partner_page_id() {
     $term_id = isset($_POST['term_id']) ? absint($_POST['term_id']) : 0;
     $partner_page_id = isset($_POST['partner_page_id']) ? sanitize_text_field(wp_unslash($_POST['partner_page_id'])) : '';
     $dashboard_days = isset($_POST['dashboard_days']) ? absint($_POST['dashboard_days']) : 30;
+    $source_term_id = isset($_POST['source_term_id']) ? absint($_POST['source_term_id']) : 0;
+    $copy_partner_page_id = isset($_POST['copy_partner_page_id']) && '1' === sanitize_text_field(wp_unslash($_POST['copy_partner_page_id']));
+    $status_copy_map = [
+        'copy_status_ok'        => 'statusok',
+        'copy_status_attention' => 'statusattention',
+        'copy_status_alarm'     => 'statusalarm',
+    ];
+    $status_fields_to_copy = [];
+
+    foreach ($status_copy_map as $request_key => $meta_key) {
+        if (isset($_POST[$request_key]) && '1' === sanitize_text_field(wp_unslash($_POST[$request_key]))) {
+            $status_fields_to_copy[] = $meta_key;
+        }
+    }
 
     if ($term_id <= 0) {
         wp_send_json_error(array('msg' => __('Invalid product tag.', 'bokun-bookings-manager')));
@@ -3354,10 +3368,43 @@ function bokun_update_partner_page_id() {
         wp_die();
     }
 
+    $source_term = null;
+    if ($copy_partner_page_id || !empty($status_fields_to_copy)) {
+        $source_term = get_term($source_term_id, 'product_tags');
+
+        if ($source_term_id <= 0 || !$source_term || is_wp_error($source_term) || $source_term_id === $term_id) {
+            wp_send_json_error(array('msg' => __('Please choose a valid source product tag for the status settings.', 'bokun-bookings-manager')));
+            wp_die();
+        }
+
+        if ($copy_partner_page_id) {
+            $source_partner_page_id = get_term_meta($source_term_id, 'partnerpageid', true);
+            $source_partner_page_id = is_scalar($source_partner_page_id) ? trim((string) $source_partner_page_id) : '';
+
+            if ('' === $source_partner_page_id) {
+                wp_send_json_error(array('msg' => __('The selected source product tag does not have a Partner Page ID.', 'bokun-bookings-manager')));
+                wp_die();
+            }
+
+            $partner_page_id = $source_partner_page_id;
+        }
+    }
+
     if ('' === $partner_page_id) {
         delete_term_meta($term_id, 'partnerpageid');
     } else {
         update_term_meta($term_id, 'partnerpageid', $partner_page_id);
+    }
+
+    foreach ($status_fields_to_copy as $status_meta_key) {
+        $source_status_value = get_term_meta($source_term_id, $status_meta_key, true);
+        $source_status_value = is_scalar($source_status_value) ? trim((string) $source_status_value) : '';
+
+        if ('' === $source_status_value) {
+            delete_term_meta($term_id, $status_meta_key);
+        } else {
+            update_term_meta($term_id, $status_meta_key, (int) $source_status_value);
+        }
     }
 
     $message = sprintf(
@@ -3365,6 +3412,20 @@ function bokun_update_partner_page_id() {
         __('Partner Page ID saved for %s.', 'bokun-bookings-manager'),
         $term->name
     );
+
+    if (!empty($status_fields_to_copy)) {
+        $message .= ' ' . sprintf(
+            /* translators: 1: Number of status settings copied. 2: Source product tag name. */
+            _n(
+                '%1$d status setting was copied from %2$s.',
+                '%1$d status settings were copied from %2$s.',
+                count($status_fields_to_copy),
+                'bokun-bookings-manager'
+            ),
+            count($status_fields_to_copy),
+            $source_term->name
+        );
+    }
 
     wp_send_json_success(array('msg' => $message));
     wp_die();

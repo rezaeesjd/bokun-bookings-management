@@ -120,6 +120,70 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             );
         }
 
+        /**
+         * Group product tags with an existing partner page ID for a missing tag.
+         *
+         * Exact title matches are shown first, followed by up to five closest
+         * titles, and then the remaining tags alphabetically.
+         *
+         * @param string $missing_name Product tag title that needs an ID.
+         * @param array  $source_tags  Product tags that already have an ID.
+         * @return array
+         */
+        private function get_partner_tag_suggestions($missing_name, $source_tags) {
+            $normalize = static function ($value) {
+                $value = html_entity_decode(wp_strip_all_tags((string) $value), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                $value = preg_replace('/\s+/', ' ', trim($value));
+
+                if (function_exists('mb_strtolower')) {
+                    return mb_strtolower($value, 'UTF-8');
+                }
+
+                return strtolower($value);
+            };
+
+            $missing_normalized = $normalize($missing_name);
+            $exact = [];
+            $ranked = [];
+
+            foreach ($source_tags as $source_tag) {
+                $source_normalized = $normalize($source_tag['name']);
+
+                if ($source_normalized === $missing_normalized) {
+                    $exact[] = $source_tag;
+                    continue;
+                }
+
+                $percentage = 0.0;
+                similar_text($missing_normalized, $source_normalized, $percentage);
+                $source_tag['similarity'] = $percentage;
+                $ranked[] = $source_tag;
+            }
+
+            usort($exact, static function ($a, $b) {
+                return strcasecmp($a['name'], $b['name']);
+            });
+            usort($ranked, static function ($a, $b) {
+                if ($a['similarity'] === $b['similarity']) {
+                    return strcasecmp($a['name'], $b['name']);
+                }
+
+                return ($a['similarity'] > $b['similarity']) ? -1 : 1;
+            });
+
+            $similar = array_slice($ranked, 0, 5);
+            $other = array_slice($ranked, 5);
+            usort($other, static function ($a, $b) {
+                return strcasecmp($a['name'], $b['name']);
+            });
+
+            return [
+                'exact'   => $exact,
+                'similar' => $similar,
+                'other'   => $other,
+            ];
+        }
+
 
         function render_booking_history_table($atts = []) {
             global $wpdb;
@@ -1250,6 +1314,39 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         return strcasecmp($a['name'], $b['name']);
                     }
                 );
+
+                $partner_tag_sources = [];
+                $all_product_tags = get_terms(
+                    [
+                        'taxonomy'   => 'product_tags',
+                        'hide_empty' => false,
+                    ]
+                );
+
+                if (!is_wp_error($all_product_tags)) {
+                    foreach ($all_product_tags as $source_term) {
+                        $source_partner_id = get_term_meta($source_term->term_id, 'partnerpageid', true);
+                        $source_partner_id = is_scalar($source_partner_id) ? trim((string) $source_partner_id) : '';
+
+                        if ('' === $source_partner_id) {
+                            continue;
+                        }
+
+                        $partner_tag_sources[] = [
+                            'term_id'         => (int) $source_term->term_id,
+                            'name'            => $source_term->name,
+                            'partner_page_id' => $source_partner_id,
+                        ];
+                    }
+                }
+
+                foreach ($product_tags_without_partner as &$missing_term_data) {
+                    $missing_term_data['suggestions'] = $this->get_partner_tag_suggestions(
+                        $missing_term_data['name'],
+                        $partner_tag_sources
+                    );
+                }
+                unset($missing_term_data);
             }
 
             wp_reset_postdata();
@@ -1625,6 +1722,61 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                             </a>
                                         <?php endif; ?>
                                         <form class="bokun-booking-dashboard__missing-tag-form" data-partner-tag-form data-term-id="<?php echo esc_attr($term_id); ?>" data-dashboard-days="<?php echo esc_attr($days); ?>">
+                                            <?php
+                                            $suggestion_groups = isset($term_data['suggestions']) && is_array($term_data['suggestions'])
+                                                ? $term_data['suggestions']
+                                                : [];
+                                            $has_suggestions = !empty($suggestion_groups['exact']) || !empty($suggestion_groups['similar']) || !empty($suggestion_groups['other']);
+                                            ?>
+                                            <?php if ($has_suggestions) : ?>
+                                                <label class="screen-reader-text" for="<?php echo esc_attr($input_id . '-source'); ?>"><?php esc_html_e('Copy Partner Page ID from an existing product tag', 'BOKUN_txt_domain'); ?></label>
+                                                <select
+                                                    id="<?php echo esc_attr($input_id . '-source'); ?>"
+                                                    class="bokun-booking-dashboard__missing-tag-source"
+                                                    data-partner-tag-source
+                                                >
+                                                    <option value=""><?php esc_html_e('Choose an existing tag…', 'BOKUN_txt_domain'); ?></option>
+                                                    <?php
+                                                    $group_labels = [
+                                                        'exact'   => __('Exact title matches', 'BOKUN_txt_domain'),
+                                                        'similar' => __('Most similar titles', 'BOKUN_txt_domain'),
+                                                        'other'   => __('All other tags', 'BOKUN_txt_domain'),
+                                                    ];
+                                                    foreach ($group_labels as $group_key => $group_label) :
+                                                        if (empty($suggestion_groups[$group_key])) {
+                                                            continue;
+                                                        }
+                                                    ?>
+                                                        <optgroup label="<?php echo esc_attr($group_label); ?>">
+                                                            <?php foreach ($suggestion_groups[$group_key] as $suggestion) : ?>
+                                                                <option
+                                                                    value="<?php echo esc_attr($suggestion['partner_page_id']); ?>"
+                                                                    data-source-term-id="<?php echo esc_attr($suggestion['term_id']); ?>"
+                                                                ><?php echo esc_html(sprintf('%1$s — ID %2$s', $suggestion['name'], $suggestion['partner_page_id'])); ?></option>
+                                                            <?php endforeach; ?>
+                                                        </optgroup>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                                <fieldset class="bokun-booking-dashboard__missing-tag-copy-options" data-partner-tag-copy-options disabled>
+                                                    <legend><?php esc_html_e('Copy from selected tag', 'BOKUN_txt_domain'); ?></legend>
+                                                    <label>
+                                                        <input type="checkbox" name="copy_partner_page_id" value="1" data-partner-tag-copy-id checked>
+                                                        <?php esc_html_e('Partner Page ID', 'BOKUN_txt_domain'); ?>
+                                                    </label>
+                                                    <label>
+                                                        <input type="checkbox" name="copy_status_ok" value="1" data-partner-tag-copy-field>
+                                                        <?php esc_html_e('Status OK', 'BOKUN_txt_domain'); ?>
+                                                    </label>
+                                                    <label>
+                                                        <input type="checkbox" name="copy_status_attention" value="1" data-partner-tag-copy-field>
+                                                        <?php esc_html_e('Status Attention', 'BOKUN_txt_domain'); ?>
+                                                    </label>
+                                                    <label>
+                                                        <input type="checkbox" name="copy_status_alarm" value="1" data-partner-tag-copy-field>
+                                                        <?php esc_html_e('Status Alarm', 'BOKUN_txt_domain'); ?>
+                                                    </label>
+                                                </fieldset>
+                                            <?php endif; ?>
                                             <label class="screen-reader-text" for="<?php echo esc_attr($input_id); ?>"><?php esc_html_e('Partner Page ID', 'BOKUN_txt_domain'); ?></label>
                                             <input
                                                 type="text"
@@ -1645,6 +1797,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                                 aria-hidden="true"
                                                 hidden
                                             ></span>
+                                            <?php if ($has_suggestions) : ?>
+                                                <span class="bokun-booking-dashboard__missing-tag-hint"><?php esc_html_e('Selecting a tag copies its Partner Page ID here. Review it, then save.', 'BOKUN_txt_domain'); ?></span>
+                                            <?php endif; ?>
                                         </form>
                                     </div>
                                 </li>
