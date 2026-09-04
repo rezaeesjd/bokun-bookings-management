@@ -940,6 +940,7 @@ jQuery(function ($) {
                 }
 
                 var $input = $form.find('[data-partner-page-input]');
+                var $source = $form.find('[data-partner-tag-source]');
                 var $submit = $form.find('[data-partner-page-submit]');
                 var $feedback = $form.find('[data-partner-page-feedback]');
                 var partnerPageId = $input.length ? String($input.val()).trim() : '';
@@ -987,6 +988,7 @@ jQuery(function ($) {
                 showFeedback();
                 $submit.prop('disabled', true);
                 $input.prop('disabled', true);
+                $source.prop('disabled', true);
 
                 ensureTeamMemberServerGrant().then(function () {
                         return $.ajax({
@@ -1043,8 +1045,30 @@ jQuery(function ($) {
                 }).always(function () {
                         $submit.prop('disabled', false);
                         $input.prop('disabled', false);
+                        $source.prop('disabled', false);
                 });
         }
+
+        $(document).on('change', '[data-partner-tag-source]', function () {
+                var $source = $(this);
+                var partnerPageId = String($source.val() || '').trim();
+
+                if (!partnerPageId) {
+                        return;
+                }
+
+                var $form = $source.closest('[data-partner-tag-form]');
+                var $input = $form.find('[data-partner-page-input]').first();
+                var $feedback = $form.find('[data-partner-page-feedback]').first();
+
+                $input.val(partnerPageId).trigger('input').focus();
+                $feedback
+                        .text('Partner Page ID copied. Review it, then save.')
+                        .removeClass('is-error')
+                        .addClass('is-success')
+                        .removeAttr('hidden')
+                        .attr('aria-hidden', 'false');
+        });
 
         $(document).on('submit', '[data-partner-tag-form]', function (e) {
                 e.preventDefault();
