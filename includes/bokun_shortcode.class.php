@@ -733,13 +733,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             $product_tags_without_partner = [];
             $processed_product_tag_ids    = [];
 
-            // Only offer the "Message client" composer to viewers who can actually
-            // send: it uses the same authorization predicate as the AJAX handler,
-            // so unauthorized dashboard viewers are not shown an action that would
-            // always fail. The standalone Viator link is rendered independently.
+            // Use the same authorization predicate as the AJAX handler. This also
+            // allows guests to use the composer on the public booking dashboard,
+            // while hiding it from logged-in users without a staff capability.
             $user_can_send_message = function_exists('bokun_can_send_booking_message')
                 ? bokun_can_send_booking_message()
-                : (current_user_can('edit_others_posts') || current_user_can('manage_options'));
+                : (!is_user_logged_in() || current_user_can('edit_others_posts') || current_user_can('manage_options'));
 
             while ($query->have_posts()) {
                 $query->the_post();

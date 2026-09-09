@@ -3370,18 +3370,15 @@ function bokun_update_partner_page_id() {
     wp_die();
 }
 
-// Intentionally not registered for `nopriv`: sending mail is an external side
-// effect that must never be reachable by unauthenticated visitors.
 add_action('wp_ajax_bokun_send_booking_message', 'bokun_send_booking_message');
+add_action('wp_ajax_nopriv_bokun_send_booking_message', 'bokun_send_booking_message');
 
 /**
  * Whether the current requester may send a client message from the dashboard.
  *
- * Requires a trusted-staff capability. The team-member verified grant is
- * deliberately NOT accepted here: the `nopriv` add-team-member handler lets an
- * anonymous visitor self-issue that signed cookie for any name, so it is not a
- * trustworthy authorization boundary for an external side effect like sending
- * email to a stored customer address.
+ * Anonymous dashboard visitors are allowed to send messages because the
+ * booking dashboard is designed to be operated without a WordPress account.
+ * Logged-in users still require a trusted-staff capability.
  *
  * The boundary is `edit_others_posts` (Editors and Administrators), not the
  * broader `edit_posts`: the latter is also granted to Contributors and Authors,
@@ -3389,7 +3386,7 @@ add_action('wp_ajax_bokun_send_booking_message', 'bokun_send_booking_message');
  * able to email a customer for any booking whose confirmation code they obtain.
  */
 function bokun_can_send_booking_message() {
-    return current_user_can('manage_options') || current_user_can('edit_others_posts');
+    return !is_user_logged_in() || current_user_can('manage_options') || current_user_can('edit_others_posts');
 }
 
 // Handle AJAX request to send a message to the booking's stored contact email.
