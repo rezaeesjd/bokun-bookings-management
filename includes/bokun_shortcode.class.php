@@ -765,6 +765,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $vendor_title      = is_scalar($vendor_title_meta) ? (string) $vendor_title_meta : '';
                 $rate_title        = is_scalar($rate_title_meta) ? (string) $rate_title_meta : '';
 
+                if ('Taste of Florence Tours' === trim($vendor_title)) {
+                    $vendor_title = 'Via Florence';
+                }
+
                 $external_ref  = is_scalar($external_ref) ? (string) $external_ref : '';
                 $parent_booking_id = is_scalar($parent_booking_id_meta) ? (string) $parent_booking_id_meta : '';
 
