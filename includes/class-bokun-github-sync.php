@@ -46,9 +46,16 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
         const PENDING_SHA_KEY = 'bokun_github_sync_pending_sha';
 
         /**
-         * Admin page slug (Tools submenu).
+         * Admin page slug (submenu under the Bokun Bookings menu).
          */
         const ADMIN_SLUG = 'bokun-github-sync';
+
+        /**
+         * Parent menu the settings page lives under (the Bokun Bookings CPT
+         * menu). The main plugin registers the submenu in the correct order;
+         * this constant is used to build links back to the page.
+         */
+        const ADMIN_PARENT = 'edit.php?post_type=bokun_booking';
 
         /**
          * Transient key holding a short-lived admin notice.
@@ -127,8 +134,10 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
             // activation hook does not fire again).
             add_action( 'admin_init', array( $this, 'maybe_schedule_cron' ) );
 
-            // Admin UI.
-            add_action( 'admin_menu', array( $this, 'register_settings_page' ) );
+            // Admin UI. The settings page is registered by the main plugin as a
+            // submenu under the Bokun Bookings menu (ordered between Settings and
+            // Booking History) and routed to render_settings_page(); we only
+            // register the setting/handlers here.
             add_action( 'admin_init', array( $this, 'register_settings' ) );
             add_action( 'admin_post_bokun_github_sync_now', array( $this, 'handle_sync_now' ) );
             add_filter(
@@ -775,15 +784,17 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
          * ------------------------------------------------------------------ */
 
         /**
-         * Register the settings page under Tools.
+         * Build the admin URL of the settings page under the Bokun menu.
+         *
+         * @return string
          */
-        public function register_settings_page() {
-            add_management_page(
-                __( 'Bokun GitHub Sync', 'BOKUN_text_domain' ),
-                __( 'Bokun GitHub Sync', 'BOKUN_text_domain' ),
-                'manage_options',
-                self::ADMIN_SLUG,
-                array( $this, 'render_settings_page' )
+        private function get_admin_page_url() {
+            return add_query_arg(
+                array(
+                    'post_type' => 'bokun_booking',
+                    'page'      => self::ADMIN_SLUG,
+                ),
+                admin_url( 'edit.php' )
             );
         }
 
@@ -949,7 +960,7 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
          * @return array
          */
         public function add_action_links( $links ) {
-            $url = add_query_arg( array( 'page' => self::ADMIN_SLUG ), admin_url( 'tools.php' ) );
+            $url = $this->get_admin_page_url();
 
             $links[] = '<a href="' . esc_url( $url ) . '">' . esc_html__( 'GitHub Sync', 'BOKUN_text_domain' ) . '</a>';
 
@@ -1299,7 +1310,7 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
          * Redirect back to the settings page and stop execution.
          */
         private function redirect_back() {
-            wp_safe_redirect( add_query_arg( array( 'page' => self::ADMIN_SLUG ), admin_url( 'tools.php' ) ) );
+            wp_safe_redirect( $this->get_admin_page_url() );
             exit;
         }
     }
