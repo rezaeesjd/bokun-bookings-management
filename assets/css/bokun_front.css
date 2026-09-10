@@ -1420,7 +1420,7 @@ body.bokun-dashboard-modal-open {
 }
 
 /* Per-booking "Message client" button + composer modal */
-.bokun-booking-dashboard__message-button {
+.bokun-booking-dashboard .bokun-booking-dashboard__message-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1428,9 +1428,11 @@ body.bokun-dashboard-modal-open {
   min-height: 2.25rem;
   padding: 0.45rem 0.9rem;
   border-radius: 0.65rem;
-  border: 1px solid transparent;
+  /* Force a defined blue border/text so the theme's own button colours (which
+     otherwise render the label red on the blue background) cannot leak in. */
+  border: 1px solid #1d4ed8 !important;
   background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-  color: #ffffff;
+  color: #ffffff !important;
   font-weight: 600;
   font-size: 0.8rem;
   line-height: 1.2;
@@ -1438,6 +1440,21 @@ body.bokun-dashboard-modal-open {
   text-decoration: none;
   box-shadow: 0 1px 2px rgba(37, 99, 235, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.12s ease;
+}
+
+/* Keep the label and icon white in every state, including theme link colours. */
+.bokun-booking-dashboard .bokun-booking-dashboard__message-button:hover,
+.bokun-booking-dashboard .bokun-booking-dashboard__message-button:focus,
+.bokun-booking-dashboard .bokun-booking-dashboard__message-button:active,
+.bokun-booking-dashboard .bokun-booking-dashboard__message-button:visited {
+  color: #ffffff !important;
+  text-decoration: none;
+}
+
+.bokun-booking-dashboard__message-button span,
+.bokun-booking-dashboard__message-button svg {
+  color: #ffffff !important;
+  stroke: currentColor;
 }
 
 .bokun-booking-dashboard__message-button svg {
