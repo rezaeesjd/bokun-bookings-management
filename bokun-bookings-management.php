@@ -571,3 +571,25 @@ if( $rb->bokun_is_activate() && file_exists( BOKUN_INCLUDES_DIR . "bokun-booking
 if( $rb->bokun_is_activate() && file_exists( BOKUN_INCLUDES_DIR . "bokun_shortcode.class.php" ) ) {
     include_once( BOKUN_INCLUDES_DIR . "bokun_shortcode.class.php" );
 }
+
+/**
+ * GitHub auto-sync.
+ *
+ * Merges the former "Github Plugin Installer and Updater" helper directly into
+ * this plugin. It keeps the installed plugin in sync with its GitHub branch and
+ * (with auto-sync enabled by default) installs new commits automatically.
+ *
+ * Loaded unconditionally so updates keep working even before the plugin has
+ * been fully configured.
+ */
+if ( file_exists( BOKUN_INCLUDES_DIR . 'class-bokun-github-sync.php' ) ) {
+    include_once( BOKUN_INCLUDES_DIR . 'class-bokun-github-sync.php' );
+
+    if ( class_exists( 'Bokun_Github_Sync' ) ) {
+        global $bokun_github_sync;
+        $bokun_github_sync = new Bokun_Github_Sync( __FILE__ );
+
+        register_activation_hook( __FILE__, array( $bokun_github_sync, 'activate' ) );
+        register_deactivation_hook( __FILE__, array( $bokun_github_sync, 'deactivate' ) );
+    }
+}

@@ -17,12 +17,12 @@ Bokun Bookings Management is a WordPress plugin that lets tour and activity oper
 │   ├── bokun_settings.class.php    # Admin AJAX endpoints & settings handler
 │   ├── bokun_shortcode.class.php   # Front-end shortcodes
 │   ├── bokun_settings.view.php     # Settings screen markup
-│   └── bokun_booking_history.view.php # Booking history admin page
+│   ├── bokun_booking_history.view.php # Booking history admin page
+│   └── class-bokun-github-sync.php # GitHub auto-sync (self-updater)
 ├── assets/
 │   ├── css/                        # Admin/front styles
 │   ├── js/                         # Admin/front scripts (import, DataTables helpers)
 │   └── images/                     # UI assets (e.g., progress spinner)
-└── addons/                         # Extension hooks (currently empty placeholder)
 ```
 
 ## Features
@@ -34,6 +34,29 @@ Bokun Bookings Management is a WordPress plugin that lets tour and activity oper
 - **Rich booking history UI** – The admin page and shortcode render a responsive DataTable with filters, column searching, and CSV export via DataTables Buttons/JSZip. Permission checks prevent unauthorized viewing. 【F:includes/bokun_shortcode.class.php†L78-L171】
 - **Product tag image importer** – Trigger a background job from the settings screen to pull gallery images for every Bokun product tag and attach them to the WordPress taxonomy terms. 【F:includes/bokun_settings.view.php†L200-L233】
 - **Accessibility-aware progress feedback** – Both the admin fetch button and `[bokun_fetch_button]` shortcode share ARIA-enabled progress bars and live regions so users know the import status. 【F:includes/bokun_shortcode.class.php†L15-L52】【F:includes/bokun_settings.view.php†L110-L150】
+- **GitHub auto-sync (self-updater)** – The plugin keeps itself in sync with its GitHub repository. It tracks the latest commit on a configured branch (default `main`) and, with auto-sync enabled by default, installs new commits automatically in the background using WordPress' native update pipeline. This replaces the separate "Github Plugin Installer and Updater" helper plugin, which is now merged into this one. 【F:includes/class-bokun-github-sync.php†L1-L120】
+
+## GitHub auto-sync
+
+The plugin ships with an integrated self-updater that mirrors the tracked GitHub branch onto the installed site. It uses WordPress' own plugin-update mechanism, so updates appear on the **Plugins** and **Dashboard → Updates** screens and can install automatically in the background.
+
+- **Change detection is commit-based.** Rather than relying only on the plugin header version, it compares the latest commit SHA of the tracked branch against the installed commit. This means *any* change pushed to the branch — not just version bumps — is picked up.
+- **Auto-sync is on by default.** On activation the plugin enables WordPress background auto-updates for itself and schedules an hourly check (WP-Cron). New commits are downloaded and installed without manual intervention.
+- **Configuration** lives under **Tools → Bokun GitHub Sync**, where you can set the repository URL, branch, and (for private repositories) a GitHub token, and toggle auto-sync on or off. A **Sync from GitHub now** button forces an immediate update.
+
+### GitHub token for private repositories
+
+For public repositories no token is required. For private repositories, supply a GitHub personal access token with `repo` (or fine-grained *Contents: read*) scope in one of two ways:
+
+1. **Recommended – wp-config.php constant** (kept out of the database and the repository):
+
+   ```php
+   define( 'BOKUN_GITHUB_TOKEN', 'ghp_your_token_here' );
+   ```
+
+2. **Settings field** – Enter the token under **Tools → Bokun GitHub Sync**. It is stored in the WordPress options table. The constant, when defined, always takes precedence.
+
+> **Never commit a token to the repository.** Anything pushed to GitHub is exposed publicly (for public repos) and GitHub automatically revokes leaked tokens.
 
 ## Installation
 
