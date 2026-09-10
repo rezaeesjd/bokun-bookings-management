@@ -1429,19 +1429,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             <div id="<?php echo esc_attr($dashboard_id); ?>" class="bokun-booking-dashboard" <?php echo $columns_style; ?>>
                 <div class="bokun-booking-dashboard__toolbar">
                     <div class="bokun-booking-dashboard__toolbar-group">
-                        <a href="#" class="bokun-booking-dashboard__toolbar-link bokun_fetch_booking_data_front" role="button">
-                            <?php esc_html_e('Fetch bookings', 'BOKUN_txt_domain'); ?>
-                        </a>
+                        <h2 class="bokun-booking-dashboard__toolbar-title">
+                            <?php esc_html_e('Bookings Dashboard', 'BOKUN_txt_domain'); ?>
+                        </h2>
                     </div>
                     <div class="bokun-booking-dashboard__toolbar-group bokun-booking-dashboard__toolbar-group--right">
-                        <a
-                            href="#"
-                            class="bokun-booking-dashboard__toolbar-link"
-                            data-dashboard-conversations-toggle
-                            aria-haspopup="dialog"
-                            aria-expanded="false"
-                        >
-                            <?php esc_html_e('Common conversations', 'BOKUN_txt_domain'); ?>
+                        <a href="#" class="bokun-booking-dashboard__toolbar-link bokun_fetch_booking_data_front" role="button">
+                            <?php esc_html_e('Fetch bookings', 'BOKUN_txt_domain'); ?>
                         </a>
                     </div>
                 </div>
@@ -1651,45 +1645,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 <?php
                 $meeting_point_map_url = 'https://maps.app.goo.gl/P6R5T7zeYNbSYR9YA';
                 ?>
-                <div class="bokun-booking-dashboard__conversations-overlay" data-dashboard-conversations-overlay hidden aria-hidden="true"></div>
-                <div class="bokun-booking-dashboard__conversations" data-dashboard-conversations hidden aria-hidden="true" tabindex="-1">
-                    <div class="bokun-booking-dashboard__conversations-header">
-                        <h3><?php esc_html_e('Common conversations', 'BOKUN_txt_domain'); ?></h3>
-                        <a href="#" class="bokun-booking-dashboard__conversations-close" data-dashboard-conversations-close role="button" aria-label="<?php esc_attr_e('Close common conversations', 'BOKUN_txt_domain'); ?>">&times;</a>
-                    </div>
-                    <div class="bokun-booking-dashboard__conversations-body">
-                        <section class="bokun-booking-dashboard__conversation">
-                            <h4><?php esc_html_e('Meeting point', 'BOKUN_txt_domain'); ?></h4>
-                            <p><?php esc_html_e('Hello, we hope this message finds you well.', 'BOKUN_txt_domain'); ?></p>
-                            <p><?php esc_html_e('Here is the exact meeting point for your tour:', 'BOKUN_txt_domain'); ?></p>
-                            <p><strong><?php esc_html_e('Piazzale Montelungo', 'BOKUN_txt_domain'); ?></strong></p>
-                            <p>
-                                <a href="<?php echo esc_url($meeting_point_map_url); ?>" target="_blank" rel="noopener noreferrer">
-                                    <?php echo esc_html($meeting_point_map_url); ?>
-                                </a>
-                            </p>
-                            <p><?php esc_html_e('You will find us in fuchsia shirts.', 'BOKUN_txt_domain'); ?></p>
-                            <p><?php esc_html_e('Please make sure to be there at least 15 minutes before the tour starts.', 'BOKUN_txt_domain'); ?></p>
-                            <p><?php esc_html_e('Best regards', 'BOKUN_txt_domain'); ?></p>
-                        </section>
-                        <section class="bokun-booking-dashboard__conversation">
-                            <h4><?php esc_html_e('Alternative date', 'BOKUN_txt_domain'); ?></h4>
-                            <p><?php esc_html_e('Hello, we hope this message finds you well.', 'BOKUN_txt_domain'); ?></p>
-                            <p><?php esc_html_e('Unfortunately this tour is not available for Day and Month. We apologize for any inconvenience caused by this. The first available date will be Day and Month.', 'BOKUN_txt_domain'); ?></p>
-                            <p><?php esc_html_e('Let us know if that works for you. If not, we have to cancel the reservation with a full refund.', 'BOKUN_txt_domain'); ?></p>
-                            <p><?php esc_html_e('Thank you for understanding and patience.', 'BOKUN_txt_domain'); ?></p>
-                            <p><?php esc_html_e('Best regards', 'BOKUN_txt_domain'); ?></p>
-                        </section>
-                        <section class="bokun-booking-dashboard__conversation">
-                            <h4><?php esc_html_e('Tour not available', 'BOKUN_txt_domain'); ?></h4>
-                            <p><?php esc_html_e('Hello, we hope this message finds you well.', 'BOKUN_txt_domain'); ?></p>
-                            <p><?php esc_html_e('Unfortunately this tour is not available for Day and Month. We apologize for the inconvenience but we have to cancel the reservation with a full refund.', 'BOKUN_txt_domain'); ?></p>
-                            <p><?php esc_html_e('Thank you for understanding and patience.', 'BOKUN_txt_domain'); ?></p>
-                            <p><?php esc_html_e('Best regards', 'BOKUN_txt_domain'); ?></p>
-                        </section>
-                    </div>
-                </div>
-
                 <?php
                 $message_greeting = __('Hello, we hope this message finds you well.', 'BOKUN_txt_domain');
                 $message_signoff  = __('Best regards', 'BOKUN_txt_domain');

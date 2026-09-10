@@ -149,6 +149,14 @@
   margin-left: auto;
 }
 
+.bokun-booking-dashboard__toolbar-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #0f172a;
+}
+
 .bokun-booking-dashboard__toolbar-link {
   display: inline-flex;
   align-items: center;
