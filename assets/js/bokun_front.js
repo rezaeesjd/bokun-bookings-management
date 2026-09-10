@@ -1144,6 +1144,9 @@ jQuery(function ($) {
                 $dashboard.data('historyTrigger', $button);
                 $button.attr('aria-expanded', 'true');
 
+                // Lock background scroll while the modal is open.
+                $('body').addClass('bokun-dashboard-modal-open');
+
                 var $focusTarget = context.dialog.find('[data-dashboard-history-close]').first();
 
                 if (!$focusTarget.length) {
@@ -1153,6 +1156,58 @@ jQuery(function ($) {
                 setTimeout(function () {
                         $focusTarget.trigger('focus');
                 }, 0);
+        }
+
+        // Collect the visible, focusable elements inside a dialog for trapping.
+        function getFocusableElements($dialog) {
+                var selector = 'a[href], area[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+                return $dialog.find(selector).filter(function () {
+                        var el = this;
+                        return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement;
+                });
+        }
+
+        // Keep Tab / Shift+Tab focus within the open history dialog.
+        function trapHistoryFocus(event) {
+                if (event.key !== 'Tab' && event.keyCode !== 9) {
+                        return;
+                }
+
+                var $openDashboard = $('.bokun-booking-dashboard--history-open').last();
+
+                if (!$openDashboard.length) {
+                        return;
+                }
+
+                var context = getHistoryContext($openDashboard);
+
+                if (!context) {
+                        return;
+                }
+
+                var $focusable = getFocusableElements(context.dialog);
+
+                if (!$focusable.length) {
+                        event.preventDefault();
+                        context.dialog.trigger('focus');
+                        return;
+                }
+
+                var first = $focusable.get(0);
+                var last = $focusable.get($focusable.length - 1);
+                var active = document.activeElement;
+                var withinDialog = context.dialog.get(0).contains(active);
+
+                if (event.shiftKey) {
+                        if (active === first || !withinDialog) {
+                                event.preventDefault();
+                                last.focus();
+                        }
+                } else if (active === last || !withinDialog) {
+                        event.preventDefault();
+                        first.focus();
+                }
         }
 
         function closeHistoryDialog(element) {
@@ -1185,6 +1240,11 @@ jQuery(function ($) {
 
                 $dashboard.removeClass('bokun-booking-dashboard--history-open');
                 $dashboard.removeData('historyTrigger');
+
+                // Release the scroll lock only when no history dialog remains open.
+                if (!$('.bokun-booking-dashboard--history-open').length) {
+                        $('body').removeClass('bokun-dashboard-modal-open');
+                }
 
                 if ($trigger && $trigger.length) {
                         setTimeout(function () {
@@ -1221,7 +1281,11 @@ jQuery(function ($) {
                                 event.preventDefault();
                                 closeHistoryDialog($openDashboard);
                         }
+
+                        return;
                 }
+
+                trapHistoryFocus(event);
         });
 
 
