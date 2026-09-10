@@ -1108,6 +1108,95 @@ body.bokun-dashboard-modal-open {
   accent-color: #2563eb;
 }
 
+/* Collapsible "Result" disclosure */
+.bokun-booking-dashboard__result {
+  margin: 0.15rem 0 0.35rem;
+}
+
+.bokun-booking-dashboard__result-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 0.6rem;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.bokun-booking-dashboard__result-toggle:hover {
+  background: #e2e8f0;
+}
+
+.bokun-booking-dashboard__result-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3);
+}
+
+.bokun-booking-dashboard__result-summary {
+  font-weight: 500;
+  color: #2563eb;
+}
+
+.bokun-booking-dashboard__result-summary:empty {
+  display: none;
+}
+
+.bokun-booking-dashboard__result-caret {
+  transition: transform 0.2s ease;
+  color: #64748b;
+}
+
+.bokun-booking-dashboard__result-toggle[aria-expanded="true"] .bokun-booking-dashboard__result-caret {
+  transform: rotate(180deg);
+}
+
+.bokun-booking-dashboard__result-panel {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bokun-booking-dashboard__result-panel[hidden] {
+  display: none;
+}
+
+.bokun-booking-dashboard__result-panel .bokun-booking-dashboard__toggles {
+  margin: 0;
+}
+
+.bokun-booking-dashboard__payment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 0.85rem;
+  background: #eef2ff;
+  border: 1px solid #dbe2fb;
+}
+
+.bokun-booking-dashboard__payment[hidden] {
+  display: none;
+}
+
+.bokun-booking-dashboard__payment-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bokun-booking-dashboard__result-caret {
+    transition: none;
+  }
+}
+
 .bokun-booking-dashboard__conversations-overlay {
   position: fixed;
   inset: 0;

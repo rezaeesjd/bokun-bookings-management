@@ -129,6 +129,78 @@ jQuery(document).ready(function($) {
         });
     });
 
+    // Result disclosure: reveal the Full/Partial/Not available options on click.
+    $(document).on('click', '[data-result-toggle]', function() {
+        var $toggle = $(this);
+        var $panel = $toggle.siblings('[data-result-panel]').first();
+
+        if (!$panel.length) {
+            return;
+        }
+
+        var isHidden = $panel.prop('hidden');
+        $panel.prop('hidden', !isHidden);
+        $toggle.attr('aria-expanded', isHidden ? 'true' : 'false');
+    });
+
+    // Show the Payment method sub-question only once a result is selected, and
+    // keep the collapsed "Result" summary in sync.
+    function updateResultState($result, persistClear) {
+        if (!$result || !$result.length) {
+            return;
+        }
+
+        var resultTypes = ['full', 'partial', 'not-available'];
+        var selected = [];
+
+        $result.find('.booking-checkbox').each(function() {
+            var type = String($(this).data('type'));
+
+            if (resultTypes.indexOf(type) !== -1 && $(this).is(':checked')) {
+                selected.push($(this).closest('.bokun-booking-dashboard__toggle').find('span').first().text());
+            }
+        });
+
+        var hasSelection = selected.length > 0;
+
+        // When the last result is cleared, also clear any payment method
+        // selections and persist their removal, so a hidden payment group does
+        // not leave stale Amex/PayPal/Other statuses attached to the booking.
+        if (persistClear && !hasSelection) {
+            var $checkedPayments = $result.find('[data-payment] .booking-checkbox:checked');
+
+            if ($checkedPayments.length) {
+                $checkedPayments.prop('checked', false);
+                $checkedPayments.each(function() {
+                    // Fires the persistence handler (removes the taxonomy term).
+                    $(this).trigger('change');
+                });
+            }
+        }
+
+        var $payment = $result.find('[data-payment]').first();
+
+        if ($payment.length) {
+            $payment.prop('hidden', !hasSelection);
+        }
+
+        var $summary = $result.find('[data-result-summary]').first();
+
+        if ($summary.length) {
+            $summary.text(hasSelection ? selected.join(', ') : '');
+        }
+    }
+
+    $(document).on('change', '.booking-checkbox', function() {
+        updateResultState($(this).closest('[data-result]'), true);
+    });
+
+    $(function() {
+        $('[data-result]').each(function() {
+            updateResultState($(this), false);
+        });
+    });
+
     // Handle Team Member form submission
     $(document).on('submit', '.bokun-team-member-form', function(event) {
         event.preventDefault();
