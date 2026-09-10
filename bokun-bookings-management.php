@@ -343,6 +343,11 @@ class BokunBookingManagement {
                 'slug' => $this->bokun_settings, // Slug of the submenu
             ),
             array(
+                'name' => __('Bokun GitHub Sync', 'BOKUN_txt_domain'),
+                'cap'  => 'manage_options',
+                'slug' => 'bokun-github-sync',
+            ),
+            array(
                 'name' => __('Booking History', 'BOKUN_txt_domain'),
                 'cap'  => 'manage_options',
                 'slug' => $this->bokun_booking_history,
@@ -384,6 +389,7 @@ class BokunBookingManagement {
         function bokun_admin_slugs() {
                 $bokun_pages_slug = array(
                         $this->bokun_settings,
+                        'bokun-github-sync',
                         $this->bokun_booking_history,
                 );
                 return $bokun_pages_slug;
@@ -520,6 +526,12 @@ class BokunBookingManagement {
                                 case $this->bokun_booking_history:
                                         if (file_exists(BOKUN_INCLUDES_DIR . 'bokun_booking_history.view.php')) {
                                             include_once BOKUN_INCLUDES_DIR . 'bokun_booking_history.view.php';
+                                        }
+                                        break;
+                                case 'bokun-github-sync':
+                                        global $bokun_github_sync;
+                                        if ( is_object( $bokun_github_sync ) && method_exists( $bokun_github_sync, 'render_settings_page' ) ) {
+                                            $bokun_github_sync->render_settings_page();
                                         }
                                         break;
                         }

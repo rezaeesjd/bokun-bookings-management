@@ -42,7 +42,7 @@ The plugin ships with an integrated self-updater that mirrors the tracked GitHub
 
 - **Change detection is commit-based.** Rather than relying only on the plugin header version, it compares the latest commit SHA of the tracked branch against the installed commit. This means *any* change pushed to the branch — not just version bumps — is picked up.
 - **Auto-sync is on by default.** On activation the plugin enables WordPress background auto-updates for itself and schedules an hourly check (WP-Cron). New commits are downloaded and installed without manual intervention.
-- **Configuration** lives under **Tools → Bokun GitHub Sync**, where you can set the repository URL, branch, and (for private repositories) a GitHub token, and toggle auto-sync on or off. A **Sync from GitHub now** button forces an immediate update.
+- **Configuration** lives under **Bokun Bookings Management → Bokun GitHub Sync** (between Settings and Booking History), where you can set the repository URL, branch, and (for private repositories) a GitHub token, and toggle auto-sync on or off. A **Sync from GitHub now** button forces an immediate update.
 
 ### GitHub token for private repositories
 
@@ -54,7 +54,7 @@ For public repositories no token is required. For private repositories, supply a
    define( 'BOKUN_GITHUB_TOKEN', 'ghp_your_token_here' );
    ```
 
-2. **Settings field** – Enter the token under **Tools → Bokun GitHub Sync**. It is stored in the WordPress options table. The constant, when defined, always takes precedence.
+2. **Settings field** – Enter the token under **Bokun Bookings Management → Bokun GitHub Sync**. It is stored in the WordPress options table. The constant, when defined, always takes precedence.
 
 > **Never commit a token to the repository.** Anything pushed to GitHub is exposed publicly (for public repos) and GitHub automatically revokes leaked tokens.
 
