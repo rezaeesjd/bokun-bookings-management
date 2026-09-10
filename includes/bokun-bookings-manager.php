@@ -3052,7 +3052,7 @@ function update_booking_status() {
         wp_die();
     }
 
-    $allowed_types = ['full', 'partial', 'not-available', 'refund-partner'];
+    $allowed_types = ['full', 'partial', 'not-available', 'refund-partner', 'amex', 'paypal', 'other'];
 
     if (!in_array($type, $allowed_types, true)) {
         wp_send_json_error(['message' => 'Invalid booking status type provided.']);
@@ -3093,6 +3093,22 @@ function update_booking_status() {
                         bokun_assign_tag_to_post($post_id, 'Refund Requested from Partner', $taxonomy);
                     } else {
                         bokun_remove_tag_from_post($post_id, 'Refund Requested from Partner', $taxonomy);
+                    }
+                    break;
+                case 'amex':
+                case 'paypal':
+                case 'other':
+                    $payment_terms = [
+                        'amex'   => 'Amex',
+                        'paypal' => 'PayPal',
+                        'other'  => 'Other Payment',
+                    ];
+                    $payment_term = $payment_terms[$type];
+
+                    if ($checked) {
+                        bokun_assign_tag_to_post($post_id, $payment_term, $taxonomy);
+                    } else {
+                        bokun_remove_tag_from_post($post_id, $payment_term, $taxonomy);
                     }
                     break;
                 default:
