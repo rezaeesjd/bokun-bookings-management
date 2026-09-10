@@ -41,8 +41,18 @@ Bokun Bookings Management is a WordPress plugin that lets tour and activity oper
 The plugin ships with an integrated self-updater that mirrors the tracked GitHub branch onto the installed site. It uses WordPress' own plugin-update mechanism, so updates appear on the **Plugins** and **Dashboard → Updates** screens and can install automatically in the background.
 
 - **Change detection is commit-based.** Rather than relying only on the plugin header version, it compares the latest commit SHA of the tracked branch against the installed commit. This means *any* change pushed to the branch — not just version bumps — is picked up.
-- **Auto-sync is on by default.** On activation the plugin enables WordPress background auto-updates for itself and schedules an hourly check (WP-Cron). New commits are downloaded and installed without manual intervention.
+- **Auto-sync is on by default.** On activation the plugin enables WordPress background auto-updates for itself and installs new commits without manual intervention.
 - **Configuration** lives under **Bokun Bookings Management → Bokun GitHub Sync** (between Settings and Booking History), where you can set the repository URL, branch, and (for private repositories) a GitHub token, and toggle auto-sync on or off. A **Sync from GitHub now** button forces an immediate update.
+
+> **First-time install (bootstrap).** The auto-sync module can only update a copy of the plugin that already contains it. The very first time, install the current `main` build once (download the repository ZIP and upload it via **Plugins → Add New → Upload Plugin → Replace current with uploaded**, then activate). After that, every change syncs on its own.
+
+### How updates are triggered
+
+Three mechanisms work together, from fastest to fallback:
+
+1. **GitHub webhook (event-driven, recommended).** Installed the moment you push to the tracked branch. Under **Bokun Bookings Management → Bokun GitHub Sync**, copy the **Payload URL** and **Secret** and add them in GitHub (**Repository → Settings → Webhooks → Add webhook**; Content type `application/json`; "Just the push event"). The endpoint verifies the GitHub `X-Hub-Signature-256` HMAC before doing anything. The secret can also be set via a `BOKUN_GITHUB_WEBHOOK_SECRET` constant in `wp-config.php`.
+2. **Admin-load check.** Whenever an administrator opens wp-admin, the plugin checks for a new commit (throttled to at most once every couple of minutes) and installs it if the branch has moved.
+3. **Hourly WP-Cron check.** A background safety net. Note WP-Cron only fires on site traffic unless a real system cron calls `wp-cron.php`.
 
 ### GitHub token for private repositories
 
