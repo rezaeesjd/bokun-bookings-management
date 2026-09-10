@@ -546,6 +546,38 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
             }
 
             $this->clear_remote_cache();
+
+            // WordPress silently deactivates an active plugin before swapping its
+            // files during an update (Plugin_Upgrader::deactivate_plugin_before_upgrade),
+            // and our self-sync flow does not otherwise restore it — which left
+            // the plugin deactivated after every auto-sync. This callback only
+            // runs because the plugin was active at the start of the request
+            // (its hooks would not be registered otherwise), so re-activate it.
+            $this->restore_active_state();
+        }
+
+        /**
+         * Re-activate the plugin after a self-update if WordPress deactivated it.
+         *
+         * Activation is silent: the files are already in place and the real
+         * activation hooks ran when the plugin was first activated, so this only
+         * restores the entry in the active_plugins option without re-running
+         * activation side effects.
+         */
+        private function restore_active_state() {
+            if ( ! function_exists( 'is_plugin_active' ) || ! function_exists( 'activate_plugin' ) ) {
+                require_once ABSPATH . 'wp-admin/includes/plugin.php';
+            }
+
+            if ( is_plugin_active( $this->plugin_basename ) ) {
+                return;
+            }
+
+            // Network-activated plugins are not deactivated during upgrade, so
+            // mirror the original scope when re-activating just in case.
+            $network_wide = is_multisite() && is_plugin_active_for_network( $this->plugin_basename );
+
+            activate_plugin( $this->plugin_basename, '', $network_wide, true );
         }
 
         /**
