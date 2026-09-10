@@ -1113,42 +1113,60 @@ body.bokun-dashboard-modal-open {
   margin: 0.15rem 0 0.35rem;
 }
 
-.bokun-booking-dashboard__result-toggle {
+/* High specificity + !important so page-builder (Elementor) button styles
+   cannot repaint this control (e.g. a crimson focus/active background). */
+.bokun-booking-dashboard .bokun-booking-dashboard__result-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
   padding: 0.3rem 0.7rem;
   border-radius: 0.6rem;
-  border: 1px solid #e2e8f0;
-  background: #f1f5f9;
-  color: #0f172a;
+  border: 1px solid #e2e8f0 !important;
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
   font-size: 0.8rem;
   font-weight: 700;
+  line-height: 1.2;
   cursor: pointer;
+  box-shadow: none !important;
+  text-shadow: none !important;
   transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
-.bokun-booking-dashboard__result-toggle:hover {
-  background: #e2e8f0;
+.bokun-booking-dashboard .bokun-booking-dashboard__result-toggle:hover {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
 }
 
-.bokun-booking-dashboard__result-toggle:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3);
+.bokun-booking-dashboard .bokun-booking-dashboard__result-toggle:focus,
+.bokun-booking-dashboard .bokun-booking-dashboard__result-toggle:active,
+.bokun-booking-dashboard .bokun-booking-dashboard__result-toggle[aria-expanded="true"] {
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+  outline: none !important;
 }
 
-.bokun-booking-dashboard__result-summary {
+.bokun-booking-dashboard .bokun-booking-dashboard__result-toggle:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35) !important;
+}
+
+.bokun-booking-dashboard .bokun-booking-dashboard__result-title {
+  color: #0f172a !important;
+}
+
+.bokun-booking-dashboard .bokun-booking-dashboard__result-summary {
   font-weight: 500;
-  color: #2563eb;
+  color: #2563eb !important;
 }
 
 .bokun-booking-dashboard__result-summary:empty {
   display: none;
 }
 
-.bokun-booking-dashboard__result-caret {
+.bokun-booking-dashboard .bokun-booking-dashboard__result-caret {
   transition: transform 0.2s ease;
-  color: #64748b;
+  color: #64748b !important;
 }
 
 .bokun-booking-dashboard__result-toggle[aria-expanded="true"] .bokun-booking-dashboard__result-caret {
