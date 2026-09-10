@@ -38,6 +38,14 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
         const INSTALLED_SHA_KEY = 'bokun_github_sync_installed_sha';
 
         /**
+         * Option key that stores the commit SHA of an update currently being
+         * installed, so it can be promoted to the installed SHA once the
+         * upgrade finishes (recording the exact tree that was installed rather
+         * than re-querying the branch HEAD afterwards).
+         */
+        const PENDING_SHA_KEY = 'bokun_github_sync_pending_sha';
+
+        /**
          * Admin page slug (Tools submenu).
          */
         const ADMIN_SLUG = 'bokun-github-sync';
@@ -141,15 +149,13 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
                 $this->set_wp_auto_update( true );
             }
 
-            // Record the SHA that ships with this build so we do not immediately
-            // re-download an identical tree on the first check.
-            if ( '' === (string) get_option( self::INSTALLED_SHA_KEY, '' ) ) {
-                $remote = $this->get_remote_info();
-
-                if ( ! is_wp_error( $remote ) && ! empty( $remote['sha'] ) ) {
-                    update_option( self::INSTALLED_SHA_KEY, $remote['sha'] );
-                }
-            }
+            // Intentionally do NOT seed the installed SHA from the remote HEAD
+            // here. The shipped files do not carry their own commit reference,
+            // so adopting the current branch tip would mask any commits that
+            // are newer than the files actually on disk (for example when this
+            // module arrives via an in-place update whose activation hook never
+            // runs). Leaving it unset makes the first check perform an initial
+            // sync, after which after_update() records the exact installed SHA.
         }
 
         /**
@@ -278,13 +284,6 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
 
             $installed_sha = (string) get_option( self::INSTALLED_SHA_KEY, '' );
 
-            // On a fresh install without a recorded SHA, adopt the remote SHA so
-            // we do not force a redundant download of the identical tree.
-            if ( '' === $installed_sha ) {
-                update_option( self::INSTALLED_SHA_KEY, $remote['sha'] );
-                $installed_sha = $remote['sha'];
-            }
-
             $current_version = $this->get_installed_version();
 
             if ( ! isset( $transient->checked ) || ! is_array( $transient->checked ) ) {
@@ -293,9 +292,16 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
 
             $transient->checked[ $this->plugin_basename ] = $current_version;
 
-            $has_change = ( $remote['sha'] !== $installed_sha );
+            // An unknown installed SHA means we have never recorded what is on
+            // disk, so force an initial sync rather than assuming the remote
+            // HEAD is already installed.
+            $has_change = ( '' === $installed_sha ) || ( $remote['sha'] !== $installed_sha );
 
             if ( $has_change ) {
+                // Remember the exact SHA whose archive we are about to offer so
+                // after_update() can record it verbatim.
+                $this->set_pending_sha( $remote['sha'] );
+
                 $update = (object) array(
                     'slug'         => $this->plugin_slug,
                     'plugin'       => $this->plugin_basename,
@@ -490,13 +496,18 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
                 return;
             }
 
-            $this->clear_remote_cache();
+            // Promote the SHA whose archive we actually installed. Re-querying
+            // the branch HEAD here would risk recording a commit pushed after
+            // the archive was resolved, marking it installed even though its
+            // files never landed.
+            $pending = (string) get_option( self::PENDING_SHA_KEY, '' );
 
-            $remote = $this->get_remote_info();
-
-            if ( ! is_wp_error( $remote ) && ! empty( $remote['sha'] ) ) {
-                update_option( self::INSTALLED_SHA_KEY, $remote['sha'] );
+            if ( '' !== $pending ) {
+                update_option( self::INSTALLED_SHA_KEY, $pending );
+                delete_option( self::PENDING_SHA_KEY );
             }
+
+            $this->clear_remote_cache();
         }
 
         /**
@@ -595,7 +606,11 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
                 'sha'          => $sha,
                 'version'      => $version,
                 'branch'       => $branch,
-                'package'      => sprintf( 'https://api.github.com/repos/%1$s/%2$s/zipball/%3$s', $parsed['owner'], $parsed['repo'], rawurlencode( $branch ) ),
+                // Pin the archive to the exact resolved commit, not the branch
+                // name, so the tree we install matches the SHA we compared and
+                // record. Otherwise a commit pushed between resolving the SHA
+                // and downloading could install a different tree.
+                'package'      => sprintf( 'https://api.github.com/repos/%1$s/%2$s/zipball/%3$s', $parsed['owner'], $parsed['repo'], rawurlencode( $sha ) ),
                 'homepage'     => sprintf( 'https://github.com/%1$s/%2$s', $parsed['owner'], $parsed['repo'] ),
                 'requires'     => $meta['requires'],
                 'requires_php' => $meta['requires_php'],
@@ -1020,6 +1035,10 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
 
             set_site_transient( 'update_plugins', $transient );
 
+            // Record the SHA being installed so after_update() promotes exactly
+            // this commit once the upgrade completes.
+            $this->set_pending_sha( $remote['sha'] );
+
             $skin     = new Automatic_Upgrader_Skin();
             $upgrader = new Plugin_Upgrader( $skin );
 
@@ -1129,6 +1148,24 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
             $branch = ! empty( $settings['repository_branch'] ) ? $settings['repository_branch'] : 'main';
 
             delete_transient( 'bokun_github_sync_' . md5( $settings['repository_url'] . '|' . $branch ) );
+        }
+
+        /**
+         * Store the commit SHA of an update we are about to install.
+         *
+         * Written only when it changes to avoid needless option writes on the
+         * frequent update-transient checks.
+         *
+         * @param string $sha Commit SHA.
+         */
+        private function set_pending_sha( $sha ) {
+            if ( '' === (string) $sha ) {
+                return;
+            }
+
+            if ( (string) get_option( self::PENDING_SHA_KEY, '' ) !== (string) $sha ) {
+                update_option( self::PENDING_SHA_KEY, $sha );
+            }
         }
 
         /**
