@@ -46,6 +46,22 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
         const PENDING_SHA_KEY = 'bokun_github_sync_pending_sha';
 
         /**
+         * Option key that stores the webhook shared secret.
+         */
+        const WEBHOOK_SECRET_KEY = 'bokun_github_sync_webhook_secret';
+
+        /**
+         * Transient key used to throttle the admin-load sync check.
+         */
+        const ADMIN_THROTTLE_KEY = 'bokun_github_sync_admin_throttle';
+
+        /**
+         * REST namespace and route for the GitHub push webhook.
+         */
+        const REST_NAMESPACE = 'bokun-github-sync/v1';
+        const REST_ROUTE     = '/webhook';
+
+        /**
          * Admin page slug (submenu under the Bokun Bookings menu).
          */
         const ADMIN_SLUG = 'bokun-github-sync';
@@ -134,6 +150,15 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
             // activation hook does not fire again).
             add_action( 'admin_init', array( $this, 'maybe_schedule_cron' ) );
 
+            // Event-driven trigger: a GitHub push webhook installs changes the
+            // instant they land on the tracked branch.
+            add_action( 'rest_api_init', array( $this, 'register_webhook_route' ) );
+
+            // Near-real-time fallback: when an admin loads wp-admin, check for a
+            // new commit (throttled) so changes appear without waiting for the
+            // hourly cron or a webhook.
+            add_action( 'admin_init', array( $this, 'maybe_admin_sync' ) );
+
             // Admin UI. The settings page is registered by the main plugin as a
             // submenu under the Bokun Bookings menu (ordered between Settings and
             // Booking History) and routed to render_settings_page(); we only
@@ -157,6 +182,10 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
             if ( ! empty( $settings['autosync'] ) ) {
                 $this->set_wp_auto_update( true );
             }
+
+            // Ensure a webhook secret exists so the payload URL can be wired up
+            // in GitHub immediately.
+            $this->get_webhook_secret();
 
             // Intentionally do NOT seed the installed SHA from the remote HEAD
             // here. The shipped files do not carry their own commit reference,
@@ -543,6 +572,196 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
             $settings = $this->get_settings();
 
             return ! empty( $settings['autosync'] );
+        }
+
+        /* ---------------------------------------------------------------------
+         * Event-driven triggers (webhook + admin-load check)
+         * ------------------------------------------------------------------ */
+
+        /**
+         * Register the REST endpoint GitHub calls on push.
+         */
+        public function register_webhook_route() {
+            register_rest_route(
+                self::REST_NAMESPACE,
+                self::REST_ROUTE,
+                array(
+                    'methods'             => 'POST',
+                    'callback'            => array( $this, 'handle_webhook' ),
+                    'permission_callback' => '__return_true',
+                )
+            );
+        }
+
+        /**
+         * Handle a GitHub webhook delivery.
+         *
+         * Verifies the HMAC signature, and on a push to the tracked branch
+         * installs the new commit immediately.
+         *
+         * @param WP_REST_Request $request Incoming request.
+         *
+         * @return WP_REST_Response
+         */
+        public function handle_webhook( $request ) {
+            $settings = $this->get_settings();
+
+            $secret = $this->get_webhook_secret();
+
+            if ( '' === $secret ) {
+                return new WP_REST_Response( array( 'message' => 'Webhook secret is not configured.' ), 403 );
+            }
+
+            $payload   = $request->get_body();
+            $signature = $request->get_header( 'x_hub_signature_256' );
+
+            if ( ! $this->verify_webhook_signature( $payload, $signature, $secret ) ) {
+                return new WP_REST_Response( array( 'message' => 'Invalid signature.' ), 401 );
+            }
+
+            $event = $request->get_header( 'x_github_event' );
+
+            if ( 'ping' === $event ) {
+                return new WP_REST_Response( array( 'message' => 'pong' ), 200 );
+            }
+
+            if ( 'push' !== $event ) {
+                return new WP_REST_Response( array( 'message' => 'Ignored event: ' . sanitize_text_field( (string) $event ) ), 202 );
+            }
+
+            if ( empty( $settings['autosync'] ) ) {
+                return new WP_REST_Response( array( 'message' => 'Auto-sync is disabled.' ), 202 );
+            }
+
+            $data   = json_decode( $payload, true );
+            $branch = ! empty( $settings['repository_branch'] ) ? $settings['repository_branch'] : 'main';
+            $ref    = is_array( $data ) && isset( $data['ref'] ) ? $data['ref'] : '';
+
+            if ( 'refs/heads/' . $branch !== $ref ) {
+                return new WP_REST_Response( array( 'message' => 'Push does not target the tracked branch.' ), 202 );
+            }
+
+            $this->clear_remote_cache();
+
+            $remote = $this->get_remote_info();
+
+            if ( is_wp_error( $remote ) ) {
+                return new WP_REST_Response( array( 'message' => $remote->get_error_message() ), 500 );
+            }
+
+            $result = $this->install_from_remote( $remote );
+
+            if ( is_wp_error( $result ) ) {
+                return new WP_REST_Response( array( 'message' => $result->get_error_message() ), 500 );
+            }
+
+            update_option( self::INSTALLED_SHA_KEY, $remote['sha'] );
+
+            return new WP_REST_Response(
+                array(
+                    'message' => 'Synced to latest commit.',
+                    'sha'     => substr( $remote['sha'], 0, 7 ),
+                ),
+                200
+            );
+        }
+
+        /**
+         * Verify a GitHub webhook signature (X-Hub-Signature-256).
+         *
+         * @param string $payload   Raw request body.
+         * @param string $signature Signature header value.
+         * @param string $secret    Shared secret.
+         *
+         * @return bool
+         */
+        private function verify_webhook_signature( $payload, $signature, $secret ) {
+            if ( empty( $signature ) || 0 !== strpos( $signature, 'sha256=' ) ) {
+                return false;
+            }
+
+            $expected = 'sha256=' . hash_hmac( 'sha256', (string) $payload, $secret );
+
+            return hash_equals( $expected, $signature );
+        }
+
+        /**
+         * On an admin request, check for a new commit and install it (throttled).
+         *
+         * This gives near-real-time updates without depending solely on the
+         * hourly WP-Cron event, and downloads only when the branch has actually
+         * moved so the common case is a single cheap API call.
+         */
+        public function maybe_admin_sync() {
+            if ( wp_doing_ajax() || wp_doing_cron() ) {
+                return;
+            }
+
+            if ( ! current_user_can( 'update_plugins' ) ) {
+                return;
+            }
+
+            $settings = $this->get_settings();
+
+            if ( empty( $settings['autosync'] ) ) {
+                return;
+            }
+
+            if ( get_transient( self::ADMIN_THROTTLE_KEY ) ) {
+                return;
+            }
+
+            // Throttle so at most one check runs per couple of minutes per site.
+            set_transient( self::ADMIN_THROTTLE_KEY, 1, 2 * MINUTE_IN_SECONDS );
+
+            $remote = $this->get_remote_info();
+
+            if ( is_wp_error( $remote ) || empty( $remote['sha'] ) ) {
+                return;
+            }
+
+            $installed = (string) get_option( self::INSTALLED_SHA_KEY, '' );
+
+            if ( '' !== $installed && $remote['sha'] === $installed ) {
+                return;
+            }
+
+            $result = $this->install_from_remote( $remote );
+
+            if ( ! is_wp_error( $result ) ) {
+                update_option( self::INSTALLED_SHA_KEY, $remote['sha'] );
+            }
+        }
+
+        /**
+         * Get the webhook payload URL for this site.
+         *
+         * @return string
+         */
+        private function get_webhook_url() {
+            return rest_url( self::REST_NAMESPACE . self::REST_ROUTE );
+        }
+
+        /**
+         * Resolve the webhook secret, generating and persisting one if needed.
+         *
+         * A BOKUN_GITHUB_WEBHOOK_SECRET constant, when defined, takes precedence.
+         *
+         * @return string
+         */
+        private function get_webhook_secret() {
+            if ( defined( 'BOKUN_GITHUB_WEBHOOK_SECRET' ) && BOKUN_GITHUB_WEBHOOK_SECRET ) {
+                return (string) BOKUN_GITHUB_WEBHOOK_SECRET;
+            }
+
+            $secret = (string) get_option( self::WEBHOOK_SECRET_KEY, '' );
+
+            if ( '' === $secret ) {
+                $secret = wp_generate_password( 40, false );
+                update_option( self::WEBHOOK_SECRET_KEY, $secret );
+            }
+
+            return $secret;
         }
 
         /* ---------------------------------------------------------------------
@@ -948,6 +1167,36 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
                     <input type="hidden" name="action" value="bokun_github_sync_now" />
                     <?php submit_button( __( 'Sync from GitHub now', 'BOKUN_text_domain' ), 'primary', 'submit', false ); ?>
                 </form>
+
+                <hr />
+
+                <h2><?php esc_html_e( 'Instant sync on push (GitHub webhook)', 'BOKUN_text_domain' ); ?></h2>
+                <p><?php esc_html_e( 'For an event-driven update — installed the moment you push to the branch, instead of waiting for a scheduled check — add a webhook in your GitHub repository using the details below.', 'BOKUN_text_domain' ); ?></p>
+                <table class="form-table" role="presentation">
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Payload URL', 'BOKUN_text_domain' ); ?></th>
+                        <td>
+                            <input type="text" class="large-text code" readonly onfocus="this.select();" value="<?php echo esc_attr( $this->get_webhook_url() ); ?>" />
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Secret', 'BOKUN_text_domain' ); ?></th>
+                        <td>
+                            <input type="text" class="regular-text code" readonly onfocus="this.select();" value="<?php echo esc_attr( $this->get_webhook_secret() ); ?>" />
+                            <p class="description"><?php esc_html_e( 'Paste this into the webhook Secret field. It can also be set via the BOKUN_GITHUB_WEBHOOK_SECRET constant in wp-config.php.', 'BOKUN_text_domain' ); ?></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><?php esc_html_e( 'Content type', 'BOKUN_text_domain' ); ?></th>
+                        <td><code>application/json</code></td>
+                    </tr>
+                </table>
+                <p>
+                    <?php esc_html_e( 'In GitHub: Repository → Settings → Webhooks → Add webhook. Paste the Payload URL and Secret above, set Content type to application/json, choose "Just the push event", and save. Every push to the tracked branch will then sync this site immediately.', 'BOKUN_text_domain' ); ?>
+                </p>
+                <p class="description">
+                    <?php esc_html_e( 'Even without a webhook, the plugin also checks for changes whenever an administrator opens the dashboard (at most once every couple of minutes) and hourly via WP-Cron.', 'BOKUN_text_domain' ); ?>
+                </p>
             </div>
             <?php
         }
