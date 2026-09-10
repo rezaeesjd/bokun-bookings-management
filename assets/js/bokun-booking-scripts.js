@@ -145,7 +145,7 @@ jQuery(document).ready(function($) {
 
     // Show the Payment method sub-question only once a result is selected, and
     // keep the collapsed "Result" summary in sync.
-    function updateResultState($result) {
+    function updateResultState($result, persistClear) {
         if (!$result || !$result.length) {
             return;
         }
@@ -162,6 +162,22 @@ jQuery(document).ready(function($) {
         });
 
         var hasSelection = selected.length > 0;
+
+        // When the last result is cleared, also clear any payment method
+        // selections and persist their removal, so a hidden payment group does
+        // not leave stale Amex/PayPal/Other statuses attached to the booking.
+        if (persistClear && !hasSelection) {
+            var $checkedPayments = $result.find('[data-payment] .booking-checkbox:checked');
+
+            if ($checkedPayments.length) {
+                $checkedPayments.prop('checked', false);
+                $checkedPayments.each(function() {
+                    // Fires the persistence handler (removes the taxonomy term).
+                    $(this).trigger('change');
+                });
+            }
+        }
+
         var $payment = $result.find('[data-payment]').first();
 
         if ($payment.length) {
@@ -176,12 +192,12 @@ jQuery(document).ready(function($) {
     }
 
     $(document).on('change', '.booking-checkbox', function() {
-        updateResultState($(this).closest('[data-result]'));
+        updateResultState($(this).closest('[data-result]'), true);
     });
 
     $(function() {
         $('[data-result]').each(function() {
-            updateResultState($(this));
+            updateResultState($(this), false);
         });
     });
 
