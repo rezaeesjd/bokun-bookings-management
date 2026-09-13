@@ -1,6 +1,46 @@
 (function ($) {
     'use strict';
 
+    function enrichHistorySearchData($table) {
+        var $dashboard = $table.closest('.bokun-booking-dashboard');
+        var bookingSearchIndex = {};
+
+        if ($dashboard.length) {
+            $dashboard.find('.bokun-booking-dashboard__card[data-booking-id]').each(function () {
+                var $card = $(this);
+                var bookingId = ($card.attr('data-booking-id') || '').toString().trim().toLowerCase();
+                var searchText = ($card.attr('data-search') || '').toString().trim();
+
+                if (!bookingId || !searchText) {
+                    return;
+                }
+
+                bookingSearchIndex[bookingId] = searchText;
+            });
+        }
+
+        $table.find('tbody tr').each(function () {
+            var $row = $(this);
+            var $bookingCell = $row.children('td').eq(1);
+
+            if (!$bookingCell.length) {
+                return;
+            }
+
+            var bookingId = ($bookingCell.text() || '').toString().trim();
+            var normalizedBookingId = bookingId.toLowerCase();
+            var searchText = bookingId;
+
+            if (normalizedBookingId && bookingSearchIndex[normalizedBookingId]) {
+                searchText += ' ' + bookingSearchIndex[normalizedBookingId];
+            }
+
+            // DataTables reads data-search as the filtering value while keeping
+            // the visible Booking ID cell and CSV export unchanged.
+            $bookingCell.attr('data-search', searchText.trim());
+        });
+    }
+
     function initBookingHistoryTable(context) {
         var $tables = $('.bokun-booking-history-table', context || document);
 
@@ -22,6 +62,8 @@
             var exportTitle = ($wrapper.data('export-title') || (localized && localized.exportTitle)) || 'booking-history';
             var texts = localized && localized.texts ? localized.texts : {};
             var language = localized && localized.language ? localized.language : {};
+
+            enrichHistorySearchData($table);
 
             $table.DataTable({
                 dom: '<"bokun-history-toolbar"Bfrtip>',
