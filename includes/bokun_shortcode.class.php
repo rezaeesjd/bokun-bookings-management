@@ -1924,6 +1924,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     </div>
                 </div>
 
+                <?php
+                if (function_exists('bokun_render_fetch_status_note')) {
+                    echo bokun_render_fetch_status_note(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Output is pre-escaped in the helper.
+                }
+                ?>
+
                 <?php if (!empty($product_tags_without_partner)) : ?>
                     <div class="bokun-booking-dashboard__missing-tags">
                         <h3><?php esc_html_e('Product tags without link to partner website:', 'BOKUN_txt_domain'); ?></h3>

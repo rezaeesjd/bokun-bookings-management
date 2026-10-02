@@ -515,6 +515,172 @@ function bokun_reset_import_progress_state($context) {
     delete_transient($key);
 }
 
+/**
+ * Option key used to persist the last import run metadata per API context.
+ */
+if (!defined('BOKUN_IMPORT_LAST_RUNS_OPTION')) {
+    define('BOKUN_IMPORT_LAST_RUNS_OPTION', 'bokun_import_last_runs');
+}
+
+/**
+ * Retrieve the stored "last run" metadata for every API context.
+ *
+ * @return array Associative array keyed by context slug.
+ */
+function bokun_get_import_last_runs() {
+    $runs = get_option(BOKUN_IMPORT_LAST_RUNS_OPTION, array());
+
+    return is_array($runs) ? $runs : array();
+}
+
+/**
+ * Record metadata about an import run for a single API context so the
+ * dashboard can show when each API was last fetched, how it was triggered,
+ * and whether the most recent run errored.
+ *
+ * @param string $context The API context slug.
+ * @param string $status  'success' or 'error'.
+ * @param string $trigger 'manual' (Fetch button) or 'scheduled' (daily cron).
+ * @param string $message Optional message (error text or short note).
+ * @param array  $summary Optional import summary counts (on success).
+ * @return array The stored entry for this context.
+ */
+function bokun_record_import_run($context, $status, $trigger, $message = '', $summary = array()) {
+    $context = bokun_normalize_import_context($context);
+
+    $status  = ('error' === $status) ? 'error' : 'success';
+    $trigger = in_array($trigger, array('manual', 'scheduled'), true) ? $trigger : 'manual';
+    $now     = time();
+
+    $runs  = bokun_get_import_last_runs();
+    $entry = isset($runs[$context]) && is_array($runs[$context]) ? $runs[$context] : array();
+
+    $entry['last_run_time']    = $now;
+    $entry['last_run_status']  = $status;
+    $entry['last_run_trigger'] = $trigger;
+    $entry['last_run_message'] = is_string($message) ? $message : '';
+    $entry['label']            = bokun_get_import_progress_label($context);
+
+    if ('success' === $status) {
+        $entry['last_success_time']    = $now;
+        $entry['last_success_trigger'] = $trigger;
+
+        if (is_array($summary)) {
+            $entry['summary'] = array(
+                'total'     => isset($summary['total']) ? (int) $summary['total'] : 0,
+                'created'   => isset($summary['created']) ? (int) $summary['created'] : 0,
+                'updated'   => isset($summary['updated']) ? (int) $summary['updated'] : 0,
+                'skipped'   => isset($summary['skipped']) ? (int) $summary['skipped'] : 0,
+                'processed' => isset($summary['processed']) ? (int) $summary['processed'] : 0,
+            );
+        }
+    }
+
+    $runs[$context] = $entry;
+    update_option(BOKUN_IMPORT_LAST_RUNS_OPTION, $runs, false);
+
+    return $entry;
+}
+
+/**
+ * Human friendly label for how an import was triggered.
+ *
+ * @param string $trigger 'manual' or 'scheduled'.
+ * @return string
+ */
+function bokun_get_import_trigger_label($trigger) {
+    if ('scheduled' === $trigger) {
+        return __('Scheduled daily auto-import', 'bokun-bookings-manager');
+    }
+
+    return __('Manual (Fetch bookings button)', 'bokun-bookings-manager');
+}
+
+/**
+ * Build the HTML note summarising, per API context, the last successful fetch
+ * (with relative time), how it was triggered, and any error from the last run.
+ *
+ * @return string HTML markup, or an empty string when there are no APIs.
+ */
+function bokun_render_fetch_status_note() {
+    $contexts = bokun_get_api_context_definitions();
+
+    if (empty($contexts)) {
+        return '';
+    }
+
+    $runs = bokun_get_import_last_runs();
+    // Stored run times use time() (UTC); compare against the same basis so the
+    // relative "x ago" is accurate. wp_date() handles timezone for display.
+    $now  = time();
+    $datetime_format = trim(get_option('date_format', 'M j, Y') . ' ' . get_option('time_format', 'g:i a'));
+
+    ob_start();
+    ?>
+    <div class="bokun-booking-dashboard__fetch-status" data-dashboard-fetch-status>
+        <h3 class="bokun-booking-dashboard__fetch-status-title"><?php esc_html_e('Last booking fetch per API', 'BOKUN_txt_domain'); ?></h3>
+        <ul class="bokun-booking-dashboard__fetch-status-list">
+            <?php foreach ($contexts as $context) :
+                $slug  = isset($context['slug']) ? bokun_normalize_import_context($context['slug']) : '';
+                $label = isset($context['label']) && '' !== $context['label'] ? $context['label'] : bokun_get_import_progress_label($slug);
+                $entry = isset($runs[$slug]) && is_array($runs[$slug]) ? $runs[$slug] : array();
+
+                $last_success_time    = isset($entry['last_success_time']) ? (int) $entry['last_success_time'] : 0;
+                $last_success_trigger = isset($entry['last_success_trigger']) ? $entry['last_success_trigger'] : '';
+                $last_run_time        = isset($entry['last_run_time']) ? (int) $entry['last_run_time'] : 0;
+                $last_run_status      = isset($entry['last_run_status']) ? $entry['last_run_status'] : '';
+                $last_run_trigger     = isset($entry['last_run_trigger']) ? $entry['last_run_trigger'] : '';
+                $last_run_message     = isset($entry['last_run_message']) ? $entry['last_run_message'] : '';
+                $has_error            = ('error' === $last_run_status);
+                $item_class = 'bokun-booking-dashboard__fetch-status-item' . ($has_error ? ' bokun-booking-dashboard__fetch-status-item--error' : '');
+            ?>
+                <li class="<?php echo esc_attr($item_class); ?>">
+                    <span class="bokun-booking-dashboard__fetch-status-api"><?php echo esc_html($label); ?>:</span>
+                    <?php if ($last_success_time > 0) :
+                        $relative = human_time_diff($last_success_time, $now);
+                        $absolute = wp_date($datetime_format, $last_success_time);
+                        /* translators: 1: relative time e.g. "2 hours", 2: absolute date/time. */
+                        $success_text = sprintf(__('Last successful fetch %1$s ago (%2$s)', 'BOKUN_txt_domain'), $relative, $absolute);
+                    ?>
+                        <span class="bokun-booking-dashboard__fetch-status-success"><?php echo esc_html($success_text); ?></span>
+                        <?php if ('' !== $last_success_trigger) : ?>
+                            <span class="bokun-booking-dashboard__fetch-status-trigger">&middot; <?php echo esc_html(bokun_get_import_trigger_label($last_success_trigger)); ?></span>
+                        <?php endif; ?>
+                    <?php else : ?>
+                        <span class="bokun-booking-dashboard__fetch-status-success bokun-booking-dashboard__fetch-status-success--none"><?php esc_html_e('No successful fetch recorded yet', 'BOKUN_txt_domain'); ?></span>
+                    <?php endif; ?>
+
+                    <?php if ($has_error) :
+                        $error_when = $last_run_time > 0 ? human_time_diff($last_run_time, $now) : '';
+                        $trigger_label = '' !== $last_run_trigger ? bokun_get_import_trigger_label($last_run_trigger) : '';
+                        if ('' !== $error_when && '' !== $trigger_label) {
+                            /* translators: 1: relative time e.g. "5 minutes", 2: trigger label. */
+                            $error_meta = sprintf(__('last run failed %1$s ago via %2$s', 'BOKUN_txt_domain'), $error_when, $trigger_label);
+                        } elseif ('' !== $error_when) {
+                            /* translators: %s: relative time. */
+                            $error_meta = sprintf(__('last run failed %s ago', 'BOKUN_txt_domain'), $error_when);
+                        } else {
+                            $error_meta = __('last run failed', 'BOKUN_txt_domain');
+                        }
+                    ?>
+                        <span class="bokun-booking-dashboard__fetch-status-error">
+                            &#9888; <?php echo esc_html(ucfirst($error_meta)); ?>
+                            <?php if ('' !== $last_run_message) : ?>
+                                <span class="bokun-booking-dashboard__fetch-status-error-detail">&mdash; <?php echo esc_html($last_run_message); ?></span>
+                            <?php endif; ?>
+                        </span>
+                    <?php elseif ($last_run_time > 0) : ?>
+                        <span class="bokun-booking-dashboard__fetch-status-ok">&middot; <?php esc_html_e('last run succeeded', 'BOKUN_txt_domain'); ?></span>
+                    <?php endif; ?>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+    <?php
+
+    return ob_get_clean();
+}
+
 function bokun_run_daily_import() {
     $configured_credentials = bokun_get_configured_api_credentials();
 
@@ -552,10 +718,25 @@ function bokun_run_daily_import() {
                 'message'   => $progress_message,
             ));
 
+            bokun_record_import_run(
+                $progress_context,
+                $is_error_message ? 'error' : 'success',
+                'scheduled',
+                $is_error_message ? $normalized_message : __('No bookings found.', 'bokun-bookings-manager'),
+                array()
+            );
+
             continue;
         }
 
-        bokun_save_bookings_as_posts($bookings, $progress_context);
+        $import_summary = bokun_save_bookings_as_posts($bookings, $progress_context);
+        bokun_record_import_run(
+            $progress_context,
+            'success',
+            'scheduled',
+            '',
+            is_array($import_summary) ? $import_summary : array()
+        );
     }
 }
 
