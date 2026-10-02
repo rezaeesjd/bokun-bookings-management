@@ -542,6 +542,29 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         color: #2271b1;
                     }
 
+                    .bokun-history-search-paste {
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        margin-left: 6px;
+                        padding: 4px 8px;
+                        border: 1px solid #dcdcde;
+                        border-radius: 3px;
+                        background: #f6f7f7;
+                        color: #50575e;
+                        cursor: pointer;
+                        font-size: 14px;
+                        line-height: 1;
+                        vertical-align: middle;
+                    }
+
+                    .bokun-history-search-paste:hover,
+                    .bokun-history-search-paste:focus {
+                        border-color: #2271b1;
+                        color: #2271b1;
+                        outline: none;
+                    }
+
                     .bokun-history-filter-options {
                         max-height: 220px;
                         overflow: auto;
