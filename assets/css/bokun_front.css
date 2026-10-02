@@ -207,11 +207,20 @@
 
 .bokun-booking-dashboard__search-field {
   position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.bokun-booking-dashboard__search-control {
+  position: relative;
+  flex: 1 1 auto;
+  display: block;
 }
 
 .bokun-booking-dashboard__search-input {
   width: 100%;
-  padding: 0.55rem 4.75rem 0.55rem 0.75rem;
+  padding: 0.55rem 2.5rem 0.55rem 0.75rem;
   border-radius: 0.5rem;
   border: 1px solid #cbd5e1;
   font-size: 0.95rem;
@@ -242,7 +251,7 @@
 .bokun-booking-dashboard__search-clear {
   position: absolute;
   top: 50%;
-  right: 2.7rem;
+  right: 0.6rem;
   transform: translateY(-50%);
   border: none;
   background: transparent;
@@ -268,25 +277,26 @@
 }
 
 .bokun-booking-dashboard__search-paste {
-  position: absolute;
-  top: 50%;
-  right: 0.6rem;
-  transform: translateY(-50%);
-  border: none;
-  background: transparent;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
   color: #64748b;
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
-  padding: 0.2rem;
-  border-radius: 999px;
-  transition: color 0.2s ease, background-color 0.2s ease;
+  border-radius: 0.5rem;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .bokun-booking-dashboard__search-paste:hover,
 .bokun-booking-dashboard__search-paste:focus {
   color: #1e293b;
   background-color: rgba(148, 163, 184, 0.16);
+  border-color: #2563eb;
   outline: none;
 }
 

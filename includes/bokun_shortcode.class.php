@@ -1541,23 +1541,25 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         ?>
                         <label for="<?php echo esc_attr($search_input_id); ?>"><?php echo esc_html($search_label); ?></label>
                         <div class="bokun-booking-dashboard__search-field">
-                            <input
-                                type="search"
-                                id="<?php echo esc_attr($search_input_id); ?>"
-                                class="bokun-booking-dashboard__search-input"
-                                placeholder="<?php echo esc_attr($search_label); ?>"
-                                data-dashboard-search
-                            />
-                            <a
-                                href="#"
-                                class="bokun-booking-dashboard__search-clear"
-                                data-dashboard-search-clear
-                                role="button"
-                                aria-label="<?php esc_attr_e('Clear search', 'BOKUN_txt_domain'); ?>"
-                                hidden
-                            >
-                                &times;
-                            </a>
+                            <span class="bokun-booking-dashboard__search-control">
+                                <input
+                                    type="search"
+                                    id="<?php echo esc_attr($search_input_id); ?>"
+                                    class="bokun-booking-dashboard__search-input"
+                                    placeholder="<?php echo esc_attr($search_label); ?>"
+                                    data-dashboard-search
+                                />
+                                <a
+                                    href="#"
+                                    class="bokun-booking-dashboard__search-clear"
+                                    data-dashboard-search-clear
+                                    role="button"
+                                    aria-label="<?php esc_attr_e('Clear search', 'BOKUN_txt_domain'); ?>"
+                                    hidden
+                                >
+                                    &times;
+                                </a>
+                            </span>
                             <button
                                 type="button"
                                 class="bokun-booking-dashboard__search-paste"
