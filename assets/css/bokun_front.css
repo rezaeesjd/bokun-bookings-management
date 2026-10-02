@@ -950,6 +950,68 @@ body.bokun-dashboard-modal-open {
   margin-left: auto;
 }
 
+.bokun-booking-dashboard__fetch-status {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: #f8fafc;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.bokun-booking-dashboard__fetch-status-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #64748b;
+}
+
+.bokun-booking-dashboard__fetch-status-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.bokun-booking-dashboard__fetch-status-item {
+  line-height: 1.5;
+}
+
+.bokun-booking-dashboard__fetch-status-api {
+  font-weight: 600;
+  color: #1e293b;
+  margin-right: 0.25rem;
+}
+
+.bokun-booking-dashboard__fetch-status-trigger,
+.bokun-booking-dashboard__fetch-status-ok {
+  color: #64748b;
+}
+
+.bokun-booking-dashboard__fetch-status-success--none {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.bokun-booking-dashboard__fetch-status-error {
+  display: inline;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.bokun-booking-dashboard__fetch-status-error-detail {
+  font-weight: 400;
+}
+
+.bokun-booking-dashboard__fetch-status-item--error {
+  color: #7f1d1d;
+}
+
 .bokun-booking-dashboard__history-launch {
   display: inline-flex;
   align-items: center;
