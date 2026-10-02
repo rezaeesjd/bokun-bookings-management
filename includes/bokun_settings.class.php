@@ -122,8 +122,10 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
                     'skipped'   => isset($import_summary['skipped']) ? intval($import_summary['skipped']) : 0,
                 );
 
+                $save_status  = (isset($import_summary['status']) && 'error' === $import_summary['status']) ? 'error' : 'success';
+                $save_message = !empty($import_summary['message']) ? $import_summary['message'] : '';
                 if (function_exists('bokun_record_import_run')) {
-                    bokun_record_import_run($progress_context, 'success', 'manual', '', $normalized_summary);
+                    bokun_record_import_run($progress_context, $save_status, 'manual', $save_message, $normalized_summary);
                 }
 
                 wp_send_json_success(

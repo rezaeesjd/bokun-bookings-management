@@ -534,6 +534,32 @@ function bokun_get_import_last_runs() {
 }
 
 /**
+ * Build a stable fingerprint for the API credentials behind a context.
+ *
+ * Contexts are positional (api_1, api_2, …), so after credentials are
+ * removed, replaced, or renumbered a slug can point at a different account.
+ * Storing a fingerprint of the access key lets the dashboard detect that and
+ * avoid showing one account's history under another's slug.
+ *
+ * @param string $context The API context slug.
+ * @return string A short fingerprint, or '' when no credentials are available.
+ */
+function bokun_get_import_credential_fingerprint($context) {
+    if (!function_exists('bokun_get_api_credentials_for_context')) {
+        return '';
+    }
+
+    $credentials = bokun_get_api_credentials_for_context($context);
+    $api_key     = is_array($credentials) && isset($credentials[0]) ? (string) $credentials[0] : '';
+
+    if ('' === $api_key) {
+        return '';
+    }
+
+    return substr(md5($api_key), 0, 16);
+}
+
+/**
  * Record metadata about an import run for a single API context so the
  * dashboard can show when each API was last fetched, how it was triggered,
  * and whether the most recent run errored.
@@ -560,6 +586,7 @@ function bokun_record_import_run($context, $status, $trigger, $message = '', $su
     $entry['last_run_trigger'] = $trigger;
     $entry['last_run_message'] = is_string($message) ? $message : '';
     $entry['label']            = bokun_get_import_progress_label($context);
+    $entry['credential_id']    = bokun_get_import_credential_fingerprint($context);
 
     if ('success' === $status) {
         $entry['last_success_time']    = $now;
@@ -624,6 +651,14 @@ function bokun_render_fetch_status_note() {
                 $slug  = isset($context['slug']) ? bokun_normalize_import_context($context['slug']) : '';
                 $label = isset($context['label']) && '' !== $context['label'] ? $context['label'] : bokun_get_import_progress_label($slug);
                 $entry = isset($runs[$slug]) && is_array($runs[$slug]) ? $runs[$slug] : array();
+
+                // Discard history that belongs to different credentials now
+                // sitting on this positional slug (removed/replaced/renumbered API).
+                $current_fingerprint = bokun_get_import_credential_fingerprint($slug);
+                $stored_fingerprint  = isset($entry['credential_id']) ? (string) $entry['credential_id'] : '';
+                if ('' !== $current_fingerprint && '' !== $stored_fingerprint && $current_fingerprint !== $stored_fingerprint) {
+                    $entry = array();
+                }
 
                 $last_success_time    = isset($entry['last_success_time']) ? (int) $entry['last_success_time'] : 0;
                 $last_success_trigger = isset($entry['last_success_trigger']) ? $entry['last_success_trigger'] : '';
@@ -730,11 +765,14 @@ function bokun_run_daily_import() {
         }
 
         $import_summary = bokun_save_bookings_as_posts($bookings, $progress_context);
+        $save_status    = (is_array($import_summary) && isset($import_summary['status']) && 'error' === $import_summary['status']) ? 'error' : 'success';
+        $save_message   = (is_array($import_summary) && !empty($import_summary['message'])) ? $import_summary['message'] : '';
+
         bokun_record_import_run(
             $progress_context,
-            'success',
+            $save_status,
             'scheduled',
-            '',
+            $save_message,
             is_array($import_summary) ? $import_summary : array()
         );
     }
@@ -787,6 +825,8 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
         'created'   => 0,
         'updated'   => 0,
         'skipped'   => 0,
+        'status'    => 'success',
+        'message'   => '',
     );
 
     $context = bokun_normalize_import_context($context);
@@ -807,6 +847,9 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
         ));
 
         error_log($error_message);
+
+        $stats['status']  = 'error';
+        $stats['message'] = $error_message;
 
         return $stats;
     }

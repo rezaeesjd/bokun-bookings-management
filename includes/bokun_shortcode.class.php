@@ -682,7 +682,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             );
 
             if (!$query->have_posts()) {
-                return sprintf(
+                $empty_message = sprintf(
                     '<div class="bokun-booking-dashboard__empty">%s</div>',
                     esc_html(
                         sprintf(
@@ -692,6 +692,14 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         )
                     )
                 );
+
+                // Still surface the per-API fetch status so the note stays
+                // visible even when there are no bookings to display.
+                if (function_exists('bokun_render_fetch_status_note')) {
+                    $empty_message .= bokun_render_fetch_status_note();
+                }
+
+                return $empty_message;
             }
 
             $color_priority_map = [
