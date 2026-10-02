@@ -199,6 +199,7 @@
                             var $allCheckbox = $filter.find('input[type="checkbox"][data-filter-all]');
                             var $textInput = $filter.find('[data-filter-text]');
                             var $clearText = $filter.find('[data-filter-clear-text]');
+                            var $pasteText = $filter.find('[data-filter-paste-text]');
 
                             var syncAllCheckbox = function () {
                                 if (!$allCheckbox.length) {
@@ -260,6 +261,27 @@
                                     $textInput.val('');
                                     updateTextFilter();
                                     $textInput.trigger('focus');
+                                });
+                            }
+
+                            if ($pasteText.length && $textInput.length) {
+                                $pasteText.on('click', function (event) {
+                                    event.preventDefault();
+
+                                    var applyPastedValue = function (text) {
+                                        $textInput.val((text || '').replace(/[\r\n]+/g, ' ').trim());
+                                        updateTextFilter();
+                                        $textInput.trigger('focus');
+                                    };
+
+                                    if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+                                        navigator.clipboard.readText().then(applyPastedValue).catch(function () {
+                                            // Clipboard read blocked; focus so the user can paste manually.
+                                            $textInput.trigger('focus');
+                                        });
+                                    } else {
+                                        $textInput.trigger('focus');
+                                    }
                                 });
                             }
 

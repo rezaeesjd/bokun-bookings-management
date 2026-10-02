@@ -526,7 +526,10 @@ jQuery(function ($) {
                         message = 'Import complete.';
                 }
 
+                // alert() blocks until the user clicks "OK"; reload once dismissed
+                // so the freshly imported bookings are reflected on the page.
                 alert(message);
+                window.location.reload();
         }
 
         function setImportProgress(step, options) {

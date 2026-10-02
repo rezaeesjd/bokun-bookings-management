@@ -225,7 +225,7 @@ if (!empty($logs)) {
                 width: 100%;
                 border: 1px solid #dcdcde;
                 border-radius: 3px;
-                padding: 6px 30px 6px 8px;
+                padding: 6px 52px 6px 8px;
                 font-size: 13px;
             }
 
@@ -238,7 +238,7 @@ if (!empty($logs)) {
             .bokun-history-filter-clear-text {
                 position: absolute;
                 top: 50%;
-                right: 6px;
+                right: 28px;
                 transform: translateY(-50%);
                 border: none;
                 background: transparent;
@@ -252,6 +252,25 @@ if (!empty($logs)) {
             .bokun-history-filter-clear-text:hover,
             .bokun-history-filter-clear-text:focus {
                 color: #d63638;
+            }
+
+            .bokun-history-filter-paste-text {
+                position: absolute;
+                top: 50%;
+                right: 6px;
+                transform: translateY(-50%);
+                border: none;
+                background: transparent;
+                color: #50575e;
+                cursor: pointer;
+                padding: 0;
+                font-size: 13px;
+                line-height: 1;
+            }
+
+            .bokun-history-filter-paste-text:hover,
+            .bokun-history-filter-paste-text:focus {
+                color: #2271b1;
             }
 
             .bokun-history-filter-options {
@@ -312,6 +331,9 @@ if (!empty($logs)) {
                                 <input type="text" id="<?php echo esc_attr($search_id); ?>" class="bokun-history-filter-text" data-filter-text placeholder="<?php echo esc_attr($search_label); ?>" />
                                 <button type="button" class="bokun-history-filter-clear-text" data-filter-clear-text aria-label="<?php esc_attr_e('Clear search', 'BOKUN_txt_domain'); ?>">
                                     &times;
+                                </button>
+                                <button type="button" class="bokun-history-filter-paste-text" data-filter-paste-text aria-label="<?php esc_attr_e('Paste from clipboard', 'BOKUN_txt_domain'); ?>" title="<?php esc_attr_e('Paste from clipboard', 'BOKUN_txt_domain'); ?>">
+                                    <span aria-hidden="true">&#128203;</span>
                                 </button>
                             </div>
                         </div>
@@ -447,6 +469,7 @@ if (!empty($logs)) {
                     const allCheckbox = filter.querySelector('input[type="checkbox"][data-filter-all]');
                     const textInput = filter.querySelector('[data-filter-text]');
                     const clearTextButton = filter.querySelector('[data-filter-clear-text]');
+                    const pasteTextButton = filter.querySelector('[data-filter-paste-text]');
 
                     const syncAllCheckbox = function () {
                         if (!allCheckbox) {
@@ -509,6 +532,27 @@ if (!empty($logs)) {
                             textInput.value = '';
                             updateTextFilter();
                             textInput.focus();
+                        });
+                    }
+
+                    if (pasteTextButton && textInput) {
+                        pasteTextButton.addEventListener('click', function (event) {
+                            event.preventDefault();
+
+                            const applyPastedValue = function (text) {
+                                textInput.value = (text || '').replace(/[\r\n]+/g, ' ').trim();
+                                updateTextFilter();
+                                textInput.focus();
+                            };
+
+                            if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+                                navigator.clipboard.readText().then(applyPastedValue).catch(function () {
+                                    // Clipboard read blocked; focus so the user can paste manually.
+                                    textInput.focus();
+                                });
+                            } else {
+                                textInput.focus();
+                            }
                         });
                     }
 

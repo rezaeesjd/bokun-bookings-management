@@ -386,6 +386,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                         <button type="button" class="bokun-history-filter-clear-text" data-filter-clear-text aria-label="<?php esc_attr_e('Clear search', 'BOKUN_txt_domain'); ?>">
                                             &times;
                                         </button>
+                                        <button type="button" class="bokun-history-filter-paste-text" data-filter-paste-text aria-label="<?php esc_attr_e('Paste from clipboard', 'BOKUN_txt_domain'); ?>" title="<?php esc_attr_e('Paste from clipboard', 'BOKUN_txt_domain'); ?>">
+                                            <span aria-hidden="true">&#128203;</span>
+                                        </button>
                                     </div>
                                 </div>
                                 <div class="bokun-history-filter-options">
@@ -491,7 +494,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         width: 100%;
                         border: 1px solid #dcdcde;
                         border-radius: 3px;
-                        padding: 6px 30px 6px 8px;
+                        padding: 6px 52px 6px 8px;
                         font-size: 13px;
                     }
 
@@ -504,7 +507,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     .bokun-history-filter-clear-text {
                         position: absolute;
                         top: 50%;
-                        right: 6px;
+                        right: 28px;
                         transform: translateY(-50%);
                         border: none;
                         background: transparent;
@@ -518,6 +521,25 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     .bokun-history-filter-clear-text:hover,
                     .bokun-history-filter-clear-text:focus {
                         color: #d63638;
+                    }
+
+                    .bokun-history-filter-paste-text {
+                        position: absolute;
+                        top: 50%;
+                        right: 6px;
+                        transform: translateY(-50%);
+                        border: none;
+                        background: transparent;
+                        color: #50575e;
+                        cursor: pointer;
+                        padding: 0;
+                        font-size: 13px;
+                        line-height: 1;
+                    }
+
+                    .bokun-history-filter-paste-text:hover,
+                    .bokun-history-filter-paste-text:focus {
+                        color: #2271b1;
                     }
 
                     .bokun-history-filter-options {
@@ -1513,6 +1535,15 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             >
                                 &times;
                             </a>
+                            <button
+                                type="button"
+                                class="bokun-booking-dashboard__search-paste"
+                                data-dashboard-search-paste
+                                aria-label="<?php esc_attr_e('Paste from clipboard', 'BOKUN_txt_domain'); ?>"
+                                title="<?php esc_attr_e('Paste from clipboard', 'BOKUN_txt_domain'); ?>"
+                            >
+                                <span aria-hidden="true">&#128203;</span>
+                            </button>
                         </div>
                     </div>
 
@@ -2337,6 +2368,29 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 applyFilters();
                             }
                             searchInput.focus();
+                        });
+                    }
+
+                    var searchPasteButton = dashboard.querySelector('[data-dashboard-search-paste]');
+                    if (searchPasteButton && searchInput) {
+                        searchPasteButton.addEventListener('click', function (event) {
+                            event.preventDefault();
+
+                            var applyPastedValue = function (text) {
+                                searchInput.value = (text || '').replace(/[\r\n]+/g, ' ').trim();
+                                applyFilters();
+                                searchInput.focus();
+                            };
+
+                            if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+                                navigator.clipboard.readText().then(applyPastedValue).catch(function () {
+                                    // Clipboard read blocked (permissions/insecure context);
+                                    // focus the field so the user can paste manually.
+                                    searchInput.focus();
+                                });
+                            } else {
+                                searchInput.focus();
+                            }
                         });
                     }
 
