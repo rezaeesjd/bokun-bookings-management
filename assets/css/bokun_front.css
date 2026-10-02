@@ -224,6 +224,21 @@
   outline: none;
 }
 
+/* Hide the browser's native "search" clear control so it doesn't overlap the
+   custom clear (×) and paste buttons. */
+.bokun-booking-dashboard__search-input::-webkit-search-cancel-button,
+.bokun-booking-dashboard__search-input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+.bokun-booking-dashboard__search-input::-ms-clear {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .bokun-booking-dashboard__search-clear {
   position: absolute;
   top: 50%;

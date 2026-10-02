@@ -88,6 +88,49 @@
                     var api = this.api();
                     var tableNode = $table.get(0);
                     var tableId = $table.attr('id') || '';
+
+                    // Add a "Paste from clipboard" button next to the global
+                    // DataTables search box so a value can be pasted with one click.
+                    (function addGlobalSearchPaste() {
+                        var $container = $(api.table().container());
+                        var $searchInput = $container
+                            .find('.dataTables_filter input, .dt-search input, input[type="search"]')
+                            .first();
+
+                        if (!$searchInput.length || $searchInput.data('bokunPasteAdded')) {
+                            return;
+                        }
+
+                        $searchInput.data('bokunPasteAdded', true);
+
+                        var $pasteButton = $(
+                            '<button type="button" class="bokun-history-search-paste" ' +
+                            'aria-label="Paste from clipboard" title="Paste from clipboard">' +
+                            '<span aria-hidden="true">&#128203;</span></button>'
+                        );
+
+                        $searchInput.after($pasteButton);
+
+                        $pasteButton.on('click', function (event) {
+                            event.preventDefault();
+
+                            var applyPastedValue = function (text) {
+                                var value = (text || '').replace(/[\r\n]+/g, ' ').trim();
+                                $searchInput.val(value);
+                                api.search(value).draw();
+                                $searchInput.trigger('focus');
+                            };
+
+                            if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+                                navigator.clipboard.readText().then(applyPastedValue).catch(function () {
+                                    // Clipboard read blocked; focus so the user can paste manually.
+                                    $searchInput.trigger('focus');
+                                });
+                            } else {
+                                $searchInput.trigger('focus');
+                            }
+                        });
+                    })();
                     var checkboxFilters = {};
                     var textFilters = {};
                     var filterColumns = {};
