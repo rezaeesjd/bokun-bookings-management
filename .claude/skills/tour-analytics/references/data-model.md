@@ -52,7 +52,7 @@ Built by `bokun_partners_products_seed()` from
 
 | Column | Source |
 |---|---|
-| `product_id` | catalog ID (primary key); matches booking `product_id` |
+| `product_id` | catalog ID (primary key) = the Bokun **partner page id**; joins to booking `partner_page_id` |
 | `title` | catalog title |
 | `net_price` | catalog net price (per person, booking currency assumed) |
 | `commission` | catalog commission ratio (e.g. 0.25) |
@@ -66,7 +66,8 @@ client-side.
 
 ## Client-side derived fields (in `render_analytics_panel()` JS)
 
-Computed per row after joining the partners map; not stored:
+Computed per row after joining the partners map by `partner_page_id`
+(`PARTNERS[String(r.partner_page_id)]`); not stored:
 
 - `net_price`, `commission`, `departure_city` — from the partners map.
 - `_net_cost` = `net_price × participants`.

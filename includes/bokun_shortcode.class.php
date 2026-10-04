@@ -3297,29 +3297,24 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 // and net revenue (gross amount minus net price times participants).
                 function hasNum( v ) { return v !== null && v !== undefined && v !== '' && ! isNaN( parseFloat( v ) ); }
                 function isEmpty( v ) { return v === null || v === undefined || v === ''; }
-                // Index the catalog by normalized title as a fallback key, since
-                // booking product ids (e.g. Viator-channel) may not equal the
-                // catalog id and the catalog titles differ only in case/spacing.
-                function normTitle( v ) { return esc( v ).trim().toLowerCase().replace( /\s+/g, ' ' ); }
-                var PARTNERS_BY_TITLE = {};
-                Object.keys( PARTNERS ).forEach( function ( id ) { var e = PARTNERS[ id ]; if ( e && e.title ) { var k = normTitle( e.title ); if ( ! PARTNERS_BY_TITLE[ k ] ) { PARTNERS_BY_TITLE[ k ] = e; } } } );
-                // Join a booking to its catalog row: try the Bokun product id,
-                // then the external (channel) product id, then an exact title.
+                // The partners catalog is keyed by the Bokun partner page id
+                // (the "ID" column of the partners spreadsheet). A booking's
+                // partner_page_id comes from its product tag's partnerpageid
+                // term meta and shares that numbering, so it is the only
+                // reliable join key: product ids and titles differ between the
+                // booking channel (e.g. Viator) and the catalog.
                 function partnerFor( r ) {
-                    return PARTNERS[ String( r.product_id ) ]
-                        || ( ! isEmpty( r.product_external_id ) ? PARTNERS[ String( r.product_external_id ) ] : null )
-                        || PARTNERS_BY_TITLE[ normTitle( r.product_title ) ]
-                        || {};
+                    return ( ! isEmpty( r.partner_page_id ) ? PARTNERS[ String( r.partner_page_id ) ] : null ) || {};
                 }
                 ROWS.forEach( function ( r ) {
                     var p = partnerFor( r );
                     r.net_price = ( p.net_price === undefined ) ? null : p.net_price;
                     r.commission = ( p.commission === undefined ) ? null : p.commission;
-                    // Fall back to the catalog for city and partner page id so a
-                    // partners-products rebuild is reflected without a full
-                    // analytics rebuild; the source row wins when it has a value.
+                    // Pull departure city from the catalog (a catalog-only
+                    // field) so a partners-products rebuild is reflected
+                    // without a full analytics rebuild; the source row wins
+                    // when it already carries a value.
                     if ( isEmpty( r.departure_city ) && p.departure_city ) { r.departure_city = p.departure_city; }
-                    if ( isEmpty( r.partner_page_id ) && p.partner_page_id ) { r.partner_page_id = p.partner_page_id; }
                     var pax = parts( r );
                     r._net_cost = ( r.net_price !== null ) ? ( r.net_price * pax ) : null;
                     // A numeric zero gross (complimentary/fully-discounted) is a
