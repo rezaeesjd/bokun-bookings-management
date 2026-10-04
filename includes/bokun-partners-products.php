@@ -81,8 +81,13 @@ function bokun_partners_products_maybe_upgrade() {
     }
 
     bokun_partners_products_install_table();
+
+    // Seed the catalog on this first post-upgrade admin request. `init` has
+    // already registered the product_tags taxonomy by now, so partner page
+    // ids resolve correctly (unlike during the activation hook).
+    bokun_partners_products_seed();
 }
-add_action( 'admin_init', 'bokun_partners_products_maybe_upgrade', 5 );
+add_action( 'admin_init', 'bokun_partners_products_maybe_upgrade', 20 );
 
 /**
  * Resolve the `partnerpageid` term meta for a Bokun product id.

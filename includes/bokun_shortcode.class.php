@@ -3014,7 +3014,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'channels'     => __( 'Channels', 'BOKUN_txt_domain' ),
                 'topProduct'   => __( 'Top product', 'BOKUN_txt_domain' ),
                 'topChannel'   => __( 'Top channel', 'BOKUN_txt_domain' ),
-                'fullRate'     => __( 'Full-payment rate', 'BOKUN_txt_domain' ),
+                'fullRate'     => __( 'Full-result rate', 'BOKUN_txt_domain' ),
                 'ofTotal'      => __( 'of total', 'BOKUN_txt_domain' ),
                 'trend'        => __( 'Trend over time', 'BOKUN_txt_domain' ),
                 'topProducts'  => __( 'Product performance', 'BOKUN_txt_domain' ),
@@ -3229,14 +3229,23 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 var metric = 'bookings';
                 var started = false;
+                // Revenue is aggregated in a single currency (the most common in
+                // the filtered set) so product/channel/trend sums never add, say,
+                // EUR and USD as interchangeable. Set in recompute().
+                var revCur = '';
+                var revMulti = false;
 
                 function num( v ) { var n = parseFloat( v ); return isNaN( n ) ? 0 : n; }
                 function parts( r ) { return num( r.adult_participants ) + num( r.child_participants ) + num( r.infant_participants ); }
                 function esc( v ) { return ( v === null || v === undefined ) ? '' : String( v ); }
-                function escHtml( v ) { return esc( v ).replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' ); }
+                function escHtml( v ) { return esc( v ).replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' ).replace( /"/g, '&quot;' ).replace( /'/g, '&#39;' ); }
                 function fmtInt( n ) { return Number( Math.round( n ) ).toLocaleString(); }
                 function fmtMoney( n ) { return Number( n ).toLocaleString( undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 } ); }
-                function metricVal( r ) { return metric === 'participants' ? parts( r ) : ( metric === 'revenue' ? num( r.price_amount ) : 1 ); }
+                function metricVal( r ) {
+                    if ( metric === 'participants' ) { return parts( r ); }
+                    if ( metric === 'revenue' ) { return ( esc( r.currency ) === revCur ) ? num( r.price_amount ) : 0; }
+                    return 1;
+                }
                 function metricLabel() { return metric === 'participants' ? L.participants : ( metric === 'revenue' ? L.revenue : L.bookings ); }
                 function fmtMetric( n ) { return metric === 'revenue' ? fmtMoney( n ) : fmtInt( n ); }
                 function dayStr( v ) { return esc( v ).slice( 0, 10 ); }
@@ -3341,9 +3350,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     if ( chans.length ) {
                         cards.push( { label: L.topChannel, value: chans[ 0 ].label, sub: fmtMetric( chans[ 0 ].metric ) + ' ' + metricLabel().toLowerCase() } );
                     }
-                    var totalRev = data.reduce( function ( s, r ) { return s + num( r.price_amount ); }, 0 );
+                    var revRows = data.filter( function ( r ) { return esc( r.currency ) === pc.cur && num( r.price_amount ); } );
+                    var totalRev = revRows.reduce( function ( s, r ) { return s + num( r.price_amount ); }, 0 );
                     if ( totalRev > 0 ) {
-                        cards.push( { label: L.avgValue, value: fmtMoney( data.length ? totalRev / data.length : 0 ) + ( pc.cur ? ' ' + pc.cur : '' ), sub: pc.multi ? L.mixedCur : '' } );
+                        cards.push( { label: L.avgValue, value: fmtMoney( revRows.length ? totalRev / revRows.length : 0 ) + ( pc.cur ? ' ' + pc.cur : '' ), sub: pc.multi ? L.mixedCur : '' } );
                     }
                     if ( lead !== null ) { cards.push( { label: L.avgLead, value: fmtInt( lead ) + ' ' + L.days } ); }
                     if ( resulted ) { cards.push( { label: L.fullRate, value: Math.round( ( full / resulted ) * 100 ) + '%', sub: fmtInt( full ) + ' / ' + fmtInt( resulted ) } ); }
@@ -3394,7 +3404,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var buckets = {};
                     data.forEach( function ( r ) { var c = dayStr( r.created_datetime ); if ( ! c ) { return; } var wk = weekKey( c ); if ( ! wk ) { return; } buckets[ wk ] = ( buckets[ wk ] || 0 ) + metricVal( r ); } );
                     var keys = Object.keys( buckets ).sort();
-                    if ( keys.length < 2 ) { el.innerHTML = '<p class="bokun-andash__insight-sub">' + escHtml( L.noData ) + '</p>'; return; }
+                    if ( keys.length === 0 ) { el.innerHTML = '<p class="bokun-andash__insight-sub">' + escHtml( L.noData ) + '</p>'; return; }
+                    // A single bucket still draws (one labelled point); only a
+                    // truly empty set shows the "no data" message.
                     var vals = keys.map( function ( k ) { return buckets[ k ]; } );
                     var maxV = Math.max.apply( null, vals ), W = 800, H = 240, padL = 44, padB = 26, padT = 12, padR = 12;
                     var innerW = W - padL - padR, innerH = H - padT - padB;
@@ -3449,7 +3461,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     list.sort( function ( a, b ) { return b.count - a.count; } );
                     var cols = [ 'var(--an-c1)', 'var(--an-c2)', 'var(--an-c3)', 'var(--an-c4)', 'var(--an-c5)', 'var(--an-c6)' ];
                     var max = list.reduce( function ( m, g ) { return Math.max( m, g.count ); }, 0 );
-                    var items = list.map( function ( g, idx ) { g._c = cols[ idx % cols.length ]; return g; } );
+                    // Payment mix is always count-based; align the bar metric to the
+                    // count so widths (g.metric / max) match the displayed values.
+                    var items = list.map( function ( g, idx ) { g._c = cols[ idx % cols.length ]; g.metric = g.count; return g; } );
                     root.querySelector( '[data-paymentmix]' ).innerHTML = barList( items, max, function ( g ) { return g._c; }, function ( g ) { return fmtInt( g.count ); } );
                 }
 
@@ -3495,14 +3509,22 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
 
                 var lastFiltered = ROWS;
+                function metricLabelFull() {
+                    var lbl = metricLabel();
+                    if ( metric === 'revenue' && revCur ) { lbl += ' (' + revCur + ( revMulti ? ', ' + L.mixedCur : '' ) + ')'; }
+                    return lbl;
+                }
                 function renderMetricTitles() {
-                    root.querySelector( '[data-trend-title]' ).textContent = L.trend + ' — ' + metricLabel();
-                    root.querySelector( '[data-topproducts-title]' ).textContent = L.topProducts + ' — ' + metricLabel();
-                    root.querySelector( '[data-topchannels-title]' ).textContent = L.topChannels + ' — ' + metricLabel();
+                    root.querySelector( '[data-trend-title]' ).textContent = L.trend + ' — ' + metricLabelFull();
+                    root.querySelector( '[data-topproducts-title]' ).textContent = L.topProducts + ' — ' + metricLabelFull();
+                    root.querySelector( '[data-topchannels-title]' ).textContent = L.topChannels + ' — ' + metricLabelFull();
                 }
                 function recompute() {
                     var f = currentFilters();
                     lastFiltered = ROWS.filter( function ( r ) { return matches( r, f ); } );
+                    var pc = primaryCurrency( lastFiltered );
+                    revCur = pc.cur;
+                    revMulti = pc.multi;
                     renderMetricTitles();
                     renderInsights( lastFiltered );
                     renderKpis( lastFiltered );

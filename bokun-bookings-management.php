@@ -305,11 +305,11 @@ class BokunBookingManagement {
         }
 
         if ( function_exists( 'bokun_partners_products_install_table' ) ) {
+            // Only create the table here. The catalog seed (and partner-id
+            // resolution) runs on the first admin request via
+            // bokun_partners_products_maybe_upgrade(), after `init` has
+            // registered the product_tags taxonomy the resolver needs.
             bokun_partners_products_install_table();
-
-            if ( function_exists( 'bokun_partners_products_seed' ) ) {
-                bokun_partners_products_seed();
-            }
         }
 
         bokun_schedule_daily_import();
