@@ -104,6 +104,7 @@ $bokun_version = '1.0.0';
 class BokunBookingManagement {
     var $bokun_settings = '';
     var $bokun_booking_history = 'bokun_booking_history';
+    var $bokun_analytics = 'bokun-analytics-source';
 
 	function __construct() {
         global $wpdb;
@@ -299,6 +300,10 @@ class BokunBookingManagement {
 
         dbDelta($sql);
 
+        if ( function_exists( 'bokun_analytics_install_table' ) ) {
+            bokun_analytics_install_table();
+        }
+
         bokun_schedule_daily_import();
 
         }
@@ -352,6 +357,11 @@ class BokunBookingManagement {
                 'cap'  => 'manage_options',
                 'slug' => $this->bokun_booking_history,
             ),
+            array(
+                'name' => __('Analytics Data', 'BOKUN_txt_domain'),
+                'cap'  => 'manage_options',
+                'slug' => $this->bokun_analytics,
+            ),
         );
                 return $bokun_admin_menu;
         }
@@ -391,6 +401,7 @@ class BokunBookingManagement {
                         $this->bokun_settings,
                         'bokun-github-sync',
                         $this->bokun_booking_history,
+                        $this->bokun_analytics,
                 );
                 return $bokun_pages_slug;
         }
@@ -534,6 +545,11 @@ class BokunBookingManagement {
                                             $bokun_github_sync->render_settings_page();
                                         }
                                         break;
+                                case $this->bokun_analytics:
+                                        if (file_exists(BOKUN_INCLUDES_DIR . 'bokun_analytics_source.view.php')) {
+                                            include_once BOKUN_INCLUDES_DIR . 'bokun_analytics_source.view.php';
+                                        }
+                                        break;
                         }
                 }
         }
@@ -582,6 +598,17 @@ if( $rb->bokun_is_activate() && file_exists( BOKUN_INCLUDES_DIR . "bokun-booking
 }
 if( $rb->bokun_is_activate() && file_exists( BOKUN_INCLUDES_DIR . "bokun_shortcode.class.php" ) ) {
     include_once( BOKUN_INCLUDES_DIR . "bokun_shortcode.class.php" );
+}
+
+/**
+ * Analytics source data layer.
+ *
+ * Loaded unconditionally so the source table can be created during activation
+ * (before the "activated" flag is set) and so its admin/AJAX hooks register on
+ * every request.
+ */
+if ( file_exists( BOKUN_INCLUDES_DIR . "bokun-analytics.php" ) ) {
+    include_once( BOKUN_INCLUDES_DIR . "bokun-analytics.php" );
 }
 
 /**

@@ -1006,6 +1006,11 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
             update_post_meta($post_id, 'inclusions_clean', $inclusions_clean);
         }
 
+        // Keep the analytics source table in sync with this booking.
+        if (function_exists('bokun_analytics_sync_booking')) {
+            bokun_analytics_sync_booking($post_id);
+        }
+
         bokun_set_import_progress_state($context, array(
             'status'    => 'running',
             'total'     => $stats['total'],
