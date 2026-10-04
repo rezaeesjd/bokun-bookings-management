@@ -357,9 +357,19 @@ function bokun_analytics_build_row( $post_id ) {
 
     $participants = bokun_analytics_count_participants( $post_id );
 
-    // Travel datetime is stored as the post date (GMT) at import time.
-    $travel_gmt      = get_post_time( 'Y-m-d H:i:s', true, $post_id );
-    $travel_datetime = $travel_gmt ? $travel_gmt : null;
+    // Travel datetime: derive from the raw Bokun start value, which carries an
+    // absolute instant. The importer stores `post_date` as the UTC wall-clock
+    // of that instant but then derives `post_date_gmt` with get_gmt_from_date(),
+    // which re-interprets it as site-local time — double-shifting the value on
+    // non-UTC sites. So the raw meta is authoritative; get_post_time() is only a
+    // fallback for legacy rows saved before the raw meta existed.
+    $travel_raw      = bokun_analytics_meta( $post_id, array( '_original_start_datetime', '_original_start_date' ) );
+    $travel_datetime = bokun_analytics_raw_to_gmt( $travel_raw );
+
+    if ( null === $travel_datetime ) {
+        $travel_gmt      = get_post_time( 'Y-m-d H:i:s', true, $post_id );
+        $travel_datetime = $travel_gmt ? $travel_gmt : null;
+    }
 
     $row = array(
         'post_id'                   => $post_id,
@@ -521,6 +531,34 @@ function bokun_analytics_rebuild() {
 
     return $stats;
 }
+
+/**
+ * Delete every row whose creation date has aged out of the retention window.
+ *
+ * Per-booking sync only prunes the booking it is handed, but imports fetch a
+ * forward-looking date range, so a past booking is never re-synced once its
+ * trip has gone by. Without this global prune, such rows would linger past the
+ * window until a manual rebuild. Runs on the import path so the table keeps
+ * representing the configured trailing window on its own.
+ *
+ * @return int|false Rows removed, or false on error.
+ */
+function bokun_analytics_prune_window() {
+    global $wpdb;
+
+    $table_name       = bokun_analytics_get_table_name();
+    $window_start_gmt = get_gmt_from_date( bokun_analytics_get_window_start() );
+
+    return $wpdb->query(
+        $wpdb->prepare(
+            "DELETE FROM {$table_name} WHERE created_datetime IS NULL OR created_datetime < %s", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            $window_start_gmt
+        )
+    );
+}
+// Prune aged-out rows after every scheduled import, including runs that fetch
+// no bookings (which skip the save path entirely).
+add_action( BOKUN_DAILY_IMPORT_HOOK, 'bokun_analytics_prune_window', 5 );
 
 /**
  * Number of rows currently in the analytics source table.
