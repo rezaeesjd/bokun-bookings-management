@@ -124,15 +124,15 @@ A companion `wp_bokun_partners_products` table holds one row per Bokun product �
 
 ### Analytics dashboard tab
 
-The `[bokun_booking_dashboard]` output is split into two tabs: **Bookings** (the existing dashboard) and **Analytics**. The analytics tab is a business-performance view that reads the `wp_bokun_analytics_source` rows and renders, entirely client-side for instant interactivity:
+The `[bokun_booking_dashboard]` output is split into two tabs: **Bookings** (the existing dashboard) and **Analytics**. The analytics tab is a business-performance view that reads the `wp_bokun_analytics_source` rows, joins each booking to the partners-products catalog by `product_id`, and renders entirely client-side for instant interactivity:
 
-- **Metric toggle** — switch the whole view between **Bookings**, **Participants** and **Revenue**; the insights, trend, and performance rankings all follow the selected metric.
-- **Date presets** — one-click Last 7 / 30 / 90 days / All, alongside the full date-range filters.
-- **Auto insights** — plain-language highlights: top product (with its share of the metric), top channel, average booking value, average lead time (created → travel), and full-payment rate.
-- **KPI tiles** — total bookings, participants (adult/child/infant split), revenue per currency, and average lead time.
-- **Charts** — a weekly **trend** line/area chart (SVG, with hover tooltip + crosshair), **product performance** and **channel performance** bar rankings, and **result** and **payment** mix. Colors follow a colorblind-safe palette and adapt to light/dark.
-- **Filters for every column** — collapsible: free-text search plus dropdowns for product, option, channel, channel type, seller, vendor, product-booking seller, result, payment method, status, language and currency, and created/travel date ranges.
-- **Group-by breakdown** (count, share %, participants, amount) and a **detail table + CSV export** of the filtered rows.
+- **Net revenue** — each booking line is joined to its catalog net price, and **net revenue = gross amount − (net price × participants)** is computed per line, shown in the detail table and aggregated in KPIs, the breakdown and the metric toggle.
+- **Metric toggle** — switch the whole view between **Bookings**, **Participants**, **Revenue** and **Net revenue**; insights, trend and performance rankings all follow the selected metric. Revenue/net-revenue aggregate in a single currency (the most common in the filtered set) so mixed currencies are never summed.
+- **Left filter sidebar** — important dimensions (product, channel, partner page, result, payment, currency, departure city) are clickable multi-select item lists; secondary dimensions stay under a collapsible **More filters**; plus search, date presets (7/30/90/All) and created/travel date ranges.
+- **Auto insights** — top product (with share), top channel, net revenue (with margin %), average booking value, average lead time (created → travel), and full-result rate.
+- **KPI tiles** — bookings, participants (adult/child/infant split), revenue per currency, net revenue, and average lead time.
+- **Charts** — a weekly **trend** line/area chart (SVG, hover tooltip + crosshair), **product performance** and **channel performance** bar rankings, and **result** and **payment** mix. Colorblind-safe palette, light/dark aware.
+- **Group-by breakdown** (count, share %, participants, gross, net revenue) and a **detail table + CSV export** (gross, net price, net revenue per line) of the filtered rows.
 
 The **amount** is parsed best-effort from the free-text price note (`productBookings_0_notes_1_body`); the raw note is retained for reference. 【F:includes/bokun_shortcode.class.php†L2901-L3560】
 
