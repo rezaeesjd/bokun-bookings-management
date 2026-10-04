@@ -63,6 +63,13 @@ net_revenue = gross_amount − (net_price × participants)
 - `net_price` is per person; `participants` = adult + child + infant.
 - It is only defined when the line has a gross amount **and** its product is in
   the partners catalog; otherwise leave it null (don't coerce to 0 per row).
+- **Partner-refunded cancellations are neutral.** The dashboard card shows a
+  "Cancelled and refunded by Partner" checkbox on bookings tagged both "Booking
+  made" and "Cancelled"; it persists as the `refund-requested-from-partner`
+  `booking_status` term and lands in the source as `partner_refunded`. When
+  set, the partner cost is recovered, so the line's net cost is forced to 0 and
+  its net revenue to null — it drops out of the net-revenue total instead of
+  showing the loss it would be while the partner payment was unrecovered.
 - The catalog join is on the **partner page id only**. The partners catalog is
   keyed by the Bokun partner page id (the "ID" column of the partners
   spreadsheet), and a booking's `partner_page_id` comes from its product tag's

@@ -3904,7 +3904,7 @@ function refund_checkbox_shortcode($atts) {
     <div class="elementor-widget-container">
         <label>
             <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="refund-partner" <?php echo $checked['refund-partner']; ?>>
-            Refund Requested from Partner
+            Cancelled and refunded by Partner
         </label>
     </div>
     <?php

@@ -23,6 +23,7 @@ meta ("N/A" and "" treated as null).
 | `product_id` | `productBookings_0_product_id` / `_product_id` |
 | `partner_page_id` | product tag `partnerpageid` term meta (via `bokun_partners_products_resolve_partner_page_id()`) |
 | `result` | `booking_status` taxonomy: `full` / `partial` / `not-available` |
+| `partner_refunded` | 1 when the `refund-requested-from-partner` `booking_status` term is set ("Cancelled and refunded by Partner"), else 0 — neutralizes net revenue for a client-cancelled booking the partner refunded |
 | `payment_method` | `booking_status` taxonomy: Amex / PayPal / Other (`amex`,`paypal`,`other-payment`) |
 | `product_title` | `_product_title` / `productBookings_0_product_title` |
 | `product_option` | `productBookings_0_fields_rateTitle` / `productBookings_0_rateTitle` |
@@ -73,6 +74,11 @@ Computed per row after joining the partners map by `partner_page_id`
 - `_net_cost` = `net_price × participants`.
 - `_net_revenue` = `price_amount − net_price × participants` (null unless both
   present). Currency-scoped to `revCur` in all aggregates.
+- **Partner-refunded cancellations.** When `partner_refunded` is set, the
+  client cancelled a reserved booking but the partner refunded the cost, so the
+  line has no profit or loss: `_net_cost` is forced to `0` and `_net_revenue`
+  to `null` (neutral — it contributes nothing to the net-revenue total instead
+  of the negative it would otherwise be while the partner payment was unrecovered).
 
 ## Taxonomies
 

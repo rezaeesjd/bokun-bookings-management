@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Schema version for the analytics source table. Bump when columns change so
  * installed sites re-run dbDelta on the next admin request.
  */
-define( 'BOKUN_ANALYTICS_DB_VERSION', '1.2.0' );
+define( 'BOKUN_ANALYTICS_DB_VERSION', '1.3.0' );
 
 /** Option key tracking the installed analytics schema version. */
 define( 'BOKUN_ANALYTICS_DB_VERSION_OPTION', 'bokun_analytics_db_version' );
@@ -101,6 +101,7 @@ function bokun_analytics_install_table() {
         product_id VARCHAR(191) NULL,
         partner_page_id VARCHAR(191) NULL,
         result VARCHAR(50) NULL,
+        partner_refunded TINYINT(1) NOT NULL DEFAULT 0,
         payment_method VARCHAR(100) NULL,
         product_title VARCHAR(255) NULL,
         product_option VARCHAR(255) NULL,
@@ -450,6 +451,7 @@ function bokun_analytics_build_row( $post_id ) {
         'product_id'                => $product_id,
         'partner_page_id'           => ( '' !== $partner_page_id ) ? $partner_page_id : null,
         'result'                    => bokun_analytics_get_result( $post_id ),
+        'partner_refunded'          => has_term( 'refund-requested-from-partner', 'booking_status', $post_id ) ? 1 : 0,
         'payment_method'            => bokun_analytics_get_payment_method( $post_id ),
         'product_title'             => bokun_analytics_meta( $post_id, array( '_product_title', 'productBookings_0_product_title' ) ),
         'product_option'            => bokun_analytics_meta( $post_id, array( 'productBookings_0_fields_rateTitle', 'productBookings_0_rateTitle' ) ),

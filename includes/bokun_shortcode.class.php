@@ -1146,8 +1146,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 </div>
                                 <?php if ($show_refund_toggle) : ?>
                                     <div class="bokun-booking-dashboard__toggle">
-                                        <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refund-partner" aria-label="<?php esc_attr_e('Refund requested', 'BOKUN_txt_domain'); ?>" <?php echo checked($checkbox_states['refund-partner'], true, false); ?> />
-                                        <span><?php esc_html_e('Refund requested', 'BOKUN_txt_domain'); ?></span>
+                                        <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refund-partner" aria-label="<?php esc_attr_e('Cancelled and refunded by Partner', 'BOKUN_txt_domain'); ?>" <?php echo checked($checkbox_states['refund-partner'], true, false); ?> />
+                                        <span><?php esc_html_e('Cancelled and refunded by Partner', 'BOKUN_txt_domain'); ?></span>
                                     </div>
                                 <?php endif; ?>
                             </div>
@@ -3316,10 +3316,19 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     // when it already carries a value.
                     if ( isEmpty( r.departure_city ) && p.departure_city ) { r.departure_city = p.departure_city; }
                     var pax = parts( r );
-                    r._net_cost = ( r.net_price !== null ) ? ( r.net_price * pax ) : null;
+                    // "Cancelled and refunded by Partner": the client cancelled a
+                    // booking we had reserved (and paid the partner for), but the
+                    // partner refunded that cost — so the line has no profit and no
+                    // loss. Treat the partner cost as recovered (0) and leave net
+                    // revenue null (neutral) instead of the negative it would be
+                    // while we were still out the partner payment.
+                    var partnerRefunded = ( r.partner_refunded === 1 || r.partner_refunded === '1' || r.partner_refunded === true );
+                    r._net_cost = partnerRefunded ? 0 : ( ( r.net_price !== null ) ? ( r.net_price * pax ) : null );
                     // A numeric zero gross (complimentary/fully-discounted) is a
                     // real value, so test presence, not truthiness.
-                    r._net_revenue = ( hasNum( r.price_amount ) && r.net_price !== null ) ? ( num( r.price_amount ) - r.net_price * pax ) : null;
+                    r._net_revenue = partnerRefunded
+                        ? null
+                        : ( ( hasNum( r.price_amount ) && r.net_price !== null ) ? ( num( r.price_amount ) - r.net_price * pax ) : null );
                 } );
 
                 function primaryCurrency( data ) {
