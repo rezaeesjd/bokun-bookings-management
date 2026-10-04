@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Schema version for the analytics source table. Bump when columns change so
  * installed sites re-run dbDelta on the next admin request.
  */
-define( 'BOKUN_ANALYTICS_DB_VERSION', '1.1.0' );
+define( 'BOKUN_ANALYTICS_DB_VERSION', '1.2.0' );
 
 /** Option key tracking the installed analytics schema version. */
 define( 'BOKUN_ANALYTICS_DB_VERSION_OPTION', 'bokun_analytics_db_version' );
@@ -99,6 +99,7 @@ function bokun_analytics_install_table() {
         pb_seller_title VARCHAR(191) NULL,
         product_external_id VARCHAR(191) NULL,
         product_id VARCHAR(191) NULL,
+        partner_page_id VARCHAR(191) NULL,
         result VARCHAR(50) NULL,
         payment_method VARCHAR(100) NULL,
         product_title VARCHAR(255) NULL,
@@ -122,7 +123,8 @@ function bokun_analytics_install_table() {
         KEY created_datetime (created_datetime),
         KEY travel_datetime (travel_datetime),
         KEY channel_id (channel_id),
-        KEY product_id (product_id)
+        KEY product_id (product_id),
+        KEY partner_page_id (partner_page_id)
     ) $charset_collate;";
 
     dbDelta( $sql );
@@ -411,6 +413,12 @@ function bokun_analytics_build_row( $post_id ) {
 
     $participants = bokun_analytics_count_participants( $post_id );
     $price_note   = bokun_analytics_meta( $post_id, array( 'productBookings_0_notes_1_body' ) );
+    $product_id   = bokun_analytics_meta( $post_id, array( 'productBookings_0_product_id', '_product_id' ) );
+
+    // Partner page id comes from the product tag's `partnerpageid` term meta.
+    $partner_page_id = ( null !== $product_id && function_exists( 'bokun_partners_products_resolve_partner_page_id' ) )
+        ? bokun_partners_products_resolve_partner_page_id( $product_id )
+        : '';
 
     // Travel datetime: derive from the raw Bokun start value, which carries an
     // absolute instant. The importer stores `post_date` as the UTC wall-clock
@@ -439,7 +447,8 @@ function bokun_analytics_build_row( $post_id ) {
         'pb_seller_id'              => bokun_analytics_meta( $post_id, array( 'productBookings_0_seller_id' ) ),
         'pb_seller_title'           => bokun_analytics_meta( $post_id, array( 'productBookings_0_seller_title' ) ),
         'product_external_id'       => bokun_analytics_meta( $post_id, array( 'productBookings_0_productExternalId' ) ),
-        'product_id'                => bokun_analytics_meta( $post_id, array( 'productBookings_0_product_id', '_product_id' ) ),
+        'product_id'                => $product_id,
+        'partner_page_id'           => ( '' !== $partner_page_id ) ? $partner_page_id : null,
         'result'                    => bokun_analytics_get_result( $post_id ),
         'payment_method'            => bokun_analytics_get_payment_method( $post_id ),
         'product_title'             => bokun_analytics_meta( $post_id, array( '_product_title', 'productBookings_0_product_title' ) ),

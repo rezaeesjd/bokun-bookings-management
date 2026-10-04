@@ -27,6 +27,19 @@ $row_count     = $table_exists ? bokun_analytics_get_row_count() : 0;
 $last_built    = get_option( BOKUN_ANALYTICS_LAST_BUILT_OPTION, '' );
 $rebuild_nonce = wp_create_nonce( 'bokun_analytics_rebuild' );
 
+// Partners products reference table.
+$pp_available   = function_exists( 'bokun_partners_products_get_row_count' );
+$pp_count       = $pp_available ? bokun_partners_products_get_row_count() : 0;
+$pp_last_sync   = get_option( 'bokun_partners_products_last_sync', '' );
+$pp_nonce       = wp_create_nonce( 'bokun_partners_products_rebuild' );
+$pp_last_display = '';
+if ( ! empty( $pp_last_sync ) ) {
+    $pp_last_ts = strtotime( $pp_last_sync . ' UTC' );
+    if ( $pp_last_ts ) {
+        $pp_last_display = wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $pp_last_ts );
+    }
+}
+
 $last_built_display = '';
 if ( ! empty( $last_built ) ) {
     $last_built_ts = strtotime( $last_built . ' UTC' );
@@ -42,6 +55,7 @@ $preview_columns = array(
     'travel_datetime'     => __( 'Travel (GMT)', 'BOKUN_text_domain' ),
     'product_title'       => __( 'Product', 'BOKUN_text_domain' ),
     'product_option'      => __( 'Option', 'BOKUN_text_domain' ),
+    'partner_page_id'     => __( 'Partner', 'BOKUN_text_domain' ),
     'result'              => __( 'Result', 'BOKUN_text_domain' ),
     'payment_method'      => __( 'Payment', 'BOKUN_text_domain' ),
     'adult_participants'  => __( 'Ad', 'BOKUN_text_domain' ),
@@ -108,6 +122,80 @@ if ( $table_exists && $row_count > 0 ) {
         <span class="spinner" id="bokun-analytics-spinner" style="float:none;margin-top:0;"></span>
         <span id="bokun-analytics-message" style="margin-left:8px;"></span>
     </p>
+
+    <hr style="margin:24px 0;" />
+
+    <h2><?php esc_html_e( 'Partners products', 'BOKUN_text_domain' ); ?></h2>
+    <p class="description">
+        <?php esc_html_e( 'Per-product reference table (title, net price, commission, departure city) joined with each product\'s partner page id from the product tag term meta. Powers partner, net-revenue and commission reporting.', 'BOKUN_text_domain' ); ?>
+    </p>
+
+    <div class="bokun-analytics-source__cards" style="display:flex;gap:16px;flex-wrap:wrap;margin:16px 0;">
+        <div class="card" style="padding:16px;min-width:180px;">
+            <h2 style="margin-top:0;"><?php esc_html_e( 'Products', 'BOKUN_text_domain' ); ?></h2>
+            <p style="font-size:28px;font-weight:600;margin:0;" data-pp-count><?php echo esc_html( number_format_i18n( $pp_count ) ); ?></p>
+        </div>
+        <div class="card" style="padding:16px;min-width:220px;">
+            <h2 style="margin-top:0;"><?php esc_html_e( 'Last imported', 'BOKUN_text_domain' ); ?></h2>
+            <p style="font-size:16px;margin:8px 0 0;" data-pp-last>
+                <?php echo $pp_last_display ? esc_html( $pp_last_display ) : esc_html__( 'Never', 'BOKUN_text_domain' ); ?>
+            </p>
+        </div>
+    </div>
+
+    <p>
+        <button type="button" class="button button-primary" id="bokun-pp-rebuild">
+            <?php esc_html_e( 'Rebuild partners products', 'BOKUN_text_domain' ); ?>
+        </button>
+        <span class="spinner" id="bokun-pp-spinner" style="float:none;margin-top:0;"></span>
+        <span id="bokun-pp-message" style="margin-left:8px;"></span>
+    </p>
+
+    <script type="text/javascript">
+    ( function () {
+        var button  = document.getElementById( 'bokun-pp-rebuild' );
+        var spinner = document.getElementById( 'bokun-pp-spinner' );
+        var message = document.getElementById( 'bokun-pp-message' );
+        var count   = document.querySelector( '[data-pp-count]' );
+        var last    = document.querySelector( '[data-pp-last]' );
+        if ( ! button ) { return; }
+        button.addEventListener( 'click', function () {
+            button.disabled = true;
+            spinner.classList.add( 'is-active' );
+            message.textContent = '';
+            var body = new URLSearchParams();
+            body.append( 'action', 'bokun_rebuild_partners_products' );
+            body.append( 'nonce', '<?php echo esc_js( $pp_nonce ); ?>' );
+            fetch( '<?php echo esc_url_raw( admin_url( 'admin-ajax.php' ) ); ?>', {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: body.toString()
+            } )
+            .then( function ( r ) { return r.json(); } )
+            .then( function ( json ) {
+                button.disabled = false;
+                spinner.classList.remove( 'is-active' );
+                if ( json && json.success ) {
+                    message.style.color = '#1a7f37';
+                    message.textContent = json.data.message || '<?php echo esc_js( __( 'Rebuilt.', 'BOKUN_text_domain' ) ); ?>';
+                    if ( count && typeof json.data.row_count !== 'undefined' ) { count.textContent = json.data.row_count; }
+                    if ( last ) { last.textContent = '<?php echo esc_js( __( 'Just now', 'BOKUN_text_domain' ) ); ?>'; }
+                } else {
+                    message.style.color = '#d63638';
+                    message.textContent = ( json && json.data && json.data.message ) ? json.data.message : '<?php echo esc_js( __( 'Rebuild failed.', 'BOKUN_text_domain' ) ); ?>';
+                }
+            } )
+            .catch( function () {
+                button.disabled = false;
+                spinner.classList.remove( 'is-active' );
+                message.style.color = '#d63638';
+                message.textContent = '<?php echo esc_js( __( 'Rebuild failed.', 'BOKUN_text_domain' ) ); ?>';
+            } );
+        } );
+    } )();
+    </script>
+
+    <hr style="margin:24px 0;" />
 
     <h2><?php esc_html_e( 'Preview (latest 25 records)', 'BOKUN_text_domain' ); ?></h2>
 
