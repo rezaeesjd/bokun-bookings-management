@@ -2883,9 +2883,441 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 })();
             </script>
             <?php
+            $dashboard_html = ob_get_clean();
+            $analytics_html = $this->render_analytics_panel();
+
+            return $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html );
+        }
+
+        /**
+         * Wrap the bookings dashboard and the analytics dashboard in a two-tab
+         * layout so the existing dashboard becomes the first tab and analytics
+         * the second.
+         *
+         * @param string $bookings_html  Rendered bookings dashboard markup.
+         * @param string $analytics_html Rendered analytics dashboard markup.
+         * @return string
+         */
+        private function wrap_dashboard_tabs( $bookings_html, $analytics_html ) {
+            $tabs_id = 'bokun-dash-tabs-' . wp_rand( 1000, 9999 );
+
+            ob_start();
+            ?>
+            <div class="bokun-dash-tabs" id="<?php echo esc_attr( $tabs_id ); ?>" data-bokun-tabs>
+                <div class="bokun-dash-tabs__nav" role="tablist" aria-label="<?php esc_attr_e( 'Dashboard views', 'BOKUN_txt_domain' ); ?>">
+                    <button type="button" class="bokun-dash-tabs__tab is-active" role="tab" aria-selected="true" data-tab-target="bookings">
+                        <?php esc_html_e( 'Bookings', 'BOKUN_txt_domain' ); ?>
+                    </button>
+                    <button type="button" class="bokun-dash-tabs__tab" role="tab" aria-selected="false" data-tab-target="analytics">
+                        <?php esc_html_e( 'Analytics', 'BOKUN_txt_domain' ); ?>
+                    </button>
+                </div>
+                <div class="bokun-dash-tabs__panel is-active" data-tab-panel="bookings">
+                    <?php echo $bookings_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                </div>
+                <div class="bokun-dash-tabs__panel" data-tab-panel="analytics" hidden>
+                    <?php echo $analytics_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                </div>
+            </div>
+            <style>
+                .bokun-dash-tabs__nav { display:flex; gap:4px; border-bottom:2px solid #e2e4e7; margin-bottom:16px; flex-wrap:wrap; }
+                .bokun-dash-tabs__tab { appearance:none; background:transparent; border:0; border-bottom:3px solid transparent; margin-bottom:-2px; padding:10px 18px; font-size:15px; font-weight:600; color:#50575e; cursor:pointer; }
+                .bokun-dash-tabs__tab:hover { color:#1d2327; }
+                .bokun-dash-tabs__tab.is-active { color:#2271b1; border-bottom-color:#2271b1; }
+                .bokun-dash-tabs__panel[hidden] { display:none; }
+            </style>
+            <script>
+                ( function () {
+                    var root = document.getElementById( '<?php echo esc_js( $tabs_id ); ?>' );
+                    if ( ! root ) { return; }
+                    var tabs = root.querySelectorAll( '.bokun-dash-tabs__tab' );
+                    var panels = root.querySelectorAll( '.bokun-dash-tabs__panel' );
+
+                    tabs.forEach( function ( tab ) {
+                        tab.addEventListener( 'click', function () {
+                            var target = tab.getAttribute( 'data-tab-target' );
+                            tabs.forEach( function ( t ) {
+                                var active = t === tab;
+                                t.classList.toggle( 'is-active', active );
+                                t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
+                            } );
+                            panels.forEach( function ( panel ) {
+                                var match = panel.getAttribute( 'data-tab-panel' ) === target;
+                                panel.classList.toggle( 'is-active', match );
+                                panel.hidden = ! match;
+                            } );
+                            if ( 'analytics' === target && root.bokunAnalyticsInit ) {
+                                root.bokunAnalyticsInit();
+                            }
+                        } );
+                    } );
+                } )();
+            </script>
+            <?php
             return ob_get_clean();
         }
 
+        /**
+         * Render the analytics dashboard panel: KPI tiles (counts and totals),
+         * filters for every column, a group-by breakdown, and a filtered detail
+         * table with CSV export. Filtering and aggregation run client-side over
+         * the source rows for snappy interactivity.
+         *
+         * @return string
+         */
+        public function render_analytics_panel() {
+            if ( ! function_exists( 'bokun_analytics_get_rows' ) ) {
+                return '<div class="bokun-andash__empty">' . esc_html__( 'Analytics data layer is unavailable.', 'BOKUN_txt_domain' ) . '</div>';
+            }
+
+            $rows   = bokun_analytics_get_rows();
+            $months = function_exists( 'bokun_analytics_get_window_months' ) ? (int) bokun_analytics_get_window_months() : 3;
+            $uid    = 'bokun-andash-' . wp_rand( 1000, 9999 );
+
+            // Categorical columns offered as dropdown filters and group-by keys.
+            $dimensions = array(
+                'channel_title'        => __( 'Channel', 'BOKUN_txt_domain' ),
+                'channel_channel_type' => __( 'Channel type', 'BOKUN_txt_domain' ),
+                'seller_title'         => __( 'Seller', 'BOKUN_txt_domain' ),
+                'vendor_title'         => __( 'Vendor', 'BOKUN_txt_domain' ),
+                'pb_seller_title'      => __( 'Product-booking seller', 'BOKUN_txt_domain' ),
+                'product_title'        => __( 'Product', 'BOKUN_txt_domain' ),
+                'product_option'       => __( 'Option', 'BOKUN_txt_domain' ),
+                'result'               => __( 'Result', 'BOKUN_txt_domain' ),
+                'payment_method'       => __( 'Payment method', 'BOKUN_txt_domain' ),
+                'pb_status'            => __( 'Status', 'BOKUN_txt_domain' ),
+                'language'             => __( 'Language', 'BOKUN_txt_domain' ),
+                'currency'             => __( 'Currency', 'BOKUN_txt_domain' ),
+            );
+
+            ob_start();
+            ?>
+            <div class="bokun-andash" id="<?php echo esc_attr( $uid ); ?>" data-rows="<?php echo (int) count( $rows ); ?>">
+                <div class="bokun-andash__head">
+                    <h2 class="bokun-andash__title"><?php esc_html_e( 'Analytics', 'BOKUN_txt_domain' ); ?></h2>
+                    <p class="bokun-andash__sub">
+                        <?php
+                        printf(
+                            /* translators: %d: number of months. */
+                            esc_html__( 'Bookings from the last %d months (by creation date).', 'BOKUN_txt_domain' ),
+                            (int) $months
+                        );
+                        ?>
+                    </p>
+                </div>
+
+                <?php if ( empty( $rows ) ) : ?>
+                    <div class="bokun-andash__empty">
+                        <?php esc_html_e( 'No analytics records yet. Open Bokun Bookings Management → Analytics Data and click “Rebuild now”, or run an import.', 'BOKUN_txt_domain' ); ?>
+                    </div>
+                <?php else : ?>
+
+                    <div class="bokun-andash__kpis" data-kpis></div>
+
+                    <div class="bokun-andash__filters" data-filters>
+                        <div class="bokun-andash__filter bokun-andash__filter--search">
+                            <label><?php esc_html_e( 'Search', 'BOKUN_txt_domain' ); ?></label>
+                            <input type="search" data-f-search placeholder="<?php esc_attr_e( 'Any text (code, name, id…)', 'BOKUN_txt_domain' ); ?>" />
+                        </div>
+                        <?php foreach ( $dimensions as $key => $label ) : ?>
+                            <div class="bokun-andash__filter">
+                                <label><?php echo esc_html( $label ); ?></label>
+                                <select data-f-dim="<?php echo esc_attr( $key ); ?>">
+                                    <option value=""><?php esc_html_e( 'All', 'BOKUN_txt_domain' ); ?></option>
+                                </select>
+                            </div>
+                        <?php endforeach; ?>
+                        <div class="bokun-andash__filter">
+                            <label><?php esc_html_e( 'Created from', 'BOKUN_txt_domain' ); ?></label>
+                            <input type="date" data-f-date="created_from" />
+                        </div>
+                        <div class="bokun-andash__filter">
+                            <label><?php esc_html_e( 'Created to', 'BOKUN_txt_domain' ); ?></label>
+                            <input type="date" data-f-date="created_to" />
+                        </div>
+                        <div class="bokun-andash__filter">
+                            <label><?php esc_html_e( 'Travel from', 'BOKUN_txt_domain' ); ?></label>
+                            <input type="date" data-f-date="travel_from" />
+                        </div>
+                        <div class="bokun-andash__filter">
+                            <label><?php esc_html_e( 'Travel to', 'BOKUN_txt_domain' ); ?></label>
+                            <input type="date" data-f-date="travel_to" />
+                        </div>
+                        <div class="bokun-andash__filter bokun-andash__filter--actions">
+                            <button type="button" class="button" data-reset><?php esc_html_e( 'Reset', 'BOKUN_txt_domain' ); ?></button>
+                            <button type="button" class="button" data-export><?php esc_html_e( 'Export CSV', 'BOKUN_txt_domain' ); ?></button>
+                        </div>
+                    </div>
+
+                    <div class="bokun-andash__breakdown">
+                        <div class="bokun-andash__breakdown-head">
+                            <h3><?php esc_html_e( 'Breakdown', 'BOKUN_txt_domain' ); ?></h3>
+                            <label>
+                                <?php esc_html_e( 'Group by', 'BOKUN_txt_domain' ); ?>
+                                <select data-groupby>
+                                    <?php foreach ( $dimensions as $key => $label ) : ?>
+                                        <option value="<?php echo esc_attr( $key ); ?>"><?php echo esc_html( $label ); ?></option>
+                                    <?php endforeach; ?>
+                                    <option value="__created_month"><?php esc_html_e( 'Created month', 'BOKUN_txt_domain' ); ?></option>
+                                    <option value="__travel_month"><?php esc_html_e( 'Travel month', 'BOKUN_txt_domain' ); ?></option>
+                                </select>
+                            </label>
+                        </div>
+                        <div data-breakdown></div>
+                    </div>
+
+                    <div class="bokun-andash__detail">
+                        <h3><?php esc_html_e( 'Records', 'BOKUN_txt_domain' ); ?> <span data-detail-count></span></h3>
+                        <div class="bokun-andash__table-wrap" data-detail></div>
+                    </div>
+
+                    <script type="application/json" data-andash-rows><?php echo wp_json_encode( $rows ); ?></script>
+                <?php endif; ?>
+            </div>
+
+            <style>
+                .bokun-andash__head { margin-bottom:12px; }
+                .bokun-andash__title { margin:0; font-size:20px; }
+                .bokun-andash__sub { margin:4px 0 0; color:#50575e; }
+                .bokun-andash__empty { padding:24px; background:#f6f7f7; border:1px dashed #c3c4c7; border-radius:8px; color:#50575e; }
+                .bokun-andash__kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:16px 0; }
+                .bokun-andash__kpi { background:#fff; border:1px solid #e2e4e7; border-radius:10px; padding:14px 16px; }
+                .bokun-andash__kpi-label { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:#646970; }
+                .bokun-andash__kpi-value { font-size:24px; font-weight:700; margin-top:4px; color:#1d2327; }
+                .bokun-andash__kpi-sub { font-size:12px; color:#646970; margin-top:2px; }
+                .bokun-andash__filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; background:#fff; border:1px solid #e2e4e7; border-radius:10px; padding:14px; margin-bottom:16px; }
+                .bokun-andash__filter { display:flex; flex-direction:column; gap:4px; }
+                .bokun-andash__filter label { font-size:12px; font-weight:600; color:#50575e; }
+                .bokun-andash__filter select, .bokun-andash__filter input { width:100%; }
+                .bokun-andash__filter--actions { justify-content:flex-end; flex-direction:row; align-items:flex-end; gap:8px; }
+                .bokun-andash__breakdown, .bokun-andash__detail { background:#fff; border:1px solid #e2e4e7; border-radius:10px; padding:14px; margin-bottom:16px; }
+                .bokun-andash__breakdown-head { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:8px; }
+                .bokun-andash__breakdown-head h3, .bokun-andash__detail h3 { margin:0 0 8px; font-size:16px; }
+                .bokun-andash table { width:100%; border-collapse:collapse; font-size:13px; }
+                .bokun-andash th, .bokun-andash td { text-align:left; padding:7px 8px; border-bottom:1px solid #f0f0f1; white-space:nowrap; }
+                .bokun-andash th { color:#646970; font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
+                .bokun-andash__bar-row td { position:relative; }
+                .bokun-andash__bar { display:inline-block; height:10px; background:#2271b1; border-radius:3px; vertical-align:middle; margin-right:6px; min-width:2px; }
+                .bokun-andash__table-wrap { overflow-x:auto; max-height:520px; overflow-y:auto; }
+                .bokun-andash__num { text-align:right; font-variant-numeric:tabular-nums; }
+            </style>
+            <script>
+            ( function () {
+                var root = document.getElementById( '<?php echo esc_js( $uid ); ?>' );
+                if ( ! root ) { return; }
+
+                var rowsEl = root.querySelector( '[data-andash-rows]' );
+                if ( ! rowsEl ) { return; } // empty state
+
+                var ROWS = [];
+                try { ROWS = JSON.parse( rowsEl.textContent || '[]' ); } catch ( e ) { ROWS = []; }
+
+                var DIMS = <?php echo wp_json_encode( array_keys( $dimensions ) ); ?>;
+                var DIM_LABELS = <?php echo wp_json_encode( $dimensions ); ?>;
+
+                var started = false;
+
+                function num( v ) { var n = parseFloat( v ); return isNaN( n ) ? 0 : n; }
+                function parts( r ) { return num( r.adult_participants ) + num( r.child_participants ) + num( r.infant_participants ); }
+                function monthOf( v ) { return ( v && v.length >= 7 ) ? v.slice( 0, 7 ) : ''; }
+                function esc( v ) { return ( v === null || v === undefined ) ? '' : String( v ); }
+                function fmtInt( n ) { return Number( n ).toLocaleString(); }
+                function fmtMoney( n ) { return Number( n ).toLocaleString( undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 } ); }
+
+                function uniqueSorted( key ) {
+                    var seen = {}, out = [];
+                    ROWS.forEach( function ( r ) {
+                        var v = r[ key ];
+                        if ( v !== null && v !== undefined && v !== '' && ! seen[ v ] ) { seen[ v ] = 1; out.push( String( v ) ); }
+                    } );
+                    out.sort( function ( a, b ) { return a.localeCompare( b, undefined, { numeric: true } ); } );
+                    return out;
+                }
+
+                // Populate dropdown filters with distinct values.
+                DIMS.forEach( function ( key ) {
+                    var sel = root.querySelector( '[data-f-dim="' + key + '"]' );
+                    if ( ! sel ) { return; }
+                    uniqueSorted( key ).forEach( function ( v ) {
+                        var o = document.createElement( 'option' );
+                        o.value = v; o.textContent = v; sel.appendChild( o );
+                    } );
+                } );
+
+                function currentFilters() {
+                    var f = { search: '', dims: {}, dates: {} };
+                    var s = root.querySelector( '[data-f-search]' );
+                    f.search = s ? s.value.trim().toLowerCase() : '';
+                    DIMS.forEach( function ( key ) {
+                        var sel = root.querySelector( '[data-f-dim="' + key + '"]' );
+                        if ( sel && sel.value ) { f.dims[ key ] = sel.value; }
+                    } );
+                    root.querySelectorAll( '[data-f-date]' ).forEach( function ( el ) {
+                        if ( el.value ) { f.dates[ el.getAttribute( 'data-f-date' ) ] = el.value; }
+                    } );
+                    return f;
+                }
+
+                function matches( r, f ) {
+                    for ( var key in f.dims ) { if ( String( r[ key ] || '' ) !== f.dims[ key ] ) { return false; } }
+                    var cd = esc( r.created_datetime ).slice( 0, 10 );
+                    var td = esc( r.travel_datetime ).slice( 0, 10 );
+                    if ( f.dates.created_from && cd && cd < f.dates.created_from ) { return false; }
+                    if ( f.dates.created_to && cd && cd > f.dates.created_to ) { return false; }
+                    if ( f.dates.travel_from && td && td < f.dates.travel_from ) { return false; }
+                    if ( f.dates.travel_to && td && td > f.dates.travel_to ) { return false; }
+                    if ( f.search ) {
+                        var hay = '';
+                        for ( var k in r ) { hay += ' ' + esc( r[ k ] ).toLowerCase(); }
+                        if ( hay.indexOf( f.search ) === -1 ) { return false; }
+                    }
+                    return true;
+                }
+
+                function renderKpis( data ) {
+                    var count = data.length, a = 0, c = 0, i = 0, byCur = {}, prods = {}, chans = {};
+                    data.forEach( function ( r ) {
+                        a += num( r.adult_participants ); c += num( r.child_participants ); i += num( r.infant_participants );
+                        var amt = num( r.price_amount );
+                        if ( amt ) { var cur = esc( r.currency ) || '—'; byCur[ cur ] = ( byCur[ cur ] || 0 ) + amt; }
+                        if ( r.product_title ) { prods[ r.product_title ] = 1; }
+                        if ( r.channel_title ) { chans[ r.channel_title ] = 1; }
+                    } );
+                    var money = Object.keys( byCur ).sort().map( function ( cur ) {
+                        return fmtMoney( byCur[ cur ] ) + ' ' + cur;
+                    } );
+                    var tiles = [
+                        { label: '<?php echo esc_js( __( 'Bookings', 'BOKUN_txt_domain' ) ); ?>', value: fmtInt( count ) },
+                        { label: '<?php echo esc_js( __( 'Participants', 'BOKUN_txt_domain' ) ); ?>', value: fmtInt( a + c + i ), sub: 'A ' + fmtInt( a ) + ' · C ' + fmtInt( c ) + ' · I ' + fmtInt( i ) },
+                        { label: '<?php echo esc_js( __( 'Total amount', 'BOKUN_txt_domain' ) ); ?>', value: money.length ? money[ 0 ] : '—', sub: money.length > 1 ? money.slice( 1 ).join( ' · ' ) : '' },
+                        { label: '<?php echo esc_js( __( 'Products', 'BOKUN_txt_domain' ) ); ?>', value: fmtInt( Object.keys( prods ).length ) },
+                        { label: '<?php echo esc_js( __( 'Channels', 'BOKUN_txt_domain' ) ); ?>', value: fmtInt( Object.keys( chans ).length ) }
+                    ];
+                    root.querySelector( '[data-kpis]' ).innerHTML = tiles.map( function ( t ) {
+                        return '<div class="bokun-andash__kpi"><div class="bokun-andash__kpi-label">' + t.label +
+                            '</div><div class="bokun-andash__kpi-value">' + t.value + '</div>' +
+                            ( t.sub ? '<div class="bokun-andash__kpi-sub">' + t.sub + '</div>' : '' ) + '</div>';
+                    } ).join( '' );
+                }
+
+                function renderBreakdown( data ) {
+                    var key = root.querySelector( '[data-groupby]' ).value;
+                    var groups = {};
+                    data.forEach( function ( r ) {
+                        var g;
+                        if ( key === '__created_month' ) { g = monthOf( esc( r.created_datetime ) ) || '—'; }
+                        else if ( key === '__travel_month' ) { g = monthOf( esc( r.travel_datetime ) ) || '—'; }
+                        else { g = esc( r[ key ] ) || '—'; }
+                        if ( ! groups[ g ] ) { groups[ g ] = { label: g, count: 0, parts: 0, amount: 0 }; }
+                        groups[ g ].count++; groups[ g ].parts += parts( r ); groups[ g ].amount += num( r.price_amount );
+                    } );
+                    var list = Object.keys( groups ).map( function ( k ) { return groups[ k ]; } );
+                    list.sort( function ( x, y ) { return y.count - x.count; } );
+                    var max = list.length ? list[ 0 ].count : 0;
+                    var rowsHtml = list.map( function ( g ) {
+                        var w = max ? Math.max( 2, Math.round( ( g.count / max ) * 160 ) ) : 2;
+                        return '<tr><td>' + esc( g.label ) + '</td>' +
+                            '<td class="bokun-andash__num"><span class="bokun-andash__bar" style="width:' + w + 'px"></span>' + fmtInt( g.count ) + '</td>' +
+                            '<td class="bokun-andash__num">' + fmtInt( g.parts ) + '</td>' +
+                            '<td class="bokun-andash__num">' + fmtMoney( g.amount ) + '</td></tr>';
+                    } ).join( '' );
+                    root.querySelector( '[data-breakdown]' ).innerHTML =
+                        '<table><thead><tr><th>' + ( DIM_LABELS[ key ] || '<?php echo esc_js( __( 'Group', 'BOKUN_txt_domain' ) ); ?>' ) +
+                        '</th><th class="bokun-andash__num"><?php echo esc_js( __( 'Bookings', 'BOKUN_txt_domain' ) ); ?></th>' +
+                        '<th class="bokun-andash__num"><?php echo esc_js( __( 'Participants', 'BOKUN_txt_domain' ) ); ?></th>' +
+                        '<th class="bokun-andash__num"><?php echo esc_js( __( 'Amount', 'BOKUN_txt_domain' ) ); ?></th></tr></thead><tbody>' +
+                        ( rowsHtml || '<tr><td colspan="4">—</td></tr>' ) + '</tbody></table>';
+                }
+
+                var DETAIL_COLS = [
+                    [ 'created_datetime', '<?php echo esc_js( __( 'Created', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'travel_datetime', '<?php echo esc_js( __( 'Travel', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'confirmation_code', '<?php echo esc_js( __( 'Confirmation', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'product_title', '<?php echo esc_js( __( 'Product', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'product_option', '<?php echo esc_js( __( 'Option', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'result', '<?php echo esc_js( __( 'Result', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'payment_method', '<?php echo esc_js( __( 'Payment', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ '__parts', '<?php echo esc_js( __( 'Pax', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'price_amount', '<?php echo esc_js( __( 'Amount', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'currency', '<?php echo esc_js( __( 'Cur', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'channel_title', '<?php echo esc_js( __( 'Channel', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'seller_title', '<?php echo esc_js( __( 'Seller', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'vendor_title', '<?php echo esc_js( __( 'Vendor', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'pb_status', '<?php echo esc_js( __( 'Status', 'BOKUN_txt_domain' ) ); ?>' ],
+                    [ 'language', '<?php echo esc_js( __( 'Lang', 'BOKUN_txt_domain' ) ); ?>' ]
+                ];
+                var DETAIL_CAP = 300;
+
+                function cell( r, key ) {
+                    if ( key === '__parts' ) { return fmtInt( parts( r ) ); }
+                    if ( key === 'price_amount' ) { var a = num( r.price_amount ); return a ? fmtMoney( a ) : ''; }
+                    return esc( r[ key ] );
+                }
+
+                function renderDetail( data ) {
+                    var head = '<thead><tr>' + DETAIL_COLS.map( function ( c ) { return '<th>' + c[ 1 ] + '</th>'; } ).join( '' ) + '</tr></thead>';
+                    var slice = data.slice( 0, DETAIL_CAP );
+                    var body = slice.map( function ( r ) {
+                        return '<tr>' + DETAIL_COLS.map( function ( c ) {
+                            var cls = ( c[ 0 ] === 'price_amount' || c[ 0 ] === '__parts' ) ? ' class="bokun-andash__num"' : '';
+                            return '<td' + cls + '>' + cell( r, c[ 0 ] ).replace( /</g, '&lt;' ) + '</td>';
+                        } ).join( '' ) + '</tr>';
+                    } ).join( '' );
+                    root.querySelector( '[data-detail]' ).innerHTML = '<table>' + head + '<tbody>' + ( body || '<tr><td>—</td></tr>' ) + '</tbody></table>';
+                    var countEl = root.querySelector( '[data-detail-count]' );
+                    countEl.textContent = data.length > DETAIL_CAP ? ( '(' + fmtInt( DETAIL_CAP ) + ' / ' + fmtInt( data.length ) + ')' ) : ( '(' + fmtInt( data.length ) + ')' );
+                }
+
+                function exportCsv( data ) {
+                    if ( ! data.length ) { return; }
+                    var cols = Object.keys( data[ 0 ] );
+                    var lines = [ cols.join( ',' ) ];
+                    data.forEach( function ( r ) {
+                        lines.push( cols.map( function ( k ) {
+                            var v = ( r[ k ] === null || r[ k ] === undefined ) ? '' : String( r[ k ] );
+                            return '"' + v.replace( /"/g, '""' ) + '"';
+                        } ).join( ',' ) );
+                    } );
+                    var blob = new Blob( [ lines.join( '\n' ) ], { type: 'text/csv;charset=utf-8;' } );
+                    var a = document.createElement( 'a' );
+                    a.href = URL.createObjectURL( blob );
+                    a.download = 'bokun-analytics.csv';
+                    document.body.appendChild( a ); a.click(); document.body.removeChild( a );
+                }
+
+                var lastFiltered = ROWS;
+
+                function recompute() {
+                    var f = currentFilters();
+                    lastFiltered = ROWS.filter( function ( r ) { return matches( r, f ); } );
+                    renderKpis( lastFiltered );
+                    renderBreakdown( lastFiltered );
+                    renderDetail( lastFiltered );
+                }
+
+                root.querySelectorAll( '[data-filters] input, [data-filters] select' ).forEach( function ( el ) {
+                    el.addEventListener( 'input', recompute );
+                    el.addEventListener( 'change', recompute );
+                } );
+                root.querySelector( '[data-groupby]' ).addEventListener( 'change', function () { renderBreakdown( lastFiltered ); } );
+                root.querySelector( '[data-reset]' ).addEventListener( 'click', function () {
+                    root.querySelectorAll( '[data-filters] input' ).forEach( function ( el ) { el.value = ''; } );
+                    root.querySelectorAll( '[data-filters] select' ).forEach( function ( el ) { el.value = ''; } );
+                    recompute();
+                } );
+                root.querySelector( '[data-export]' ).addEventListener( 'click', function () { exportCsv( lastFiltered ); } );
+
+                // Defer first render until the tab is shown (saves work when the
+                // analytics tab is never opened), but render now if already visible.
+                function init() { if ( started ) { return; } started = true; recompute(); }
+                root.closest( '[data-bokun-tabs]' ) && ( root.closest( '[data-bokun-tabs]' ).bokunAnalyticsInit = init );
+                var panel = root.closest( '[data-tab-panel]' );
+                if ( ! panel || ! panel.hidden ) { init(); }
+            } )();
+            </script>
+            <?php
+            return ob_get_clean();
+        }
 
         function bokun_display_settings( ) {
             if( file_exists( BOKUN_INCLUDES_DIR . "bokun_shortcode.view.php" ) ) {
