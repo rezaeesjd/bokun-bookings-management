@@ -63,6 +63,11 @@ net_revenue = gross_amount − (net_price × participants)
 - `net_price` is per person; `participants` = adult + child + infant.
 - It is only defined when the line has a gross amount **and** its product is in
   the partners catalog; otherwise leave it null (don't coerce to 0 per row).
+- The catalog join is best-effort: match the booking's `product_id`, then its
+  `product_external_id`, then an exact normalized title — because channel
+  (e.g. Viator) bookings may carry a different id or title casing than the
+  catalog. The Analytics Data admin screen shows a catalog-match % and a
+  sample of unmatched booking products so a bad/partial catalog is visible.
 
 Revenue and net-revenue are money, so they are **aggregated in a single
 currency** — the most common one in the filtered set (`revCur`). Rows in other

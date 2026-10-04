@@ -40,6 +40,43 @@ if ( ! empty( $pp_last_sync ) ) {
     }
 }
 
+// Catalog-match coverage: how many distinct booking products join to a
+// partners-products row (by product id, external id, or exact title). Mirrors
+// the dashboard join so an operator can see whether net revenue will populate.
+$pp_match = array(
+    'total'     => 0,
+    'matched'   => 0,
+    'unmatched' => array(),
+);
+if ( $pp_available && $pp_count > 0 && function_exists( 'bokun_partners_products_get_map' ) && function_exists( 'bokun_analytics_get_rows' ) ) {
+    $pp_map      = bokun_partners_products_get_map();
+    $pp_by_title = array();
+    foreach ( $pp_map as $pp_e ) {
+        if ( ! empty( $pp_e['title'] ) ) {
+            $pp_by_title[ strtolower( trim( preg_replace( '/\s+/', ' ', $pp_e['title'] ) ) ) ] = true;
+        }
+    }
+    $pp_seen = array();
+    foreach ( bokun_analytics_get_rows() as $pp_row ) {
+        $pp_pid = (string) ( $pp_row['product_id'] ?? '' );
+        if ( '' === $pp_pid || isset( $pp_seen[ $pp_pid ] ) ) {
+            continue;
+        }
+        $pp_seen[ $pp_pid ] = true;
+        $pp_match['total']++;
+        $pp_ext   = (string) ( $pp_row['product_external_id'] ?? '' );
+        $pp_title = strtolower( trim( preg_replace( '/\s+/', ' ', (string) ( $pp_row['product_title'] ?? '' ) ) ) );
+        $pp_hit   = isset( $pp_map[ $pp_pid ] )
+            || ( '' !== $pp_ext && isset( $pp_map[ $pp_ext ] ) )
+            || ( '' !== $pp_title && isset( $pp_by_title[ $pp_title ] ) );
+        if ( $pp_hit ) {
+            $pp_match['matched']++;
+        } elseif ( count( $pp_match['unmatched'] ) < 10 ) {
+            $pp_match['unmatched'][] = array( $pp_pid, $pp_ext, (string) ( $pp_row['product_title'] ?? '' ) );
+        }
+    }
+}
+
 $last_built_display = '';
 if ( ! empty( $last_built ) ) {
     $last_built_ts = strtotime( $last_built . ' UTC' );
@@ -150,6 +187,43 @@ if ( $table_exists && $row_count > 0 ) {
         <span class="spinner" id="bokun-pp-spinner" style="float:none;margin-top:0;"></span>
         <span id="bokun-pp-message" style="margin-left:8px;"></span>
     </p>
+
+    <?php if ( $pp_match['total'] > 0 ) : ?>
+        <?php
+        $pp_pct = (int) round( ( $pp_match['matched'] / $pp_match['total'] ) * 100 );
+        ?>
+        <p>
+            <strong><?php esc_html_e( 'Catalog match:', 'BOKUN_text_domain' ); ?></strong>
+            <?php
+            printf(
+                /* translators: 1: matched products, 2: total products, 3: percent. */
+                esc_html__( '%1$d of %2$d booking products matched a catalog row (%3$d%%) — by product id, external id, or exact title. Net revenue only fills for matched products.', 'BOKUN_text_domain' ),
+                (int) $pp_match['matched'],
+                (int) $pp_match['total'],
+                (int) $pp_pct
+            );
+            ?>
+        </p>
+        <?php if ( ! empty( $pp_match['unmatched'] ) ) : ?>
+            <p class="description"><?php esc_html_e( 'Sample unmatched booking products (so the correct catalog key can be identified):', 'BOKUN_text_domain' ); ?></p>
+            <table class="widefat striped" style="max-width:900px;margin-bottom:16px;">
+                <thead><tr>
+                    <th><?php esc_html_e( 'Booking product_id', 'BOKUN_text_domain' ); ?></th>
+                    <th><?php esc_html_e( 'External id', 'BOKUN_text_domain' ); ?></th>
+                    <th><?php esc_html_e( 'Product title', 'BOKUN_text_domain' ); ?></th>
+                </tr></thead>
+                <tbody>
+                    <?php foreach ( $pp_match['unmatched'] as $pp_u ) : ?>
+                        <tr>
+                            <td><?php echo esc_html( $pp_u[0] ); ?></td>
+                            <td><?php echo esc_html( $pp_u[1] ); ?></td>
+                            <td><?php echo esc_html( $pp_u[2] ); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
+    <?php endif; ?>
 
     <script type="text/javascript">
     ( function () {

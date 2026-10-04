@@ -3292,8 +3292,22 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 // and net revenue (gross amount minus net price times participants).
                 function hasNum( v ) { return v !== null && v !== undefined && v !== '' && ! isNaN( parseFloat( v ) ); }
                 function isEmpty( v ) { return v === null || v === undefined || v === ''; }
+                // Index the catalog by normalized title as a fallback key, since
+                // booking product ids (e.g. Viator-channel) may not equal the
+                // catalog id and the catalog titles differ only in case/spacing.
+                function normTitle( v ) { return esc( v ).trim().toLowerCase().replace( /\s+/g, ' ' ); }
+                var PARTNERS_BY_TITLE = {};
+                Object.keys( PARTNERS ).forEach( function ( id ) { var e = PARTNERS[ id ]; if ( e && e.title ) { var k = normTitle( e.title ); if ( ! PARTNERS_BY_TITLE[ k ] ) { PARTNERS_BY_TITLE[ k ] = e; } } } );
+                // Join a booking to its catalog row: try the Bokun product id,
+                // then the external (channel) product id, then an exact title.
+                function partnerFor( r ) {
+                    return PARTNERS[ String( r.product_id ) ]
+                        || ( ! isEmpty( r.product_external_id ) ? PARTNERS[ String( r.product_external_id ) ] : null )
+                        || PARTNERS_BY_TITLE[ normTitle( r.product_title ) ]
+                        || {};
+                }
                 ROWS.forEach( function ( r ) {
-                    var p = PARTNERS[ String( r.product_id ) ] || {};
+                    var p = partnerFor( r );
                     r.net_price = ( p.net_price === undefined ) ? null : p.net_price;
                     r.commission = ( p.commission === undefined ) ? null : p.commission;
                     // Fall back to the catalog for city and partner page id so a
@@ -3428,7 +3442,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var chans = groupSum( data, function ( r ) { return esc( r.channel_title ); } ).filter( function ( g ) { return g.label !== '—'; } );
                     chans.sort( function ( a, b ) { return b.metric - a.metric; } );
                     var totalMetric = data.reduce( function ( s, r ) { return s + metricVal( r ); }, 0 );
-                    var lead = avgLead( data );
                     var full = 0, resulted = 0;
                     data.forEach( function ( r ) { var res = esc( r.result ); if ( res ) { resulted++; if ( res === 'full' ) { full++; } } } );
                     var cards = [];
@@ -3443,7 +3456,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var revRows = data.filter( function ( r ) { return esc( r.currency ) === pc.cur && num( r.price_amount ); } );
                     var totalRev = revRows.reduce( function ( s, r ) { return s + num( r.price_amount ); }, 0 );
                     if ( totalRev > 0 ) { cards.push( { label: L.avgValue, value: fmtMoney( revRows.length ? totalRev / revRows.length : 0 ) + ( pc.cur ? ' ' + pc.cur : '' ), sub: pc.multi ? L.mixedCur : '' } ); }
-                    if ( lead !== null ) { cards.push( { label: L.avgLead, value: fmtInt( lead ) + ' ' + L.days } ); }
                     if ( resulted ) { cards.push( { label: L.fullRate, value: Math.round( ( full / resulted ) * 100 ) + '%', sub: fmtInt( full ) + ' / ' + fmtInt( resulted ) } ); }
                     root.querySelector( '[data-insights]' ).innerHTML = cards.map( function ( c ) {
                         return '<div class="bokun-andash__insight"><div class="bokun-andash__insight-label">' + escHtml( c.label ) + '</div><div class="bokun-andash__insight-value">' + escHtml( c.value ) + '</div>' + ( c.sub ? '<div class="bokun-andash__insight-sub">' + escHtml( c.sub ) + '</div>' : '' ) + '</div>';
