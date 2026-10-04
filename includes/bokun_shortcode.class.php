@@ -3086,14 +3086,16 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 <button type="button" class="bokun-andash__chip is-active" data-preset="0"><?php esc_html_e( 'All', 'BOKUN_txt_domain' ); ?></button>
                             </div>
                             <div class="bokun-andash__side-row bokun-andash__dates">
-                                <label><?php esc_html_e( 'Created', 'BOKUN_txt_domain' ); ?>
-                                    <input type="date" data-f-date="created_from" />
-                                    <input type="date" data-f-date="created_to" />
-                                </label>
-                                <label><?php esc_html_e( 'Travel', 'BOKUN_txt_domain' ); ?>
-                                    <input type="date" data-f-date="travel_from" />
-                                    <input type="date" data-f-date="travel_to" />
-                                </label>
+                                <div class="bokun-andash__daterow">
+                                    <span class="bokun-andash__daterow-label"><?php esc_html_e( 'Created', 'BOKUN_txt_domain' ); ?></span>
+                                    <input type="date" data-f-date="created_from" aria-label="<?php esc_attr_e( 'Created from', 'BOKUN_txt_domain' ); ?>" />
+                                    <input type="date" data-f-date="created_to" aria-label="<?php esc_attr_e( 'Created to', 'BOKUN_txt_domain' ); ?>" />
+                                </div>
+                                <div class="bokun-andash__daterow">
+                                    <span class="bokun-andash__daterow-label"><?php esc_html_e( 'Travel', 'BOKUN_txt_domain' ); ?></span>
+                                    <input type="date" data-f-date="travel_from" aria-label="<?php esc_attr_e( 'Travel from', 'BOKUN_txt_domain' ); ?>" />
+                                    <input type="date" data-f-date="travel_to" aria-label="<?php esc_attr_e( 'Travel to', 'BOKUN_txt_domain' ); ?>" />
+                                </div>
                             </div>
                             <?php foreach ( $facets as $key => $label ) : ?>
                                 <div class="bokun-andash__facet" data-facet="<?php echo esc_attr( $key ); ?>">
@@ -3205,9 +3207,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash__presets { display:flex; gap:4px; }
                 .bokun-andash__chip, .bokun-andash__seg { appearance:none; background:transparent; border:1px solid var(--an-line); border-radius:999px; padding:6px 12px; font-size:13px; font-weight:600; color:var(--an-ink-2); cursor:pointer; }
                 .bokun-andash__chip.is-active, .bokun-andash__seg.is-active { background:var(--an-blue); color:#fff; border-color:var(--an-blue); }
-                .bokun-andash__dates label { display:block; font-size:12px; font-weight:600; color:var(--an-ink-2); margin-bottom:6px; }
-                .bokun-andash__dates input { width:49%; }
+                .bokun-andash__dates { display:flex; flex-direction:column; gap:10px; }
+                .bokun-andash__daterow { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+                .bokun-andash__daterow-label { grid-column:1 / -1; font-size:12px; font-weight:600; color:var(--an-ink-2); }
+                .bokun-andash__daterow input { width:100%; min-width:0; }
                 .bokun-andash__facet { border-top:1px solid var(--an-line); padding-top:10px; margin-top:10px; }
+                .bokun-andash__facet[hidden] { display:none; }
                 .bokun-andash__facet h4 { margin:0 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--an-ink-2); }
                 .bokun-andash__facet-items { display:flex; flex-direction:column; gap:3px; max-height:180px; overflow:auto; }
                 .bokun-andash__item { display:flex; justify-content:space-between; gap:8px; align-items:center; padding:4px 8px; border-radius:6px; font-size:13px; cursor:pointer; border:1px solid transparent; }
@@ -3348,11 +3353,17 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     return Object.keys( m ).map( function ( v ) { return { v: v, n: m[ v ] }; } ).sort( function ( a, b ) { return b.n - a.n || a.v.localeCompare( b.v ); } );
                 }
 
-                // Build sidebar facet item lists.
+                // Build sidebar facet item lists. Facets with no values (e.g.
+                // partner page / city before the catalog join resolves) are
+                // hidden so the sidebar stays tidy instead of showing empty
+                // headers.
                 FACET_KEYS.forEach( function ( key ) {
-                    var wrap = root.querySelector( '.bokun-andash__facet[data-facet="' + key + '"] [data-facet-items]' );
+                    var facetEl = root.querySelector( '.bokun-andash__facet[data-facet="' + key + '"]' );
+                    var wrap = facetEl ? facetEl.querySelector( '[data-facet-items]' ) : null;
                     if ( ! wrap ) { return; }
-                    uniqueCounts( key ).forEach( function ( o ) {
+                    var values = uniqueCounts( key );
+                    if ( ! values.length ) { facetEl.hidden = true; return; }
+                    values.forEach( function ( o ) {
                         var el = document.createElement( 'div' );
                         el.className = 'bokun-andash__item';
                         el.setAttribute( 'data-val', o.v );
