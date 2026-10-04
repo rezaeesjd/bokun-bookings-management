@@ -1006,6 +1006,11 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
             update_post_meta($post_id, 'inclusions_clean', $inclusions_clean);
         }
 
+        // Keep the analytics source table in sync with this booking.
+        if (function_exists('bokun_analytics_sync_booking')) {
+            bokun_analytics_sync_booking($post_id);
+        }
+
         bokun_set_import_progress_state($context, array(
             'status'    => 'running',
             'total'     => $stats['total'],
@@ -1018,6 +1023,12 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
     }
 
     $stats['processed'] = $stats['created'] + $stats['updated'] + $stats['skipped'];
+
+    // Drop analytics rows whose creation date has aged out of the window; the
+    // forward-looking import range never re-syncs past bookings on its own.
+    if (function_exists('bokun_analytics_prune_window')) {
+        bokun_analytics_prune_window();
+    }
 
     bokun_set_import_progress_state($context, array(
         'status'    => 'completed',
@@ -3354,6 +3365,13 @@ function update_booking_status() {
             }
 
             bokun_record_booking_history($post_id, $booking_id, $type, $checked);
+
+            // Result/payment columns in the analytics source are snapshots of
+            // the booking_status taxonomy, so re-sync the row after a change.
+            if (function_exists('bokun_analytics_sync_booking')) {
+                bokun_analytics_sync_booking($post_id);
+            }
+
             $updated = true;
         }
         wp_reset_postdata();

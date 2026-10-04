@@ -18,6 +18,8 @@ Bokun Bookings Management is a WordPress plugin that lets tour and activity oper
 │   ├── bokun_shortcode.class.php   # Front-end shortcodes
 │   ├── bokun_settings.view.php     # Settings screen markup
 │   ├── bokun_booking_history.view.php # Booking history admin page
+│   ├── bokun-analytics.php         # Analytics source table & sync layer
+│   ├── bokun_analytics_source.view.php # Analytics data admin page
 │   └── class-bokun-github-sync.php # GitHub auto-sync (self-updater)
 ├── assets/
 │   ├── css/                        # Admin/front styles
@@ -101,6 +103,15 @@ For public repositories no token is required. For private repositories, supply a
 
 The built-in **Booking History** submenu displays the latest entries from the `wp_bokun_booking_history` table, grouped by action, status, actor, and source. Users can filter via collapsible multi-select controls, search within the table, and download the visible dataset as CSV. The view gracefully handles missing tables (e.g., when the plugin has not been activated yet). 【F:includes/bokun_booking_history.view.php†L1-L118】
 
+## Analytics data source
+
+The **Analytics Data** submenu prepares the flat source dataset that powers the analytics dashboard. Rather than querying ~25 fields across post meta and taxonomies at render time, the plugin denormalizes each booking into a single row in a dedicated `wp_bokun_analytics_source` table, keeping only bookings created within a trailing window (three months by default). 【F:includes/bokun-analytics.php†L1-L120】
+
+- **One row per booking.** Columns cover channel/seller/vendor identifiers, product title and option, travel and creation datetimes (stored in GMT), participant counts split into adult/child/infant, language, currency, price note, product/booking status, confirmation codes, phone prefix, and the dashboard-managed **result** (full/partial/not-available) and **payment method** (Amex/PayPal/Other) read from the `booking_status` taxonomy.
+- **Kept in sync automatically.** Every import upserts the booking's row and drops any that fall outside the window, so the table tracks the source bookings without a separate job. 【F:includes/bokun-bookings-manager.php†L1000-L1012】
+- **Manual rebuild.** The admin screen shows the record count, window length, and last-rebuilt time, with a **Rebuild now** button (AJAX, `manage_options` + nonce protected) that truncates and repopulates the table for the current window. 【F:includes/bokun_analytics_source.view.php†L1-L140】
+- **Schema upgrades.** The table is created on activation and re-checked on each admin request against `BOKUN_ANALYTICS_DB_VERSION`, so installs upgraded from an older build pick it up without re-activating. 【F:includes/bokun-analytics.php†L120-L150】
+
 ## Hooks & filters
 
 Use these extension points to customize behavior without editing core files:
@@ -108,6 +119,7 @@ Use these extension points to customize behavior without editing core files:
 - `bokun_booking_items_per_page` – Change the number of bookings pulled per API page (default 50).
 - `bokun_booking_request_timeout` – Adjust the cURL timeout in seconds (default 300).
 - `bokun_booking_history_page_limit` – Control how many booking history rows appear on the admin screen (default 100). 【F:includes/bokun_booking_history.view.php†L19-L45】
+- `bokun_analytics_window_months` – Change the trailing window (in months, by booking creation date) retained in the analytics source table (default 3). 【F:includes/bokun-analytics.php†L52-L60】
 - `bokun_txt_domain` action – Fired after the text domain loads so you can register additional strings. 【F:bokun-bookings-management.php†L248-L256】
 
 ## Development workflow
@@ -121,6 +133,7 @@ Use these extension points to customize behavior without editing core files:
 
 - **“Error: No API credentials available for this import.”** — Ensure at least one credential pair is saved; legacy single-key fields are deprecated and automatically migrated the next time you visit the settings screen. 【F:includes/bokun_settings.class.php†L117-L166】
 - **Booking history table missing** — Reactivate the plugin to trigger `dbDelta` and recreate the `wp_bokun_booking_history` table. 【F:bokun-bookings-management.php†L229-L279】
+- **Analytics source empty or table missing** — Open **Analytics Data** and click **Rebuild now** to create and repopulate `wp_bokun_analytics_source`. Only bookings whose creation date falls inside the window appear; adjust the window with the `bokun_analytics_window_months` filter.
 - **Imports time out** — Lower the date range in `bokun_fetch_bookings()` or add filters to reduce the payload size. Also confirm your server allows outbound HTTPS requests to `api.bokun.io`.
 
 ## License
