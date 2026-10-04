@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Schema version for the analytics source table. Bump when columns change so
  * installed sites re-run dbDelta on the next admin request.
  */
-define( 'BOKUN_ANALYTICS_DB_VERSION', '1.0.0' );
+define( 'BOKUN_ANALYTICS_DB_VERSION', '1.1.0' );
 
 /** Option key tracking the installed analytics schema version. */
 define( 'BOKUN_ANALYTICS_DB_VERSION_OPTION', 'bokun_analytics_db_version' );
@@ -111,6 +111,7 @@ function bokun_analytics_install_table() {
         language VARCHAR(50) NULL,
         pb_status VARCHAR(100) NULL,
         price_note TEXT NULL,
+        price_amount DECIMAL(14,2) NULL,
         product_confirmation_code VARCHAR(191) NULL,
         pb_channel_id VARCHAR(191) NULL,
         currency VARCHAR(10) NULL,
@@ -342,6 +343,59 @@ function bokun_analytics_count_participants( $post_id ) {
 }
 
 /**
+ * Best-effort extraction of a numeric monetary amount from the free-text price
+ * note (`productBookings_0_notes_1_body`).
+ *
+ * The note has no guaranteed format, so this pulls the last number that looks
+ * like a monetary value and normalizes thousands/decimal separators. Returns
+ * null when no number is found, so totals simply skip unparseable notes.
+ *
+ * @param string|null $note Raw note text.
+ * @return float|null
+ */
+function bokun_analytics_parse_amount( $note ) {
+    if ( null === $note || '' === $note ) {
+        return null;
+    }
+
+    // Grab number-like tokens such as 1,234.50 / 1.234,50 / 120 / 99.00.
+    if ( ! preg_match_all( '/\d[\d.,\s]*\d|\d/', (string) $note, $matches ) || empty( $matches[0] ) ) {
+        return null;
+    }
+
+    // Prefer the last token (totals usually appear at the end of the note).
+    $raw = trim( end( $matches[0] ) );
+    $raw = preg_replace( '/\s+/', '', $raw );
+
+    if ( '' === $raw ) {
+        return null;
+    }
+
+    $has_dot   = false !== strpos( $raw, '.' );
+    $has_comma = false !== strpos( $raw, ',' );
+
+    if ( $has_dot && $has_comma ) {
+        // The right-most separator is the decimal separator.
+        if ( strrpos( $raw, ',' ) > strrpos( $raw, '.' ) ) {
+            $raw = str_replace( '.', '', $raw ); // dots are thousands
+            $raw = str_replace( ',', '.', $raw );
+        } else {
+            $raw = str_replace( ',', '', $raw ); // commas are thousands
+        }
+    } elseif ( $has_comma ) {
+        // Treat a comma with exactly two trailing digits as a decimal point;
+        // otherwise it is a thousands separator.
+        if ( preg_match( '/,\d{2}$/', $raw ) ) {
+            $raw = str_replace( ',', '.', $raw );
+        } else {
+            $raw = str_replace( ',', '', $raw );
+        }
+    }
+
+    return is_numeric( $raw ) ? round( (float) $raw, 2 ) : null;
+}
+
+/**
  * Build the analytics source row for a booking post.
  *
  * @param int $post_id Booking post ID.
@@ -356,6 +410,7 @@ function bokun_analytics_build_row( $post_id ) {
     }
 
     $participants = bokun_analytics_count_participants( $post_id );
+    $price_note   = bokun_analytics_meta( $post_id, array( 'productBookings_0_notes_1_body' ) );
 
     // Travel datetime: derive from the raw Bokun start value, which carries an
     // absolute instant. The importer stores `post_date` as the UTC wall-clock
@@ -396,7 +451,8 @@ function bokun_analytics_build_row( $post_id ) {
         'infant_participants'       => $participants['infant'],
         'language'                  => bokun_analytics_meta( $post_id, array( 'language' ) ),
         'pb_status'                 => bokun_analytics_meta( $post_id, array( 'productBookings_0_status', '_booking_status_origin' ) ),
-        'price_note'                => bokun_analytics_meta( $post_id, array( 'productBookings_0_notes_1_body' ) ),
+        'price_note'                => $price_note,
+        'price_amount'              => bokun_analytics_parse_amount( $price_note ),
         'product_confirmation_code' => bokun_analytics_meta( $post_id, array( 'productBookings_0_productConfirmationCode' ) ),
         'pb_channel_id'             => bokun_analytics_meta( $post_id, array( 'productBookings_0_channelId' ) ),
         'currency'                  => bokun_analytics_meta( $post_id, array( 'currency' ) ),
@@ -559,6 +615,28 @@ function bokun_analytics_prune_window() {
 // Prune aged-out rows after every scheduled import, including runs that fetch
 // no bookings (which skip the save path entirely).
 add_action( BOKUN_DAILY_IMPORT_HOOK, 'bokun_analytics_prune_window', 5 );
+
+/**
+ * Fetch every analytics source row, newest booking first.
+ *
+ * Intended for the analytics dashboard, which filters and aggregates the rows
+ * client-side. The dataset is bounded to the retention window so it stays a
+ * reasonable size to hand to the browser.
+ *
+ * @return array[] List of column => value maps.
+ */
+function bokun_analytics_get_rows() {
+    global $wpdb;
+
+    $table_name = bokun_analytics_get_table_name();
+
+    $rows = $wpdb->get_results(
+        "SELECT * FROM {$table_name} ORDER BY created_datetime DESC", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        ARRAY_A
+    );
+
+    return is_array( $rows ) ? $rows : array();
+}
 
 /**
  * Number of rows currently in the analytics source table.

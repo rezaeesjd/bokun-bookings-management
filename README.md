@@ -97,7 +97,7 @@ For public repositories no token is required. For private repositories, supply a
 |-----------|---------|------------|
 | `[bokun_fetch_button]` | Renders a primary button that triggers the AJAX importer plus an optional progress bar. Use this on the front end when you want staff to pull Bokun reservations without visiting wp-admin. | None |
 | `[bokun_booking_history]` | Outputs the booking history DataTable anywhere (front end or admin). | `limit` (default `100`), `capability` (default `manage_options`), `export` (slug used for the CSV filename). Users lacking the capability see a friendly notice. 【F:includes/bokun_shortcode.class.php†L95-L152】 |
-| `[bokun_booking_dashboard]` | Displays the booking dashboard UI (cards, filters, etc.). The plugin can append it automatically to a chosen page from the settings panel. | None |
+| `[bokun_booking_dashboard]` | Displays the booking dashboard UI in two tabs — **Bookings** (cards, filters, etc.) and **Analytics** (KPIs, per-column filters, breakdown, CSV export). The plugin can append it automatically to a chosen page from the settings panel. | None |
 
 ## Admin booking history
 
@@ -107,10 +107,21 @@ The built-in **Booking History** submenu displays the latest entries from the `w
 
 The **Analytics Data** submenu prepares the flat source dataset that powers the analytics dashboard. Rather than querying ~25 fields across post meta and taxonomies at render time, the plugin denormalizes each booking into a single row in a dedicated `wp_bokun_analytics_source` table, keeping only bookings created within a trailing window (three months by default). 【F:includes/bokun-analytics.php†L1-L120】
 
-- **One row per booking.** Columns cover channel/seller/vendor identifiers, product title and option, travel and creation datetimes (stored in GMT), participant counts split into adult/child/infant, language, currency, price note, product/booking status, confirmation codes, phone prefix, and the dashboard-managed **result** (full/partial/not-available) and **payment method** (Amex/PayPal/Other) read from the `booking_status` taxonomy.
-- **Kept in sync automatically.** Every import upserts the booking's row and drops any that fall outside the window, so the table tracks the source bookings without a separate job. 【F:includes/bokun-bookings-manager.php†L1000-L1012】
+- **One row per booking.** Columns cover channel/seller/vendor identifiers, product title and option, travel and creation datetimes (stored in GMT), participant counts split into adult/child/infant, language, currency, price note plus a parsed numeric **amount**, product/booking status, confirmation codes, phone prefix, and the dashboard-managed **result** (full/partial/not-available) and **payment method** (Amex/PayPal/Other) read from the `booking_status` taxonomy.
+- **Kept in sync automatically.** Every import upserts the booking's row and drops any that fall outside the window; dashboard status changes re-sync the affected row, and a global prune runs on the import path, so the table tracks the source bookings without a separate job. 【F:includes/bokun-bookings-manager.php†L1000-L1012】
 - **Manual rebuild.** The admin screen shows the record count, window length, and last-rebuilt time, with a **Rebuild now** button (AJAX, `manage_options` + nonce protected) that truncates and repopulates the table for the current window. 【F:includes/bokun_analytics_source.view.php†L1-L140】
 - **Schema upgrades.** The table is created on activation and re-checked on each admin request against `BOKUN_ANALYTICS_DB_VERSION`, so installs upgraded from an older build pick it up without re-activating. 【F:includes/bokun-analytics.php†L120-L150】
+
+### Analytics dashboard tab
+
+The `[bokun_booking_dashboard]` output is split into two tabs: **Bookings** (the existing dashboard) and **Analytics**. The analytics tab reads the `wp_bokun_analytics_source` rows and renders, entirely client-side for instant interactivity:
+
+- **KPI tiles** — total bookings, total participants (with adult/child/infant split), total amount per currency, and distinct product/channel counts.
+- **Filters for every column** — a free-text search plus dropdowns for channel, channel type, seller, vendor, product, option, result, payment method, status, language and currency, and created/travel date ranges.
+- **Group-by breakdown** — counts, participants and amounts grouped by any dimension (or by created/travel month), with inline bars.
+- **Detail table + CSV export** of the filtered rows.
+
+The **amount** is parsed best-effort from the free-text price note (`productBookings_0_notes_1_body`); the raw note is retained for reference. 【F:includes/bokun_shortcode.class.php†L2888-L3000】
 
 ## Hooks & filters
 

@@ -53,6 +53,7 @@ $preview_columns = array(
     'seller_title'        => __( 'Seller', 'BOKUN_text_domain' ),
     'vendor_title'        => __( 'Vendor', 'BOKUN_text_domain' ),
     'pb_status'           => __( 'Status', 'BOKUN_text_domain' ),
+    'price_amount'        => __( 'Amount', 'BOKUN_text_domain' ),
     'price_note'          => __( 'Price note', 'BOKUN_text_domain' ),
 );
 
