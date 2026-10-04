@@ -3290,15 +3290,22 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 // Join each booking to the partners catalog and precompute net cost
                 // and net revenue (gross amount minus net price times participants).
+                function hasNum( v ) { return v !== null && v !== undefined && v !== '' && ! isNaN( parseFloat( v ) ); }
+                function isEmpty( v ) { return v === null || v === undefined || v === ''; }
                 ROWS.forEach( function ( r ) {
                     var p = PARTNERS[ String( r.product_id ) ] || {};
                     r.net_price = ( p.net_price === undefined ) ? null : p.net_price;
                     r.commission = ( p.commission === undefined ) ? null : p.commission;
-                    if ( ( r.departure_city === undefined || r.departure_city === null || r.departure_city === '' ) && p.departure_city ) { r.departure_city = p.departure_city; }
+                    // Fall back to the catalog for city and partner page id so a
+                    // partners-products rebuild is reflected without a full
+                    // analytics rebuild; the source row wins when it has a value.
+                    if ( isEmpty( r.departure_city ) && p.departure_city ) { r.departure_city = p.departure_city; }
+                    if ( isEmpty( r.partner_page_id ) && p.partner_page_id ) { r.partner_page_id = p.partner_page_id; }
                     var pax = parts( r );
                     r._net_cost = ( r.net_price !== null ) ? ( r.net_price * pax ) : null;
-                    var gross = num( r.price_amount );
-                    r._net_revenue = ( gross && r.net_price !== null ) ? ( gross - r.net_price * pax ) : null;
+                    // A numeric zero gross (complimentary/fully-discounted) is a
+                    // real value, so test presence, not truthiness.
+                    r._net_revenue = ( hasNum( r.price_amount ) && r.net_price !== null ) ? ( num( r.price_amount ) - r.net_price * pax ) : null;
                 } );
 
                 function primaryCurrency( data ) {
@@ -3376,9 +3383,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var g = {};
                     data.forEach( function ( r ) {
                         var k = keyFn( r ); if ( k === '' || k === null || k === undefined ) { k = '—'; }
-                        if ( ! g[ k ] ) { g[ k ] = { label: String( k ), count: 0, parts: 0, amount: 0, netrev: 0, metric: 0 }; }
+                        if ( ! g[ k ] ) { g[ k ] = { label: String( k ), count: 0, parts: 0, amount: 0, netrev: 0, netrevN: 0, metric: 0 }; }
                         g[ k ].count++; g[ k ].parts += parts( r ); g[ k ].amount += num( r.price_amount );
-                        if ( r._net_revenue !== null && esc( r.currency ) === revCur ) { g[ k ].netrev += r._net_revenue; }
+                        if ( r._net_revenue !== null && esc( r.currency ) === revCur ) { g[ k ].netrev += r._net_revenue; g[ k ].netrevN++; }
                         g[ k ].metric += metricVal( r );
                     } );
                     return Object.keys( g ).map( function ( k ) { return g[ k ]; } );
@@ -3389,11 +3396,15 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     return n ? ( tot / n ) : null;
                 }
 
+                // `max` is the scaling denominator; callers pass the largest
+                // ABSOLUTE metric so negative values (e.g. loss-making net
+                // revenue) size by magnitude and are coloured red rather than
+                // clamped to a tiny positive bar.
                 function barList( items, max, colorFn, valFn ) {
                     if ( ! items.length ) { return '<p class="bokun-andash__insight-sub">' + escHtml( L.noData ) + '</p>'; }
                     return '<div class="bokun-andash__barlist">' + items.map( function ( g ) {
-                        var w = max ? Math.max( 2, Math.round( ( g.metric / max ) * 100 ) ) : 2;
-                        var color = colorFn ? colorFn( g ) : 'var(--an-blue)';
+                        var w = max ? Math.max( 2, Math.round( ( Math.abs( g.metric ) / max ) * 100 ) ) : 2;
+                        var color = colorFn ? colorFn( g ) : ( g.metric < 0 ? 'var(--an-crit)' : 'var(--an-blue)' );
                         return '<div class="bokun-andash__barrow"><span class="lab" title="' + escHtml( g.label ) + '">' + escHtml( g.label ) +
                             '</span><span class="val">' + ( valFn ? valFn( g ) : fmtMetric( g.metric ) ) + '</span>' +
                             '<span class="bokun-andash__track"><span class="bokun-andash__fill" style="width:' + w + '%;background:' + color + '"></span></span></div>';
@@ -3404,7 +3415,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     list.sort( function ( a, b ) { return b.metric - a.metric; } );
                     var top = list.slice( 0, 8 );
                     if ( list.length > 8 ) { top.push( { label: L.other, metric: list.slice( 8 ).reduce( function ( s, g ) { return s + g.metric; }, 0 ) } ); }
-                    var max = top.reduce( function ( m, g ) { return Math.max( m, g.metric ); }, 0 );
+                    var max = top.reduce( function ( m, g ) { return Math.max( m, Math.abs( g.metric ) ); }, 0 );
                     root.querySelector( el ).innerHTML = barList( top, max, null, null );
                 }
 
@@ -3462,21 +3473,29 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var keys = Object.keys( buckets ).sort();
                     if ( keys.length === 0 ) { el.innerHTML = '<p class="bokun-andash__insight-sub">' + escHtml( L.noData ) + '</p>'; return; }
                     var vals = keys.map( function ( k ) { return buckets[ k ]; } );
-                    var maxV = Math.max.apply( null, vals ) || 1, W = 800, H = 240, padL = 48, padB = 26, padT = 12, padR = 12;
+                    var W = 800, H = 240, padL = 48, padB = 26, padT = 12, padR = 12;
                     var innerW = W - padL - padR, innerH = H - padT - padB;
+                    // Signed scale with a zero baseline so net-revenue losses
+                    // (negative) render below zero instead of off-canvas.
+                    var top = Math.max.apply( null, vals.concat( [ 0 ] ) );
+                    var bot = Math.min.apply( null, vals.concat( [ 0 ] ) );
+                    if ( top === bot ) { top = bot + 1; }
+                    var span = top - bot;
                     var x = function ( idx ) { return padL + ( keys.length === 1 ? innerW / 2 : ( idx / ( keys.length - 1 ) ) * innerW ); };
-                    var y = function ( v ) { return padT + innerH - ( maxV ? ( v / maxV ) * innerH : 0 ); };
+                    var y = function ( v ) { return padT + innerH - ( ( v - bot ) / span ) * innerH; };
+                    var y0 = y( 0 );
                     var pts = keys.map( function ( k, idx ) { return [ x( idx ), y( buckets[ k ] ) ]; } );
                     var line = pts.map( function ( p, idx ) { return ( idx ? 'L' : 'M' ) + p[ 0 ].toFixed( 1 ) + ' ' + p[ 1 ].toFixed( 1 ); } ).join( ' ' );
-                    var area = line + ' L' + x( keys.length - 1 ).toFixed( 1 ) + ' ' + ( padT + innerH ) + ' L' + x( 0 ).toFixed( 1 ) + ' ' + ( padT + innerH ) + ' Z';
+                    var area = line + ' L' + x( keys.length - 1 ).toFixed( 1 ) + ' ' + y0.toFixed( 1 ) + ' L' + x( 0 ).toFixed( 1 ) + ' ' + y0.toFixed( 1 ) + ' Z';
                     var grid = '', ticks = 4;
-                    for ( var g = 0; g <= ticks; g++ ) { var gv = ( maxV / ticks ) * g, gy = y( gv ); grid += '<line x1="' + padL + '" y1="' + gy.toFixed( 1 ) + '" x2="' + ( W - padR ) + '" y2="' + gy.toFixed( 1 ) + '" stroke="' + COL.line + '" stroke-width="1"/>'; grid += '<text x="' + ( padL - 6 ) + '" y="' + ( gy + 3 ).toFixed( 1 ) + '" text-anchor="end" font-size="10" fill="' + COL.ink2 + '">' + fmtInt( gv ) + '</text>'; }
+                    for ( var g = 0; g <= ticks; g++ ) { var gv = bot + ( span / ticks ) * g, gy = y( gv ); grid += '<line x1="' + padL + '" y1="' + gy.toFixed( 1 ) + '" x2="' + ( W - padR ) + '" y2="' + gy.toFixed( 1 ) + '" stroke="' + COL.line + '" stroke-width="1"/>'; grid += '<text x="' + ( padL - 6 ) + '" y="' + ( gy + 3 ).toFixed( 1 ) + '" text-anchor="end" font-size="10" fill="' + COL.ink2 + '">' + fmtInt( gv ) + '</text>'; }
+                    var zeroLine = ( bot < 0 ) ? '<line x1="' + padL + '" y1="' + y0.toFixed( 1 ) + '" x2="' + ( W - padR ) + '" y2="' + y0.toFixed( 1 ) + '" stroke="' + COL.ink2 + '" stroke-width="1"/>' : '';
                     var xlabels = '', step = Math.ceil( keys.length / 6 );
                     keys.forEach( function ( k, idx ) { if ( idx % step === 0 || idx === keys.length - 1 ) { xlabels += '<text x="' + x( idx ).toFixed( 1 ) + '" y="' + ( H - 8 ) + '" text-anchor="middle" font-size="10" fill="' + COL.ink2 + '">' + k.slice( 5 ) + '</text>'; } } );
                     var dots = pts.map( function ( p, idx ) { return '<circle cx="' + p[ 0 ].toFixed( 1 ) + '" cy="' + p[ 1 ].toFixed( 1 ) + '" r="3" fill="' + COL.blue + '" data-i="' + idx + '"/>'; } ).join( '' );
                     var hit = pts.map( function ( p, idx ) { var hw = innerW / keys.length; return '<rect x="' + ( p[ 0 ] - hw / 2 ).toFixed( 1 ) + '" y="' + padT + '" width="' + hw.toFixed( 1 ) + '" height="' + innerH + '" fill="transparent" data-hit="' + idx + '"/>'; } ).join( '' );
                     el.style.position = 'relative';
-                    el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + escHtml( L.trend ) + '">' + grid + '<path d="' + area + '" fill="' + COL.blueSoft + '" stroke="none"/><path d="' + line + '" fill="none" stroke="' + COL.blue + '" stroke-width="2"/><line class="an-cross" x1="0" y1="' + padT + '" x2="0" y2="' + ( padT + innerH ) + '" stroke="' + COL.blue + '" stroke-width="1" opacity="0"/>' + dots + xlabels + hit + '</svg><div class="bokun-andash__tip" data-tip></div>';
+                    el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + escHtml( L.trend ) + '">' + grid + zeroLine + '<path d="' + area + '" fill="' + COL.blueSoft + '" stroke="none"/><path d="' + line + '" fill="none" stroke="' + COL.blue + '" stroke-width="2"/><line class="an-cross" x1="0" y1="' + padT + '" x2="0" y2="' + ( padT + innerH ) + '" stroke="' + COL.blue + '" stroke-width="1" opacity="0"/>' + dots + xlabels + hit + '</svg><div class="bokun-andash__tip" data-tip></div>';
                     var svg = el.querySelector( 'svg' ), tip = el.querySelector( '[data-tip]' ), cross = el.querySelector( '.an-cross' );
                     svg.querySelectorAll( '[data-hit]' ).forEach( function ( rect ) {
                         rect.addEventListener( 'mousemove', function () { var idx = +rect.getAttribute( 'data-hit' ), px = x( idx ), py = y( buckets[ keys[ idx ] ] ); cross.setAttribute( 'x1', px ); cross.setAttribute( 'x2', px ); cross.setAttribute( 'opacity', '1' ); tip.style.left = ( ( px / W ) * el.clientWidth ) + 'px'; tip.style.top = ( ( py / H ) * el.clientHeight ) + 'px'; tip.style.opacity = '1'; tip.textContent = L.week + ' ' + keys[ idx ] + ': ' + fmtMetric( buckets[ keys[ idx ] ] ); } );
@@ -3537,8 +3556,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var totalCount = data.length || 1;
                     var rowsHtml = list.map( function ( g ) {
                         var share = Math.round( ( g.count / totalCount ) * 100 );
-                        var nr = g.netrev;
-                        return '<tr><td>' + escHtml( g.label ) + '</td><td class="bokun-andash__num">' + fmtInt( g.count ) + '</td><td class="bokun-andash__num">' + share + '%</td><td class="bokun-andash__num">' + fmtInt( g.parts ) + '</td><td class="bokun-andash__num">' + fmtMoney( g.amount ) + '</td><td class="bokun-andash__num' + ( nr < 0 ? ' bokun-andash__neg' : '' ) + '">' + fmtMoney( nr ) + '</td></tr>';
+                        // Distinguish "no computable net revenue" (no gross or no
+                        // catalog match) from a genuine 0.00, so missing data is
+                        // not shown as breakeven.
+                        var nrCell = g.netrevN ? fmtMoney( g.netrev ) : '—';
+                        var nrCls = ( g.netrevN && g.netrev < 0 ) ? ' bokun-andash__neg' : '';
+                        return '<tr><td>' + escHtml( g.label ) + '</td><td class="bokun-andash__num">' + fmtInt( g.count ) + '</td><td class="bokun-andash__num">' + share + '%</td><td class="bokun-andash__num">' + fmtInt( g.parts ) + '</td><td class="bokun-andash__num">' + fmtMoney( g.amount ) + '</td><td class="bokun-andash__num' + nrCls + '">' + nrCell + '</td></tr>';
                     } ).join( '' );
                     var GL = Object.assign( {}, GROUP_DIMS, { __created_month: 'Created month', __travel_month: 'Travel month' } );
                     root.querySelector( '[data-breakdown]' ).innerHTML = '<div class="bokun-andash__table-wrap"><table><thead><tr><th>' + escHtml( GL[ key ] || L.group ) + '</th><th class="bokun-andash__num">' + escHtml( L.bookings ) + '</th><th class="bokun-andash__num">' + escHtml( L.share ) + '</th><th class="bokun-andash__num">' + escHtml( L.participants ) + '</th><th class="bokun-andash__num">' + escHtml( L.amount ) + '</th><th class="bokun-andash__num">' + escHtml( L.netrev ) + '</th></tr></thead><tbody>' + ( rowsHtml || '<tr><td colspan="6">—</td></tr>' ) + '</tbody></table></div>';
