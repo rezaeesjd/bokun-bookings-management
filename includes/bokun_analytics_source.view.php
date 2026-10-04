@@ -40,36 +40,18 @@ if ( ! empty( $pp_last_sync ) ) {
     }
 }
 
-// Normalize a title the same way the dashboard JS does (lowercase + collapse
-// whitespace), Unicode-aware: mb_strtolower lowercases accented letters (e.g.
-// Ù) and Unicode spaces (including the non-breaking space present in some
-// catalog titles) are folded to a plain space — PHP's ASCII strtolower()/\s
-// would not, causing false "unmatched" rows the dashboard actually joins.
-if ( ! function_exists( 'bokun_pp_norm_title' ) ) {
-    function bokun_pp_norm_title( $s ) {
-        $s = (string) $s;
-        $s = preg_replace( '/[\x{00a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}\x{feff}]/u', ' ', $s );
-        $s = function_exists( 'mb_strtolower' ) ? mb_strtolower( $s, 'UTF-8' ) : strtolower( $s );
-        return trim( preg_replace( '/\s+/', ' ', $s ) );
-    }
-}
-
 // Catalog-match coverage: how many distinct booking products join to a
-// partners-products row (by product id, external id, or exact title). Mirrors
-// the dashboard join so an operator can see whether net revenue will populate.
+// partners-products row. The catalog is keyed by the partner page id (the
+// spreadsheet "ID"), and a booking's partner_page_id comes from its product
+// tag's partnerpageid term meta, so that id is the join key. Mirrors the
+// dashboard join so an operator can see whether net revenue will populate.
 $pp_match = array(
     'total'     => 0,
     'matched'   => 0,
     'unmatched' => array(),
 );
 if ( $pp_available && $pp_count > 0 && function_exists( 'bokun_partners_products_get_map' ) && function_exists( 'bokun_analytics_get_rows' ) ) {
-    $pp_map      = bokun_partners_products_get_map();
-    $pp_by_title = array();
-    foreach ( $pp_map as $pp_e ) {
-        if ( ! empty( $pp_e['title'] ) ) {
-            $pp_by_title[ bokun_pp_norm_title( $pp_e['title'] ) ] = true;
-        }
-    }
+    $pp_map  = bokun_partners_products_get_map();
     $pp_seen = array();
     foreach ( bokun_analytics_get_rows() as $pp_row ) {
         $pp_pid = (string) ( $pp_row['product_id'] ?? '' );
@@ -78,15 +60,12 @@ if ( $pp_available && $pp_count > 0 && function_exists( 'bokun_partners_products
         }
         $pp_seen[ $pp_pid ] = true;
         $pp_match['total']++;
-        $pp_ext   = (string) ( $pp_row['product_external_id'] ?? '' );
-        $pp_title = bokun_pp_norm_title( (string) ( $pp_row['product_title'] ?? '' ) );
-        $pp_hit   = isset( $pp_map[ $pp_pid ] )
-            || ( '' !== $pp_ext && isset( $pp_map[ $pp_ext ] ) )
-            || ( '' !== $pp_title && isset( $pp_by_title[ $pp_title ] ) );
+        $pp_ppid = (string) ( $pp_row['partner_page_id'] ?? '' );
+        $pp_hit  = ( '' !== $pp_ppid && isset( $pp_map[ $pp_ppid ] ) );
         if ( $pp_hit ) {
             $pp_match['matched']++;
         } elseif ( count( $pp_match['unmatched'] ) < 10 ) {
-            $pp_match['unmatched'][] = array( $pp_pid, $pp_ext, (string) ( $pp_row['product_title'] ?? '' ) );
+            $pp_match['unmatched'][] = array( $pp_pid, $pp_ppid, (string) ( $pp_row['product_title'] ?? '' ) );
         }
     }
 }
@@ -211,7 +190,7 @@ if ( $table_exists && $row_count > 0 ) {
             <?php
             printf(
                 /* translators: 1: matched products, 2: total products, 3: percent. */
-                esc_html__( '%1$d of %2$d booking products matched a catalog row (%3$d%%) — by product id, external id, or exact title. Net revenue only fills for matched products.', 'BOKUN_text_domain' ),
+                esc_html__( '%1$d of %2$d booking products matched a catalog row (%3$d%%) — joined by partner page id. Net revenue only fills for matched products.', 'BOKUN_text_domain' ),
                 (int) $pp_match['matched'],
                 (int) $pp_match['total'],
                 (int) $pp_pct
@@ -219,11 +198,11 @@ if ( $table_exists && $row_count > 0 ) {
             ?>
         </p>
         <?php if ( ! empty( $pp_match['unmatched'] ) ) : ?>
-            <p class="description"><?php esc_html_e( 'Sample unmatched booking products (so the correct catalog key can be identified):', 'BOKUN_text_domain' ); ?></p>
+            <p class="description"><?php esc_html_e( 'Sample unmatched booking products (no partner page id, or one with no catalog row):', 'BOKUN_text_domain' ); ?></p>
             <table class="widefat striped" style="max-width:900px;margin-bottom:16px;">
                 <thead><tr>
                     <th><?php esc_html_e( 'Booking product_id', 'BOKUN_text_domain' ); ?></th>
-                    <th><?php esc_html_e( 'External id', 'BOKUN_text_domain' ); ?></th>
+                    <th><?php esc_html_e( 'Partner page id', 'BOKUN_text_domain' ); ?></th>
                     <th><?php esc_html_e( 'Product title', 'BOKUN_text_domain' ); ?></th>
                 </tr></thead>
                 <tbody>
