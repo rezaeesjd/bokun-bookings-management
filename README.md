@@ -19,6 +19,8 @@ Bokun Bookings Management is a WordPress plugin that lets tour and activity oper
 │   ├── bokun_settings.view.php     # Settings screen markup
 │   ├── bokun_booking_history.view.php # Booking history admin page
 │   ├── bokun-analytics.php         # Analytics source table & sync layer
+│   ├── bokun-partners-products.php # Partners products reference table
+│   ├── data/partners-products.php  # Bundled product catalog seed data
 │   ├── bokun_analytics_source.view.php # Analytics data admin page
 │   └── class-bokun-github-sync.php # GitHub auto-sync (self-updater)
 ├── assets/
@@ -111,6 +113,14 @@ The **Analytics Data** submenu prepares the flat source dataset that powers the 
 - **Kept in sync automatically.** Every import upserts the booking's row and drops any that fall outside the window; dashboard status changes re-sync the affected row, and a global prune runs on the import path, so the table tracks the source bookings without a separate job. 【F:includes/bokun-bookings-manager.php†L1000-L1012】
 - **Manual rebuild.** The admin screen shows the record count, window length, and last-rebuilt time, with a **Rebuild now** button (AJAX, `manage_options` + nonce protected) that truncates and repopulates the table for the current window. 【F:includes/bokun_analytics_source.view.php†L1-L140】
 - **Schema upgrades.** The table is created on activation and re-checked on each admin request against `BOKUN_ANALYTICS_DB_VERSION`, so installs upgraded from an older build pick it up without re-activating. 【F:includes/bokun-analytics.php†L120-L150】
+- **Partner page id.** Each row also carries `partner_page_id`, resolved from the product tag's `partnerpageid` term meta (looked up by `bokun_product_id`), so bookings can be filtered and grouped by partner page.
+
+### Partners products reference table
+
+A companion `wp_bokun_partners_products` table holds one row per Bokun product — `product_id` (key), `title`, `net_price`, `commission`, `departure_city`, and `partner_page_id` — as the per-product dimension that the analytics layer joins against for partner, net-price and commission reporting. 【F:includes/bokun-partners-products.php†L1-L60】
+
+- **Catalog seed.** The product catalog ships in the repo (`includes/data/partners-products.php`) and is imported (upsert) on activation and via a **Rebuild partners products** button on the Analytics Data screen.
+- **Partner page id.** During import, each product's `partner_page_id` is resolved from the matching `product_tags` term's `partnerpageid` term meta (memoized per request). 【F:includes/bokun-partners-products.php†L90-L140】
 
 ### Analytics dashboard tab
 

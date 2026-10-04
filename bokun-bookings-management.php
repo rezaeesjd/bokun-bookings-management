@@ -304,6 +304,14 @@ class BokunBookingManagement {
             bokun_analytics_install_table();
         }
 
+        if ( function_exists( 'bokun_partners_products_install_table' ) ) {
+            bokun_partners_products_install_table();
+
+            if ( function_exists( 'bokun_partners_products_seed' ) ) {
+                bokun_partners_products_seed();
+            }
+        }
+
         bokun_schedule_daily_import();
 
         }
@@ -609,6 +617,15 @@ if( $rb->bokun_is_activate() && file_exists( BOKUN_INCLUDES_DIR . "bokun_shortco
  */
 if ( file_exists( BOKUN_INCLUDES_DIR . "bokun-analytics.php" ) ) {
     include_once( BOKUN_INCLUDES_DIR . "bokun-analytics.php" );
+}
+
+/**
+ * Partners products reference table (per-product catalog + partner page id).
+ * Loaded unconditionally so its table can be created during activation and its
+ * admin/AJAX hooks register on every request.
+ */
+if ( file_exists( BOKUN_INCLUDES_DIR . "bokun-partners-products.php" ) ) {
+    include_once( BOKUN_INCLUDES_DIR . "bokun-partners-products.php" );
 }
 
 /**

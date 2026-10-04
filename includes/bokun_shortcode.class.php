@@ -2988,6 +2988,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             $dimensions = array(
                 'product_title'        => __( 'Product', 'BOKUN_txt_domain' ),
                 'product_option'       => __( 'Option', 'BOKUN_txt_domain' ),
+                'partner_page_id'      => __( 'Partner page', 'BOKUN_txt_domain' ),
                 'channel_title'        => __( 'Channel', 'BOKUN_txt_domain' ),
                 'channel_channel_type' => __( 'Channel type', 'BOKUN_txt_domain' ),
                 'seller_title'         => __( 'Seller', 'BOKUN_txt_domain' ),
