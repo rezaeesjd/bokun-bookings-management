@@ -211,6 +211,39 @@ function bokun_partners_products_seed() {
 }
 
 /**
+ * Fetch the full partners-products catalog as a product_id => row map, for
+ * joining against bookings in the analytics dashboard.
+ *
+ * @return array<string,array> Map keyed by product_id (string).
+ */
+function bokun_partners_products_get_map() {
+    global $wpdb;
+
+    $table_name = bokun_partners_products_get_table_name();
+
+    $rows = $wpdb->get_results(
+        "SELECT product_id, title, net_price, commission, departure_city, partner_page_id FROM {$table_name}", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+        ARRAY_A
+    );
+
+    $map = array();
+
+    if ( is_array( $rows ) ) {
+        foreach ( $rows as $row ) {
+            $map[ (string) $row['product_id'] ] = array(
+                'title'           => $row['title'],
+                'net_price'       => ( null === $row['net_price'] ) ? null : (float) $row['net_price'],
+                'commission'      => ( null === $row['commission'] ) ? null : (float) $row['commission'],
+                'departure_city'  => $row['departure_city'],
+                'partner_page_id' => $row['partner_page_id'],
+            );
+        }
+    }
+
+    return $map;
+}
+
+/**
  * Number of rows currently in the partners-products table.
  *
  * @return int

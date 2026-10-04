@@ -2975,38 +2975,59 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
          *
          * @return string
          */
+        /**
+         * Render the analytics dashboard panel: a business-performance view of
+         * the wp_bokun_analytics_source rows, joined to the partners-products
+         * catalog (net price, commission, departure city) so it can show net
+         * revenue (gross amount minus net price times participants) per line and
+         * in aggregate. KPI tiles, auto insights, a trend chart, product/channel
+         * performance, result & payment mix, a left sidebar of clickable item
+         * filters, a group-by breakdown, and a filtered detail table with CSV
+         * export. Filtering, joining and aggregation run client-side.
+         *
+         * @return string
+         */
         public function render_analytics_panel() {
             if ( ! function_exists( 'bokun_analytics_get_rows' ) ) {
                 return '<div class="bokun-andash__empty">' . esc_html__( 'Analytics data layer is unavailable.', 'BOKUN_txt_domain' ) . '</div>';
             }
 
-            $rows   = bokun_analytics_get_rows();
-            $months = function_exists( 'bokun_analytics_get_window_months' ) ? (int) bokun_analytics_get_window_months() : 3;
-            $uid    = 'bokun-andash-' . wp_rand( 1000, 9999 );
+            $rows     = bokun_analytics_get_rows();
+            $partners = function_exists( 'bokun_partners_products_get_map' ) ? bokun_partners_products_get_map() : array();
+            $months   = function_exists( 'bokun_analytics_get_window_months' ) ? (int) bokun_analytics_get_window_months() : 3;
+            $uid      = 'bokun-andash-' . wp_rand( 1000, 9999 );
 
-            // Categorical columns offered as dropdown filters and group-by keys.
-            $dimensions = array(
-                'product_title'        => __( 'Product', 'BOKUN_txt_domain' ),
+            // Important dimensions shown as clickable item lists in the sidebar.
+            $facets = array(
+                'product_title'   => __( 'Product', 'BOKUN_txt_domain' ),
+                'channel_title'   => __( 'Channel', 'BOKUN_txt_domain' ),
+                'partner_page_id' => __( 'Partner page', 'BOKUN_txt_domain' ),
+                'result'          => __( 'Result', 'BOKUN_txt_domain' ),
+                'payment_method'  => __( 'Payment', 'BOKUN_txt_domain' ),
+                'currency'        => __( 'Currency', 'BOKUN_txt_domain' ),
+                'departure_city'  => __( 'Departure city', 'BOKUN_txt_domain' ),
+            );
+
+            // Secondary dimensions kept as compact dropdowns under "More filters".
+            $more = array(
                 'product_option'       => __( 'Option', 'BOKUN_txt_domain' ),
-                'partner_page_id'      => __( 'Partner page', 'BOKUN_txt_domain' ),
-                'channel_title'        => __( 'Channel', 'BOKUN_txt_domain' ),
                 'channel_channel_type' => __( 'Channel type', 'BOKUN_txt_domain' ),
                 'seller_title'         => __( 'Seller', 'BOKUN_txt_domain' ),
                 'vendor_title'         => __( 'Vendor', 'BOKUN_txt_domain' ),
                 'pb_seller_title'      => __( 'Product-booking seller', 'BOKUN_txt_domain' ),
-                'result'               => __( 'Result', 'BOKUN_txt_domain' ),
-                'payment_method'       => __( 'Payment method', 'BOKUN_txt_domain' ),
                 'pb_status'            => __( 'Status', 'BOKUN_txt_domain' ),
                 'language'             => __( 'Language', 'BOKUN_txt_domain' ),
-                'currency'             => __( 'Currency', 'BOKUN_txt_domain' ),
             );
 
-            // Strings handed to the client script (keeps the JS free of PHP).
+            $group_dims = array_merge( $facets, $more );
+
             $l10n = array(
                 'bookings'     => __( 'Bookings', 'BOKUN_txt_domain' ),
                 'participants' => __( 'Participants', 'BOKUN_txt_domain' ),
                 'revenue'      => __( 'Revenue', 'BOKUN_txt_domain' ),
-                'amount'       => __( 'Amount', 'BOKUN_txt_domain' ),
+                'netrev'       => __( 'Net revenue', 'BOKUN_txt_domain' ),
+                'amount'       => __( 'Gross', 'BOKUN_txt_domain' ),
+                'netprice'     => __( 'Net price', 'BOKUN_txt_domain' ),
                 'avgValue'     => __( 'Avg booking value', 'BOKUN_txt_domain' ),
                 'avgLead'      => __( 'Avg lead time', 'BOKUN_txt_domain' ),
                 'days'         => __( 'days', 'BOKUN_txt_domain' ),
@@ -3015,6 +3036,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'topProduct'   => __( 'Top product', 'BOKUN_txt_domain' ),
                 'topChannel'   => __( 'Top channel', 'BOKUN_txt_domain' ),
                 'fullRate'     => __( 'Full-result rate', 'BOKUN_txt_domain' ),
+                'margin'       => __( 'Margin', 'BOKUN_txt_domain' ),
                 'ofTotal'      => __( 'of total', 'BOKUN_txt_domain' ),
                 'trend'        => __( 'Trend over time', 'BOKUN_txt_domain' ),
                 'topProducts'  => __( 'Product performance', 'BOKUN_txt_domain' ),
@@ -3022,30 +3044,28 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'resultMix'    => __( 'Result mix', 'BOKUN_txt_domain' ),
                 'paymentMix'   => __( 'Payment mix', 'BOKUN_txt_domain' ),
                 'group'        => __( 'Group', 'BOKUN_txt_domain' ),
+                'share'        => __( 'Share', 'BOKUN_txt_domain' ),
                 'other'        => __( 'Other', 'BOKUN_txt_domain' ),
-                'none'         => __( 'None', 'BOKUN_txt_domain' ),
                 'noData'       => __( 'No data for the current filters.', 'BOKUN_txt_domain' ),
                 'week'         => __( 'Week of', 'BOKUN_txt_domain' ),
-                'share'        => __( 'Share', 'BOKUN_txt_domain' ),
-                'mixedCur'     => __( '(mixed currencies)', 'BOKUN_txt_domain' ),
+                'mixedCur'     => __( 'mixed currencies', 'BOKUN_txt_domain' ),
+                'all'          => __( 'All', 'BOKUN_txt_domain' ),
             );
 
             ob_start();
             ?>
             <div class="bokun-andash" id="<?php echo esc_attr( $uid ); ?>" data-rows="<?php echo (int) count( $rows ); ?>">
                 <div class="bokun-andash__head">
-                    <div>
-                        <h2 class="bokun-andash__title"><?php esc_html_e( 'Analytics', 'BOKUN_txt_domain' ); ?></h2>
-                        <p class="bokun-andash__sub">
-                            <?php
-                            printf(
-                                /* translators: %d: number of months. */
-                                esc_html__( 'Performance of bookings from the last %d months (by creation date).', 'BOKUN_txt_domain' ),
-                                (int) $months
-                            );
-                            ?>
-                        </p>
-                    </div>
+                    <h2 class="bokun-andash__title"><?php esc_html_e( 'Analytics', 'BOKUN_txt_domain' ); ?></h2>
+                    <p class="bokun-andash__sub">
+                        <?php
+                        printf(
+                            /* translators: %d: number of months. */
+                            esc_html__( 'Performance of bookings from the last %d months (by creation date), joined to the partners-products catalog for net revenue.', 'BOKUN_txt_domain' ),
+                            (int) $months
+                        );
+                        ?>
+                    </p>
                 </div>
 
                 <?php if ( empty( $rows ) ) : ?>
@@ -3054,108 +3074,117 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     </div>
                 <?php else : ?>
 
-                    <div class="bokun-andash__toolbar">
-                        <div class="bokun-andash__presets" role="group" aria-label="<?php esc_attr_e( 'Date range', 'BOKUN_txt_domain' ); ?>">
-                            <button type="button" class="bokun-andash__chip" data-preset="7"><?php esc_html_e( '7d', 'BOKUN_txt_domain' ); ?></button>
-                            <button type="button" class="bokun-andash__chip" data-preset="30"><?php esc_html_e( '30d', 'BOKUN_txt_domain' ); ?></button>
-                            <button type="button" class="bokun-andash__chip" data-preset="90"><?php esc_html_e( '90d', 'BOKUN_txt_domain' ); ?></button>
-                            <button type="button" class="bokun-andash__chip is-active" data-preset="0"><?php esc_html_e( 'All', 'BOKUN_txt_domain' ); ?></button>
-                        </div>
-                        <div class="bokun-andash__metric" role="group" aria-label="<?php esc_attr_e( 'Metric', 'BOKUN_txt_domain' ); ?>">
-                            <button type="button" class="bokun-andash__seg is-active" data-metric="bookings"><?php esc_html_e( 'Bookings', 'BOKUN_txt_domain' ); ?></button>
-                            <button type="button" class="bokun-andash__seg" data-metric="participants"><?php esc_html_e( 'Participants', 'BOKUN_txt_domain' ); ?></button>
-                            <button type="button" class="bokun-andash__seg" data-metric="revenue"><?php esc_html_e( 'Revenue', 'BOKUN_txt_domain' ); ?></button>
-                        </div>
-                        <div class="bokun-andash__toolbar-actions">
-                            <button type="button" class="button" data-filters-toggle aria-expanded="false"><?php esc_html_e( 'Filters', 'BOKUN_txt_domain' ); ?></button>
-                            <button type="button" class="button" data-reset><?php esc_html_e( 'Reset', 'BOKUN_txt_domain' ); ?></button>
-                            <button type="button" class="button" data-export><?php esc_html_e( 'Export CSV', 'BOKUN_txt_domain' ); ?></button>
-                        </div>
-                    </div>
-
-                    <div class="bokun-andash__filters" data-filters hidden>
-                        <div class="bokun-andash__filter bokun-andash__filter--search">
-                            <label><?php esc_html_e( 'Search', 'BOKUN_txt_domain' ); ?></label>
-                            <input type="search" data-f-search placeholder="<?php esc_attr_e( 'Any text (code, name, id…)', 'BOKUN_txt_domain' ); ?>" />
-                        </div>
-                        <?php foreach ( $dimensions as $key => $label ) : ?>
-                            <div class="bokun-andash__filter">
-                                <label><?php echo esc_html( $label ); ?></label>
-                                <select data-f-dim="<?php echo esc_attr( $key ); ?>">
-                                    <option value=""><?php esc_html_e( 'All', 'BOKUN_txt_domain' ); ?></option>
-                                </select>
+                    <div class="bokun-andash__layout">
+                        <aside class="bokun-andash__side" data-filters>
+                            <div class="bokun-andash__side-row">
+                                <input type="search" class="bokun-andash__search" data-f-search placeholder="<?php esc_attr_e( 'Search…', 'BOKUN_txt_domain' ); ?>" />
                             </div>
-                        <?php endforeach; ?>
-                        <div class="bokun-andash__filter">
-                            <label><?php esc_html_e( 'Created from', 'BOKUN_txt_domain' ); ?></label>
-                            <input type="date" data-f-date="created_from" />
-                        </div>
-                        <div class="bokun-andash__filter">
-                            <label><?php esc_html_e( 'Created to', 'BOKUN_txt_domain' ); ?></label>
-                            <input type="date" data-f-date="created_to" />
-                        </div>
-                        <div class="bokun-andash__filter">
-                            <label><?php esc_html_e( 'Travel from', 'BOKUN_txt_domain' ); ?></label>
-                            <input type="date" data-f-date="travel_from" />
-                        </div>
-                        <div class="bokun-andash__filter">
-                            <label><?php esc_html_e( 'Travel to', 'BOKUN_txt_domain' ); ?></label>
-                            <input type="date" data-f-date="travel_to" />
-                        </div>
-                    </div>
+                            <div class="bokun-andash__side-row bokun-andash__presets" role="group" aria-label="<?php esc_attr_e( 'Date range', 'BOKUN_txt_domain' ); ?>">
+                                <button type="button" class="bokun-andash__chip" data-preset="7"><?php esc_html_e( '7d', 'BOKUN_txt_domain' ); ?></button>
+                                <button type="button" class="bokun-andash__chip" data-preset="30"><?php esc_html_e( '30d', 'BOKUN_txt_domain' ); ?></button>
+                                <button type="button" class="bokun-andash__chip" data-preset="90"><?php esc_html_e( '90d', 'BOKUN_txt_domain' ); ?></button>
+                                <button type="button" class="bokun-andash__chip is-active" data-preset="0"><?php esc_html_e( 'All', 'BOKUN_txt_domain' ); ?></button>
+                            </div>
+                            <div class="bokun-andash__side-row bokun-andash__dates">
+                                <label><?php esc_html_e( 'Created', 'BOKUN_txt_domain' ); ?>
+                                    <input type="date" data-f-date="created_from" />
+                                    <input type="date" data-f-date="created_to" />
+                                </label>
+                                <label><?php esc_html_e( 'Travel', 'BOKUN_txt_domain' ); ?>
+                                    <input type="date" data-f-date="travel_from" />
+                                    <input type="date" data-f-date="travel_to" />
+                                </label>
+                            </div>
+                            <?php foreach ( $facets as $key => $label ) : ?>
+                                <div class="bokun-andash__facet" data-facet="<?php echo esc_attr( $key ); ?>">
+                                    <h4><?php echo esc_html( $label ); ?></h4>
+                                    <div class="bokun-andash__facet-items" data-facet-items></div>
+                                </div>
+                            <?php endforeach; ?>
+                            <details class="bokun-andash__more">
+                                <summary><?php esc_html_e( 'More filters', 'BOKUN_txt_domain' ); ?></summary>
+                                <?php foreach ( $more as $key => $label ) : ?>
+                                    <label class="bokun-andash__more-field">
+                                        <span><?php echo esc_html( $label ); ?></span>
+                                        <select data-f-dim="<?php echo esc_attr( $key ); ?>">
+                                            <option value=""><?php esc_html_e( 'All', 'BOKUN_txt_domain' ); ?></option>
+                                        </select>
+                                    </label>
+                                <?php endforeach; ?>
+                            </details>
+                            <div class="bokun-andash__side-row">
+                                <button type="button" class="button" data-reset><?php esc_html_e( 'Reset filters', 'BOKUN_txt_domain' ); ?></button>
+                            </div>
+                        </aside>
 
-                    <div class="bokun-andash__insights" data-insights></div>
-                    <div class="bokun-andash__kpis" data-kpis></div>
+                        <div class="bokun-andash__main">
+                            <div class="bokun-andash__toolbar">
+                                <div class="bokun-andash__metric" role="group" aria-label="<?php esc_attr_e( 'Metric', 'BOKUN_txt_domain' ); ?>">
+                                    <button type="button" class="bokun-andash__seg is-active" data-metric="bookings"><?php esc_html_e( 'Bookings', 'BOKUN_txt_domain' ); ?></button>
+                                    <button type="button" class="bokun-andash__seg" data-metric="participants"><?php esc_html_e( 'Participants', 'BOKUN_txt_domain' ); ?></button>
+                                    <button type="button" class="bokun-andash__seg" data-metric="revenue"><?php esc_html_e( 'Revenue', 'BOKUN_txt_domain' ); ?></button>
+                                    <button type="button" class="bokun-andash__seg" data-metric="netrev"><?php esc_html_e( 'Net revenue', 'BOKUN_txt_domain' ); ?></button>
+                                </div>
+                                <button type="button" class="button" data-export><?php esc_html_e( 'Export CSV', 'BOKUN_txt_domain' ); ?></button>
+                            </div>
 
-                    <div class="bokun-andash__charts">
-                        <div class="bokun-andash__card bokun-andash__card--wide">
-                            <h3 data-trend-title><?php esc_html_e( 'Trend over time', 'BOKUN_txt_domain' ); ?></h3>
-                            <div class="bokun-andash__trend" data-trend></div>
-                        </div>
-                        <div class="bokun-andash__card">
-                            <h3 data-topproducts-title><?php esc_html_e( 'Product performance', 'BOKUN_txt_domain' ); ?></h3>
-                            <div data-topproducts></div>
-                        </div>
-                        <div class="bokun-andash__card">
-                            <h3 data-topchannels-title><?php esc_html_e( 'Channel performance', 'BOKUN_txt_domain' ); ?></h3>
-                            <div data-topchannels></div>
-                        </div>
-                        <div class="bokun-andash__card">
-                            <h3><?php esc_html_e( 'Result mix', 'BOKUN_txt_domain' ); ?></h3>
-                            <div data-resultmix></div>
-                        </div>
-                        <div class="bokun-andash__card">
-                            <h3><?php esc_html_e( 'Payment mix', 'BOKUN_txt_domain' ); ?></h3>
-                            <div data-paymentmix></div>
-                        </div>
-                    </div>
+                            <div class="bokun-andash__insights" data-insights></div>
+                            <div class="bokun-andash__kpis" data-kpis></div>
 
-                    <div class="bokun-andash__card">
-                        <div class="bokun-andash__breakdown-head">
-                            <h3><?php esc_html_e( 'Breakdown', 'BOKUN_txt_domain' ); ?></h3>
-                            <label>
-                                <?php esc_html_e( 'Group by', 'BOKUN_txt_domain' ); ?>
-                                <select data-groupby>
-                                    <?php foreach ( $dimensions as $key => $label ) : ?>
-                                        <option value="<?php echo esc_attr( $key ); ?>"><?php echo esc_html( $label ); ?></option>
-                                    <?php endforeach; ?>
-                                    <option value="__created_month"><?php esc_html_e( 'Created month', 'BOKUN_txt_domain' ); ?></option>
-                                    <option value="__travel_month"><?php esc_html_e( 'Travel month', 'BOKUN_txt_domain' ); ?></option>
-                                </select>
-                            </label>
-                        </div>
-                        <div data-breakdown></div>
-                    </div>
+                            <div class="bokun-andash__charts">
+                                <div class="bokun-andash__card bokun-andash__card--wide">
+                                    <h3 data-trend-title><?php esc_html_e( 'Trend over time', 'BOKUN_txt_domain' ); ?></h3>
+                                    <div class="bokun-andash__trend" data-trend></div>
+                                </div>
+                                <div class="bokun-andash__card">
+                                    <h3 data-topproducts-title><?php esc_html_e( 'Product performance', 'BOKUN_txt_domain' ); ?></h3>
+                                    <div data-topproducts></div>
+                                </div>
+                                <div class="bokun-andash__card">
+                                    <h3 data-topchannels-title><?php esc_html_e( 'Channel performance', 'BOKUN_txt_domain' ); ?></h3>
+                                    <div data-topchannels></div>
+                                </div>
+                                <div class="bokun-andash__card">
+                                    <h3><?php esc_html_e( 'Result mix', 'BOKUN_txt_domain' ); ?></h3>
+                                    <div data-resultmix></div>
+                                </div>
+                                <div class="bokun-andash__card">
+                                    <h3><?php esc_html_e( 'Payment mix', 'BOKUN_txt_domain' ); ?></h3>
+                                    <div data-paymentmix></div>
+                                </div>
+                            </div>
 
-                    <div class="bokun-andash__card">
-                        <details>
-                            <summary><?php esc_html_e( 'Records', 'BOKUN_txt_domain' ); ?> <span data-detail-count></span></summary>
-                            <div class="bokun-andash__table-wrap" data-detail></div>
-                        </details>
+                            <div class="bokun-andash__card">
+                                <div class="bokun-andash__breakdown-head">
+                                    <h3><?php esc_html_e( 'Breakdown', 'BOKUN_txt_domain' ); ?></h3>
+                                    <label>
+                                        <?php esc_html_e( 'Group by', 'BOKUN_txt_domain' ); ?>
+                                        <select data-groupby>
+                                            <?php foreach ( $group_dims as $key => $label ) : ?>
+                                                <option value="<?php echo esc_attr( $key ); ?>"><?php echo esc_html( $label ); ?></option>
+                                            <?php endforeach; ?>
+                                            <option value="__created_month"><?php esc_html_e( 'Created month', 'BOKUN_txt_domain' ); ?></option>
+                                            <option value="__travel_month"><?php esc_html_e( 'Travel month', 'BOKUN_txt_domain' ); ?></option>
+                                        </select>
+                                    </label>
+                                </div>
+                                <div data-breakdown></div>
+                            </div>
+
+                            <div class="bokun-andash__card">
+                                <details open>
+                                    <summary><?php esc_html_e( 'Records', 'BOKUN_txt_domain' ); ?> <span data-detail-count></span></summary>
+                                    <div class="bokun-andash__table-wrap" data-detail></div>
+                                </details>
+                            </div>
+                        </div>
                     </div>
 
                     <script type="application/json" data-andash-rows><?php echo wp_json_encode( $rows ); ?></script>
-                    <script type="application/json" data-andash-dims><?php echo wp_json_encode( $dimensions ); ?></script>
+                    <script type="application/json" data-andash-partners><?php echo wp_json_encode( $partners ); ?></script>
+                    <script type="application/json" data-andash-facets><?php echo wp_json_encode( $facets ); ?></script>
+                    <script type="application/json" data-andash-more><?php echo wp_json_encode( $more ); ?></script>
+                    <script type="application/json" data-andash-groupdims><?php echo wp_json_encode( $group_dims ); ?></script>
                     <script type="application/json" data-andash-l10n><?php echo wp_json_encode( $l10n ); ?></script>
                 <?php endif; ?>
             </div>
@@ -3169,24 +3198,39 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash__title { margin:0; font-size:20px; }
                 .bokun-andash__sub { margin:4px 0 0; color:var(--an-ink-2); }
                 .bokun-andash__empty { padding:24px; background:var(--an-surface); border:1px dashed var(--an-line); border-radius:8px; color:var(--an-ink-2); }
+                .bokun-andash__layout { display:grid; grid-template-columns:260px minmax(0,1fr); gap:18px; align-items:start; }
+                .bokun-andash__side { background:var(--an-surface); border:1px solid var(--an-line); border-radius:10px; padding:12px; position:sticky; top:32px; max-height:calc(100vh - 60px); overflow:auto; }
+                .bokun-andash__side-row { margin-bottom:12px; }
+                .bokun-andash__search { width:100%; }
+                .bokun-andash__presets { display:flex; gap:4px; }
+                .bokun-andash__chip, .bokun-andash__seg { appearance:none; background:transparent; border:1px solid var(--an-line); border-radius:999px; padding:6px 12px; font-size:13px; font-weight:600; color:var(--an-ink-2); cursor:pointer; }
+                .bokun-andash__chip.is-active, .bokun-andash__seg.is-active { background:var(--an-blue); color:#fff; border-color:var(--an-blue); }
+                .bokun-andash__dates label { display:block; font-size:12px; font-weight:600; color:var(--an-ink-2); margin-bottom:6px; }
+                .bokun-andash__dates input { width:49%; }
+                .bokun-andash__facet { border-top:1px solid var(--an-line); padding-top:10px; margin-top:10px; }
+                .bokun-andash__facet h4 { margin:0 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--an-ink-2); }
+                .bokun-andash__facet-items { display:flex; flex-direction:column; gap:3px; max-height:180px; overflow:auto; }
+                .bokun-andash__item { display:flex; justify-content:space-between; gap:8px; align-items:center; padding:4px 8px; border-radius:6px; font-size:13px; cursor:pointer; border:1px solid transparent; }
+                .bokun-andash__item:hover { background:var(--an-blue-soft); }
+                .bokun-andash__item.is-on { background:var(--an-blue); color:#fff; }
+                .bokun-andash__item .lab { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+                .bokun-andash__item .cnt { font-variant-numeric:tabular-nums; opacity:.7; font-size:12px; }
+                .bokun-andash__more { margin-top:12px; border-top:1px solid var(--an-line); padding-top:8px; }
+                .bokun-andash__more summary { cursor:pointer; font-size:13px; font-weight:600; color:var(--an-ink-2); }
+                .bokun-andash__more-field { display:block; margin:8px 0; }
+                .bokun-andash__more-field span { display:block; font-size:12px; font-weight:600; color:var(--an-ink-2); margin-bottom:2px; }
+                .bokun-andash__more-field select { width:100%; }
                 .bokun-andash__toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-bottom:14px; }
-                .bokun-andash__presets, .bokun-andash__metric { display:inline-flex; border:1px solid var(--an-line); border-radius:999px; overflow:hidden; }
-                .bokun-andash__chip, .bokun-andash__seg { appearance:none; background:transparent; border:0; padding:7px 14px; font-size:13px; font-weight:600; color:var(--an-ink-2); cursor:pointer; }
-                .bokun-andash__chip.is-active, .bokun-andash__seg.is-active { background:var(--an-blue); color:#fff; }
-                .bokun-andash__toolbar-actions { display:flex; gap:6px; }
-                .bokun-andash__filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; background:var(--an-surface); border:1px solid var(--an-line); border-radius:10px; padding:14px; margin-bottom:16px; }
-                .bokun-andash__filter { display:flex; flex-direction:column; gap:4px; }
-                .bokun-andash__filter label { font-size:12px; font-weight:600; color:var(--an-ink-2); }
-                .bokun-andash__filter select, .bokun-andash__filter input { width:100%; }
-                .bokun-andash__insights { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin-bottom:14px; }
+                .bokun-andash__metric { display:inline-flex; gap:4px; flex-wrap:wrap; }
+                .bokun-andash__insights { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:14px; }
                 .bokun-andash__insight { background:var(--an-surface); border:1px solid var(--an-line); border-left:3px solid var(--an-blue); border-radius:10px; padding:12px 14px; }
                 .bokun-andash__insight-label { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--an-ink-2); }
-                .bokun-andash__insight-value { font-size:17px; font-weight:700; margin-top:3px; color:var(--an-ink); overflow-wrap:anywhere; }
+                .bokun-andash__insight-value { font-size:17px; font-weight:700; margin-top:3px; overflow-wrap:anywhere; }
                 .bokun-andash__insight-sub { font-size:12px; color:var(--an-ink-2); margin-top:2px; }
-                .bokun-andash__kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+                .bokun-andash__kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:16px; }
                 .bokun-andash__kpi { background:var(--an-surface); border:1px solid var(--an-line); border-radius:10px; padding:14px 16px; }
                 .bokun-andash__kpi-label { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--an-ink-2); }
-                .bokun-andash__kpi-value { font-size:24px; font-weight:700; margin-top:4px; }
+                .bokun-andash__kpi-value { font-size:22px; font-weight:700; margin-top:4px; }
                 .bokun-andash__kpi-sub { font-size:12px; color:var(--an-ink-2); margin-top:2px; }
                 .bokun-andash__charts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin-bottom:16px; }
                 .bokun-andash__card { background:var(--an-surface); border:1px solid var(--an-line); border-radius:10px; padding:14px; margin-bottom:16px; }
@@ -3197,22 +3241,22 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash__breakdown-head h3 { margin:0; }
                 .bokun-andash__barlist { display:flex; flex-direction:column; gap:8px; }
                 .bokun-andash__barrow { display:grid; grid-template-columns:1fr auto; gap:4px 10px; align-items:center; font-size:13px; }
-                .bokun-andash__barrow .lab { color:var(--an-ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+                .bokun-andash__barrow .lab { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
                 .bokun-andash__barrow .val { font-variant-numeric:tabular-nums; color:var(--an-ink-2); }
                 .bokun-andash__track { grid-column:1 / -1; height:8px; background:var(--an-line); border-radius:4px; overflow:hidden; }
                 .bokun-andash__fill { height:100%; border-radius:4px; background:var(--an-blue); }
                 .bokun-andash__seg-bar { display:flex; height:16px; border-radius:4px; overflow:hidden; background:var(--an-line); }
-                .bokun-andash__seg-bar > span { display:block; }
                 .bokun-andash__legend { display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:10px; font-size:12px; color:var(--an-ink-2); }
                 .bokun-andash__legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:middle; }
                 .bokun-andash table { width:100%; border-collapse:collapse; font-size:13px; }
                 .bokun-andash th, .bokun-andash td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--an-line); white-space:nowrap; }
                 .bokun-andash th { color:var(--an-ink-2); font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
                 .bokun-andash__num { text-align:right; font-variant-numeric:tabular-nums; }
+                .bokun-andash__neg { color:var(--an-crit); }
                 .bokun-andash__table-wrap { overflow:auto; max-height:520px; margin-top:10px; }
                 .bokun-andash__trend svg { width:100%; height:auto; display:block; }
                 .bokun-andash__tip { position:absolute; pointer-events:none; background:var(--an-ink); color:var(--an-surface); font-size:12px; padding:5px 8px; border-radius:6px; white-space:nowrap; transform:translate(-50%,-120%); opacity:0; transition:opacity .08s; z-index:5; }
-                @media (max-width:782px){ .bokun-andash__charts { grid-template-columns:1fr; } }
+                @media (max-width:900px){ .bokun-andash__layout { grid-template-columns:1fr; } .bokun-andash__side { position:static; max-height:none; } .bokun-andash__charts { grid-template-columns:1fr; } }
             </style>
             <script>
             ( function () {
@@ -3223,15 +3267,16 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 function readJson( sel, fb ) { var el = root.querySelector( sel ); if ( ! el ) { return fb; } try { return JSON.parse( el.textContent || '' ); } catch ( e ) { return fb; } }
                 var ROWS = readJson( '[data-andash-rows]', [] );
-                var DIM_LABELS = readJson( '[data-andash-dims]', {} );
+                var PARTNERS = readJson( '[data-andash-partners]', {} );
+                var FACETS = readJson( '[data-andash-facets]', {} );
+                var MORE = readJson( '[data-andash-more]', {} );
+                var GROUP_DIMS = readJson( '[data-andash-groupdims]', {} );
                 var L = readJson( '[data-andash-l10n]', {} );
-                var DIMS = Object.keys( DIM_LABELS );
+                var FACET_KEYS = Object.keys( FACETS );
+                var MORE_KEYS = Object.keys( MORE );
 
                 var metric = 'bookings';
                 var started = false;
-                // Revenue is aggregated in a single currency (the most common in
-                // the filtered set) so product/channel/trend sums never add, say,
-                // EUR and USD as interchangeable. Set in recompute().
                 var revCur = '';
                 var revMulti = false;
 
@@ -3241,14 +3286,27 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 function escHtml( v ) { return esc( v ).replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' ).replace( /"/g, '&quot;' ).replace( /'/g, '&#39;' ); }
                 function fmtInt( n ) { return Number( Math.round( n ) ).toLocaleString(); }
                 function fmtMoney( n ) { return Number( n ).toLocaleString( undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 } ); }
-                function metricVal( r ) {
-                    if ( metric === 'participants' ) { return parts( r ); }
-                    if ( metric === 'revenue' ) { return ( esc( r.currency ) === revCur ) ? num( r.price_amount ) : 0; }
-                    return 1;
-                }
-                function metricLabel() { return metric === 'participants' ? L.participants : ( metric === 'revenue' ? L.revenue : L.bookings ); }
-                function fmtMetric( n ) { return metric === 'revenue' ? fmtMoney( n ) : fmtInt( n ); }
                 function dayStr( v ) { return esc( v ).slice( 0, 10 ); }
+
+                // Join each booking to the partners catalog and precompute net cost
+                // and net revenue (gross amount minus net price times participants).
+                function hasNum( v ) { return v !== null && v !== undefined && v !== '' && ! isNaN( parseFloat( v ) ); }
+                function isEmpty( v ) { return v === null || v === undefined || v === ''; }
+                ROWS.forEach( function ( r ) {
+                    var p = PARTNERS[ String( r.product_id ) ] || {};
+                    r.net_price = ( p.net_price === undefined ) ? null : p.net_price;
+                    r.commission = ( p.commission === undefined ) ? null : p.commission;
+                    // Fall back to the catalog for city and partner page id so a
+                    // partners-products rebuild is reflected without a full
+                    // analytics rebuild; the source row wins when it has a value.
+                    if ( isEmpty( r.departure_city ) && p.departure_city ) { r.departure_city = p.departure_city; }
+                    if ( isEmpty( r.partner_page_id ) && p.partner_page_id ) { r.partner_page_id = p.partner_page_id; }
+                    var pax = parts( r );
+                    r._net_cost = ( r.net_price !== null ) ? ( r.net_price * pax ) : null;
+                    // A numeric zero gross (complimentary/fully-discounted) is a
+                    // real value, so test presence, not truthiness.
+                    r._net_revenue = ( hasNum( r.price_amount ) && r.net_price !== null ) ? ( num( r.price_amount ) - r.net_price * pax ) : null;
+                } );
 
                 function primaryCurrency( data ) {
                     var c = {}, best = '', bestN = -1;
@@ -3256,229 +3314,236 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     return { cur: best, multi: Object.keys( c ).length > 1 };
                 }
 
-                // ---- filters ----
-                function uniqueSorted( key ) {
-                    var seen = {}, out = [];
-                    ROWS.forEach( function ( r ) { var v = r[ key ]; if ( v !== null && v !== undefined && v !== '' && ! seen[ v ] ) { seen[ v ] = 1; out.push( String( v ) ); } } );
-                    out.sort( function ( a, b ) { return a.localeCompare( b, undefined, { numeric: true } ); } );
-                    return out;
+                function metricVal( r ) {
+                    if ( metric === 'participants' ) { return parts( r ); }
+                    if ( metric === 'revenue' ) { return ( esc( r.currency ) === revCur ) ? num( r.price_amount ) : 0; }
+                    if ( metric === 'netrev' ) { return ( esc( r.currency ) === revCur && r._net_revenue !== null ) ? r._net_revenue : 0; }
+                    return 1;
                 }
-                DIMS.forEach( function ( key ) {
+                function metricLabel() { return metric === 'participants' ? L.participants : ( metric === 'revenue' ? L.revenue : ( metric === 'netrev' ? L.netrev : L.bookings ) ); }
+                function isMoney() { return metric === 'revenue' || metric === 'netrev'; }
+                function fmtMetric( n ) { return isMoney() ? fmtMoney( n ) : fmtInt( n ); }
+                function metricLabelFull() { var lbl = metricLabel(); if ( isMoney() && revCur ) { lbl += ' (' + revCur + ( revMulti ? ', ' + L.mixedCur : '' ) + ')'; } return lbl; }
+
+                // ---- facet filter state (multi-select) ----
+                var facetSel = {}; FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = {}; } );
+
+                function uniqueCounts( key ) {
+                    var m = {};
+                    ROWS.forEach( function ( r ) { var v = r[ key ]; if ( v !== null && v !== undefined && v !== '' ) { v = String( v ); m[ v ] = ( m[ v ] || 0 ) + 1; } } );
+                    return Object.keys( m ).map( function ( v ) { return { v: v, n: m[ v ] }; } ).sort( function ( a, b ) { return b.n - a.n || a.v.localeCompare( b.v ); } );
+                }
+
+                // Build sidebar facet item lists.
+                FACET_KEYS.forEach( function ( key ) {
+                    var wrap = root.querySelector( '.bokun-andash__facet[data-facet="' + key + '"] [data-facet-items]' );
+                    if ( ! wrap ) { return; }
+                    uniqueCounts( key ).forEach( function ( o ) {
+                        var el = document.createElement( 'div' );
+                        el.className = 'bokun-andash__item';
+                        el.setAttribute( 'data-val', o.v );
+                        el.innerHTML = '<span class="lab" title="' + escHtml( o.v ) + '">' + escHtml( o.v ) + '</span><span class="cnt">' + fmtInt( o.n ) + '</span>';
+                        el.addEventListener( 'click', function () {
+                            if ( facetSel[ key ][ o.v ] ) { delete facetSel[ key ][ o.v ]; el.classList.remove( 'is-on' ); }
+                            else { facetSel[ key ][ o.v ] = 1; el.classList.add( 'is-on' ); }
+                            recompute();
+                        } );
+                        wrap.appendChild( el );
+                    } );
+                } );
+
+                // Build "more" dropdown options.
+                MORE_KEYS.forEach( function ( key ) {
                     var sel = root.querySelector( '[data-f-dim="' + key + '"]' );
                     if ( ! sel ) { return; }
-                    uniqueSorted( key ).forEach( function ( v ) { var o = document.createElement( 'option' ); o.value = v; o.textContent = v; sel.appendChild( o ); } );
+                    uniqueCounts( key ).forEach( function ( o ) { var opt = document.createElement( 'option' ); opt.value = o.v; opt.textContent = o.v + ' (' + o.n + ')'; sel.appendChild( opt ); } );
                 } );
 
                 function currentFilters() {
                     var f = { search: '', dims: {}, dates: {} };
                     var s = root.querySelector( '[data-f-search]' );
                     f.search = s ? s.value.trim().toLowerCase() : '';
-                    DIMS.forEach( function ( key ) { var sel = root.querySelector( '[data-f-dim="' + key + '"]' ); if ( sel && sel.value ) { f.dims[ key ] = sel.value; } } );
+                    FACET_KEYS.forEach( function ( key ) { var vals = Object.keys( facetSel[ key ] ); if ( vals.length ) { f.dims[ key ] = vals; } } );
+                    MORE_KEYS.forEach( function ( key ) { var sel = root.querySelector( '[data-f-dim="' + key + '"]' ); if ( sel && sel.value ) { f.dims[ key ] = [ sel.value ]; } } );
                     root.querySelectorAll( '[data-f-date]' ).forEach( function ( el ) { if ( el.value ) { f.dates[ el.getAttribute( 'data-f-date' ) ] = el.value; } } );
                     return f;
                 }
                 function matches( r, f ) {
-                    for ( var key in f.dims ) { if ( String( r[ key ] || '' ) !== f.dims[ key ] ) { return false; } }
+                    for ( var key in f.dims ) { if ( f.dims[ key ].indexOf( String( r[ key ] === null || r[ key ] === undefined ? '' : r[ key ] ) ) === -1 ) { return false; } }
                     var cd = dayStr( r.created_datetime ), td = dayStr( r.travel_datetime );
                     if ( f.dates.created_from && cd && cd < f.dates.created_from ) { return false; }
                     if ( f.dates.created_to && cd && cd > f.dates.created_to ) { return false; }
                     if ( f.dates.travel_from && td && td < f.dates.travel_from ) { return false; }
                     if ( f.dates.travel_to && td && td > f.dates.travel_to ) { return false; }
-                    if ( f.search ) { var hay = ''; for ( var k in r ) { hay += ' ' + esc( r[ k ] ).toLowerCase(); } if ( hay.indexOf( f.search ) === -1 ) { return false; } }
+                    if ( f.search ) { var hay = ''; for ( var k in r ) { if ( k.charAt( 0 ) !== '_' ) { hay += ' ' + esc( r[ k ] ).toLowerCase(); } } if ( hay.indexOf( f.search ) === -1 ) { return false; } }
                     return true;
                 }
 
-                // ---- aggregation helpers ----
                 function groupSum( data, keyFn ) {
                     var g = {};
                     data.forEach( function ( r ) {
                         var k = keyFn( r ); if ( k === '' || k === null || k === undefined ) { k = '—'; }
-                        if ( ! g[ k ] ) { g[ k ] = { label: String( k ), count: 0, parts: 0, amount: 0, metric: 0 }; }
-                        g[ k ].count++; g[ k ].parts += parts( r ); g[ k ].amount += num( r.price_amount ); g[ k ].metric += metricVal( r );
+                        if ( ! g[ k ] ) { g[ k ] = { label: String( k ), count: 0, parts: 0, amount: 0, netrev: 0, netrevN: 0, metric: 0 }; }
+                        g[ k ].count++; g[ k ].parts += parts( r ); g[ k ].amount += num( r.price_amount );
+                        if ( r._net_revenue !== null && esc( r.currency ) === revCur ) { g[ k ].netrev += r._net_revenue; g[ k ].netrevN++; }
+                        g[ k ].metric += metricVal( r );
                     } );
                     return Object.keys( g ).map( function ( k ) { return g[ k ]; } );
                 }
                 function avgLead( data ) {
                     var tot = 0, n = 0;
-                    data.forEach( function ( r ) {
-                        var c = dayStr( r.created_datetime ), t = dayStr( r.travel_datetime );
-                        if ( c && t ) { var d = ( Date.parse( t ) - Date.parse( c ) ) / 86400000; if ( ! isNaN( d ) && d >= 0 ) { tot += d; n++; } }
-                    } );
+                    data.forEach( function ( r ) { var c = dayStr( r.created_datetime ), t = dayStr( r.travel_datetime ); if ( c && t ) { var d = ( Date.parse( t ) - Date.parse( c ) ) / 86400000; if ( ! isNaN( d ) && d >= 0 ) { tot += d; n++; } } } );
                     return n ? ( tot / n ) : null;
                 }
 
-                // ---- renderers ----
+                // `max` is the scaling denominator; callers pass the largest
+                // ABSOLUTE metric so negative values (e.g. loss-making net
+                // revenue) size by magnitude and are coloured red rather than
+                // clamped to a tiny positive bar.
                 function barList( items, max, colorFn, valFn ) {
                     if ( ! items.length ) { return '<p class="bokun-andash__insight-sub">' + escHtml( L.noData ) + '</p>'; }
                     return '<div class="bokun-andash__barlist">' + items.map( function ( g ) {
-                        var w = max ? Math.max( 2, Math.round( ( g.metric / max ) * 100 ) ) : 2;
-                        var color = colorFn ? colorFn( g ) : 'var(--an-blue)';
+                        var w = max ? Math.max( 2, Math.round( ( Math.abs( g.metric ) / max ) * 100 ) ) : 2;
+                        var color = colorFn ? colorFn( g ) : ( g.metric < 0 ? 'var(--an-crit)' : 'var(--an-blue)' );
                         return '<div class="bokun-andash__barrow"><span class="lab" title="' + escHtml( g.label ) + '">' + escHtml( g.label ) +
                             '</span><span class="val">' + ( valFn ? valFn( g ) : fmtMetric( g.metric ) ) + '</span>' +
                             '<span class="bokun-andash__track"><span class="bokun-andash__fill" style="width:' + w + '%;background:' + color + '"></span></span></div>';
                     } ).join( '' ) + '</div>';
                 }
-
                 function topDimension( data, key, el ) {
                     var list = groupSum( data, function ( r ) { return esc( r[ key ] ); } ).filter( function ( g ) { return g.label !== '—'; } );
                     list.sort( function ( a, b ) { return b.metric - a.metric; } );
                     var top = list.slice( 0, 8 );
-                    if ( list.length > 8 ) {
-                        var rest = list.slice( 8 ).reduce( function ( s, g ) { return s + g.metric; }, 0 );
-                        top.push( { label: L.other, metric: rest } );
-                    }
-                    var max = top.reduce( function ( m, g ) { return Math.max( m, g.metric ); }, 0 );
+                    if ( list.length > 8 ) { top.push( { label: L.other, metric: list.slice( 8 ).reduce( function ( s, g ) { return s + g.metric; }, 0 ) } ); }
+                    var max = top.reduce( function ( m, g ) { return Math.max( m, Math.abs( g.metric ) ); }, 0 );
                     root.querySelector( el ).innerHTML = barList( top, max, null, null );
                 }
 
+                function sumNetRev( data ) { var s = 0, any = false; data.forEach( function ( r ) { if ( r._net_revenue !== null && esc( r.currency ) === revCur ) { s += r._net_revenue; any = true; } } ); return any ? s : null; }
+
                 function renderInsights( data ) {
+                    var pc = primaryCurrency( data );
                     var prods = groupSum( data, function ( r ) { return esc( r.product_title ); } ).filter( function ( g ) { return g.label !== '—'; } );
                     prods.sort( function ( a, b ) { return b.metric - a.metric; } );
                     var chans = groupSum( data, function ( r ) { return esc( r.channel_title ); } ).filter( function ( g ) { return g.label !== '—'; } );
                     chans.sort( function ( a, b ) { return b.metric - a.metric; } );
                     var totalMetric = data.reduce( function ( s, r ) { return s + metricVal( r ); }, 0 );
-                    var pc = primaryCurrency( data );
                     var lead = avgLead( data );
                     var full = 0, resulted = 0;
                     data.forEach( function ( r ) { var res = esc( r.result ); if ( res ) { resulted++; if ( res === 'full' ) { full++; } } } );
-
                     var cards = [];
-                    if ( prods.length ) {
-                        var share = totalMetric ? Math.round( ( prods[ 0 ].metric / totalMetric ) * 100 ) : 0;
-                        cards.push( { label: L.topProduct, value: prods[ 0 ].label, sub: fmtMetric( prods[ 0 ].metric ) + ' ' + metricLabel().toLowerCase() + ' · ' + share + '% ' + L.ofTotal } );
-                    }
-                    if ( chans.length ) {
-                        cards.push( { label: L.topChannel, value: chans[ 0 ].label, sub: fmtMetric( chans[ 0 ].metric ) + ' ' + metricLabel().toLowerCase() } );
+                    if ( prods.length ) { var share = totalMetric ? Math.round( ( prods[ 0 ].metric / totalMetric ) * 100 ) : 0; cards.push( { label: L.topProduct, value: prods[ 0 ].label, sub: fmtMetric( prods[ 0 ].metric ) + ' ' + metricLabel().toLowerCase() + ' · ' + share + '% ' + L.ofTotal } ); }
+                    if ( chans.length ) { cards.push( { label: L.topChannel, value: chans[ 0 ].label, sub: fmtMetric( chans[ 0 ].metric ) + ' ' + metricLabel().toLowerCase() } ); }
+                    var netrev = sumNetRev( data );
+                    if ( netrev !== null ) {
+                        var grossPrim = data.reduce( function ( s, r ) { return ( esc( r.currency ) === pc.cur ) ? s + num( r.price_amount ) : s; }, 0 );
+                        var margin = grossPrim ? Math.round( ( netrev / grossPrim ) * 100 ) : 0;
+                        cards.push( { label: L.netrev, value: fmtMoney( netrev ) + ( pc.cur ? ' ' + pc.cur : '' ), sub: L.margin + ' ' + margin + '%' + ( pc.multi ? ' · ' + L.mixedCur : '' ) } );
                     }
                     var revRows = data.filter( function ( r ) { return esc( r.currency ) === pc.cur && num( r.price_amount ); } );
                     var totalRev = revRows.reduce( function ( s, r ) { return s + num( r.price_amount ); }, 0 );
-                    if ( totalRev > 0 ) {
-                        cards.push( { label: L.avgValue, value: fmtMoney( revRows.length ? totalRev / revRows.length : 0 ) + ( pc.cur ? ' ' + pc.cur : '' ), sub: pc.multi ? L.mixedCur : '' } );
-                    }
+                    if ( totalRev > 0 ) { cards.push( { label: L.avgValue, value: fmtMoney( revRows.length ? totalRev / revRows.length : 0 ) + ( pc.cur ? ' ' + pc.cur : '' ), sub: pc.multi ? L.mixedCur : '' } ); }
                     if ( lead !== null ) { cards.push( { label: L.avgLead, value: fmtInt( lead ) + ' ' + L.days } ); }
                     if ( resulted ) { cards.push( { label: L.fullRate, value: Math.round( ( full / resulted ) * 100 ) + '%', sub: fmtInt( full ) + ' / ' + fmtInt( resulted ) } ); }
-
                     root.querySelector( '[data-insights]' ).innerHTML = cards.map( function ( c ) {
-                        return '<div class="bokun-andash__insight"><div class="bokun-andash__insight-label">' + escHtml( c.label ) +
-                            '</div><div class="bokun-andash__insight-value">' + escHtml( c.value ) + '</div>' +
-                            ( c.sub ? '<div class="bokun-andash__insight-sub">' + escHtml( c.sub ) + '</div>' : '' ) + '</div>';
+                        return '<div class="bokun-andash__insight"><div class="bokun-andash__insight-label">' + escHtml( c.label ) + '</div><div class="bokun-andash__insight-value">' + escHtml( c.value ) + '</div>' + ( c.sub ? '<div class="bokun-andash__insight-sub">' + escHtml( c.sub ) + '</div>' : '' ) + '</div>';
                     } ).join( '' );
                 }
 
                 function renderKpis( data ) {
                     var count = data.length, a = 0, c = 0, i = 0, byCur = {};
-                    data.forEach( function ( r ) {
-                        a += num( r.adult_participants ); c += num( r.child_participants ); i += num( r.infant_participants );
-                        var amt = num( r.price_amount ); if ( amt ) { var cur = esc( r.currency ) || '—'; byCur[ cur ] = ( byCur[ cur ] || 0 ) + amt; }
-                    } );
+                    data.forEach( function ( r ) { a += num( r.adult_participants ); c += num( r.child_participants ); i += num( r.infant_participants ); var amt = num( r.price_amount ); if ( amt ) { var cur = esc( r.currency ) || '—'; byCur[ cur ] = ( byCur[ cur ] || 0 ) + amt; } } );
                     var money = Object.keys( byCur ).sort().map( function ( cur ) { return fmtMoney( byCur[ cur ] ) + ' ' + cur; } );
-                    var lead = avgLead( data );
+                    var netrev = sumNetRev( data );
                     var tiles = [
                         { label: L.bookings, value: fmtInt( count ) },
                         { label: L.participants, value: fmtInt( a + c + i ), sub: 'A ' + fmtInt( a ) + ' · C ' + fmtInt( c ) + ' · I ' + fmtInt( i ) },
                         { label: L.revenue, value: money.length ? money[ 0 ] : '—', sub: money.length > 1 ? money.slice( 1 ).join( ' · ' ) : '' },
-                        { label: L.avgLead, value: lead !== null ? ( fmtInt( lead ) + ' ' + L.days ) : '—' }
+                        { label: L.netrev, value: netrev !== null ? ( fmtMoney( netrev ) + ( revCur ? ' ' + revCur : '' ) ) : '—' },
+                        { label: L.avgLead, value: avgLead( data ) !== null ? ( fmtInt( avgLead( data ) ) + ' ' + L.days ) : '—' }
                     ];
-                    root.querySelector( '[data-kpis]' ).innerHTML = tiles.map( function ( t ) {
-                        return '<div class="bokun-andash__kpi"><div class="bokun-andash__kpi-label">' + escHtml( t.label ) +
-                            '</div><div class="bokun-andash__kpi-value">' + escHtml( t.value ) + '</div>' +
-                            ( t.sub ? '<div class="bokun-andash__kpi-sub">' + escHtml( t.sub ) + '</div>' : '' ) + '</div>';
-                    } ).join( '' );
+                    root.querySelector( '[data-kpis]' ).innerHTML = tiles.map( function ( t ) { return '<div class="bokun-andash__kpi"><div class="bokun-andash__kpi-label">' + escHtml( t.label ) + '</div><div class="bokun-andash__kpi-value">' + escHtml( t.value ) + '</div>' + ( t.sub ? '<div class="bokun-andash__kpi-sub">' + escHtml( t.sub ) + '</div>' : '' ) + '</div>'; } ).join( '' );
                 }
 
-                // ---- trend (SVG line + area, weekly buckets) ----
+                function trendColors() { var cs = getComputedStyle( root ); function c( n, fb ) { var v = cs.getPropertyValue( n ).trim(); return v || fb; } return { blue: c( '--an-blue', '#2a78d6' ), blueSoft: c( '--an-blue-soft', 'rgba(42,120,214,.14)' ), line: c( '--an-line', '#e2e4e7' ), ink2: c( '--an-ink-2', '#646970' ) }; }
                 function weekKey( d ) { var dt = new Date( d + 'T00:00:00' ); if ( isNaN( dt ) ) { return ''; } var day = ( dt.getDay() + 6 ) % 7; dt.setDate( dt.getDate() - day ); return dt.toISOString().slice( 0, 10 ); }
-                function trendColors() {
-                    var cs = getComputedStyle( root );
-                    function c( name, fb ) { var v = cs.getPropertyValue( name ).trim(); return v || fb; }
-                    return {
-                        blue: c( '--an-blue', '#2a78d6' ),
-                        blueSoft: c( '--an-blue-soft', 'rgba(42,120,214,.14)' ),
-                        line: c( '--an-line', '#e2e4e7' ),
-                        ink2: c( '--an-ink-2', '#646970' )
-                    };
-                }
                 function renderTrend( data ) {
-                    var el = root.querySelector( '[data-trend]' );
-                    var COL = trendColors();
-                    var buckets = {};
-                    data.forEach( function ( r ) { var c = dayStr( r.created_datetime ); if ( ! c ) { return; } var wk = weekKey( c ); if ( ! wk ) { return; } buckets[ wk ] = ( buckets[ wk ] || 0 ) + metricVal( r ); } );
+                    var el = root.querySelector( '[data-trend]' ); var COL = trendColors(); var buckets = {};
+                    data.forEach( function ( r ) { var cday = dayStr( r.created_datetime ); if ( ! cday ) { return; } var wk = weekKey( cday ); if ( ! wk ) { return; } buckets[ wk ] = ( buckets[ wk ] || 0 ) + metricVal( r ); } );
                     var keys = Object.keys( buckets ).sort();
                     if ( keys.length === 0 ) { el.innerHTML = '<p class="bokun-andash__insight-sub">' + escHtml( L.noData ) + '</p>'; return; }
-                    // A single bucket still draws (one labelled point); only a
-                    // truly empty set shows the "no data" message.
                     var vals = keys.map( function ( k ) { return buckets[ k ]; } );
-                    var maxV = Math.max.apply( null, vals ), W = 800, H = 240, padL = 44, padB = 26, padT = 12, padR = 12;
+                    var W = 800, H = 240, padL = 48, padB = 26, padT = 12, padR = 12;
                     var innerW = W - padL - padR, innerH = H - padT - padB;
+                    // Signed scale with a zero baseline so net-revenue losses
+                    // (negative) render below zero instead of off-canvas.
+                    var top = Math.max.apply( null, vals.concat( [ 0 ] ) );
+                    var bot = Math.min.apply( null, vals.concat( [ 0 ] ) );
+                    if ( top === bot ) { top = bot + 1; }
+                    var span = top - bot;
                     var x = function ( idx ) { return padL + ( keys.length === 1 ? innerW / 2 : ( idx / ( keys.length - 1 ) ) * innerW ); };
-                    var y = function ( v ) { return padT + innerH - ( maxV ? ( v / maxV ) * innerH : 0 ); };
+                    var y = function ( v ) { return padT + innerH - ( ( v - bot ) / span ) * innerH; };
+                    var y0 = y( 0 );
                     var pts = keys.map( function ( k, idx ) { return [ x( idx ), y( buckets[ k ] ) ]; } );
                     var line = pts.map( function ( p, idx ) { return ( idx ? 'L' : 'M' ) + p[ 0 ].toFixed( 1 ) + ' ' + p[ 1 ].toFixed( 1 ); } ).join( ' ' );
-                    var area = line + ' L' + x( keys.length - 1 ).toFixed( 1 ) + ' ' + ( padT + innerH ) + ' L' + x( 0 ).toFixed( 1 ) + ' ' + ( padT + innerH ) + ' Z';
+                    var area = line + ' L' + x( keys.length - 1 ).toFixed( 1 ) + ' ' + y0.toFixed( 1 ) + ' L' + x( 0 ).toFixed( 1 ) + ' ' + y0.toFixed( 1 ) + ' Z';
                     var grid = '', ticks = 4;
-                    for ( var g = 0; g <= ticks; g++ ) {
-                        var gv = ( maxV / ticks ) * g, gy = y( gv );
-                        grid += '<line x1="' + padL + '" y1="' + gy.toFixed( 1 ) + '" x2="' + ( W - padR ) + '" y2="' + gy.toFixed( 1 ) + '" stroke="' + COL.line + '" stroke-width="1"/>';
-                        grid += '<text x="' + ( padL - 6 ) + '" y="' + ( gy + 3 ).toFixed( 1 ) + '" text-anchor="end" font-size="10" fill="' + COL.ink2 + '">' + ( metric === 'revenue' ? fmtInt( gv ) : fmtInt( gv ) ) + '</text>';
-                    }
-                    var xlabels = '';
-                    var step = Math.ceil( keys.length / 6 );
+                    for ( var g = 0; g <= ticks; g++ ) { var gv = bot + ( span / ticks ) * g, gy = y( gv ); grid += '<line x1="' + padL + '" y1="' + gy.toFixed( 1 ) + '" x2="' + ( W - padR ) + '" y2="' + gy.toFixed( 1 ) + '" stroke="' + COL.line + '" stroke-width="1"/>'; grid += '<text x="' + ( padL - 6 ) + '" y="' + ( gy + 3 ).toFixed( 1 ) + '" text-anchor="end" font-size="10" fill="' + COL.ink2 + '">' + fmtInt( gv ) + '</text>'; }
+                    var zeroLine = ( bot < 0 ) ? '<line x1="' + padL + '" y1="' + y0.toFixed( 1 ) + '" x2="' + ( W - padR ) + '" y2="' + y0.toFixed( 1 ) + '" stroke="' + COL.ink2 + '" stroke-width="1"/>' : '';
+                    var xlabels = '', step = Math.ceil( keys.length / 6 );
                     keys.forEach( function ( k, idx ) { if ( idx % step === 0 || idx === keys.length - 1 ) { xlabels += '<text x="' + x( idx ).toFixed( 1 ) + '" y="' + ( H - 8 ) + '" text-anchor="middle" font-size="10" fill="' + COL.ink2 + '">' + k.slice( 5 ) + '</text>'; } } );
                     var dots = pts.map( function ( p, idx ) { return '<circle cx="' + p[ 0 ].toFixed( 1 ) + '" cy="' + p[ 1 ].toFixed( 1 ) + '" r="3" fill="' + COL.blue + '" data-i="' + idx + '"/>'; } ).join( '' );
                     var hit = pts.map( function ( p, idx ) { var hw = innerW / keys.length; return '<rect x="' + ( p[ 0 ] - hw / 2 ).toFixed( 1 ) + '" y="' + padT + '" width="' + hw.toFixed( 1 ) + '" height="' + innerH + '" fill="transparent" data-hit="' + idx + '"/>'; } ).join( '' );
                     el.style.position = 'relative';
-                    el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + escHtml( L.trend ) + '">' + grid +
-                        '<path d="' + area + '" fill="' + COL.blueSoft + '" stroke="none"/>' +
-                        '<path d="' + line + '" fill="none" stroke="' + COL.blue + '" stroke-width="2"/>' +
-                        '<line class="an-cross" x1="0" y1="' + padT + '" x2="0" y2="' + ( padT + innerH ) + '" stroke="' + COL.blue + '" stroke-width="1" opacity="0"/>' +
-                        dots + xlabels + hit + '</svg><div class="bokun-andash__tip" data-tip></div>';
+                    el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + escHtml( L.trend ) + '">' + grid + zeroLine + '<path d="' + area + '" fill="' + COL.blueSoft + '" stroke="none"/><path d="' + line + '" fill="none" stroke="' + COL.blue + '" stroke-width="2"/><line class="an-cross" x1="0" y1="' + padT + '" x2="0" y2="' + ( padT + innerH ) + '" stroke="' + COL.blue + '" stroke-width="1" opacity="0"/>' + dots + xlabels + hit + '</svg><div class="bokun-andash__tip" data-tip></div>';
                     var svg = el.querySelector( 'svg' ), tip = el.querySelector( '[data-tip]' ), cross = el.querySelector( '.an-cross' );
                     svg.querySelectorAll( '[data-hit]' ).forEach( function ( rect ) {
-                        rect.addEventListener( 'mousemove', function () {
-                            var idx = +rect.getAttribute( 'data-hit' ), px = x( idx ), py = y( buckets[ keys[ idx ] ] );
-                            cross.setAttribute( 'x1', px ); cross.setAttribute( 'x2', px ); cross.setAttribute( 'opacity', '1' );
-                            tip.style.left = ( ( px / W ) * el.clientWidth ) + 'px';
-                            tip.style.top = ( ( py / H ) * el.clientHeight ) + 'px';
-                            tip.style.opacity = '1';
-                            tip.textContent = L.week + ' ' + keys[ idx ] + ': ' + fmtMetric( buckets[ keys[ idx ] ] );
-                        } );
+                        rect.addEventListener( 'mousemove', function () { var idx = +rect.getAttribute( 'data-hit' ), px = x( idx ), py = y( buckets[ keys[ idx ] ] ); cross.setAttribute( 'x1', px ); cross.setAttribute( 'x2', px ); cross.setAttribute( 'opacity', '1' ); tip.style.left = ( ( px / W ) * el.clientWidth ) + 'px'; tip.style.top = ( ( py / H ) * el.clientHeight ) + 'px'; tip.style.opacity = '1'; tip.textContent = L.week + ' ' + keys[ idx ] + ': ' + fmtMetric( buckets[ keys[ idx ] ] ); } );
                         rect.addEventListener( 'mouseleave', function () { tip.style.opacity = '0'; cross.setAttribute( 'opacity', '0' ); } );
                     } );
                 }
 
                 function renderResultMix( data ) {
                     var map = [ [ 'full', 'Full', 'var(--an-good)' ], [ 'partial', 'Partial', 'var(--an-warn)' ], [ 'not-available', 'Not available', 'var(--an-crit)' ] ];
-                    var counts = { full: 0, partial: 0, 'not-available': 0, none: 0 };
-                    data.forEach( function ( r ) { var res = esc( r.result ); if ( counts[ res ] !== undefined ) { counts[ res ]++; } else { counts.none++; } } );
-                    var total = data.length || 1;
+                    var counts = { full: 0, partial: 0, 'not-available': 0 }; var total = 0;
+                    data.forEach( function ( r ) { var res = esc( r.result ); if ( counts[ res ] !== undefined ) { counts[ res ]++; total++; } } );
+                    total = total || 1;
                     var seg = map.map( function ( m ) { var w = ( counts[ m[ 0 ] ] / total ) * 100; return w > 0 ? '<span style="width:' + w + '%;background:' + m[ 2 ] + '" title="' + m[ 1 ] + ': ' + counts[ m[ 0 ] ] + '"></span>' : ''; } ).join( '' );
                     var legend = map.map( function ( m ) { return '<span><i style="background:' + m[ 2 ] + '"></i>' + m[ 1 ] + ' ' + fmtInt( counts[ m[ 0 ] ] ) + ' (' + Math.round( ( counts[ m[ 0 ] ] / total ) * 100 ) + '%)</span>'; } ).join( '' );
                     root.querySelector( '[data-resultmix]' ).innerHTML = '<div class="bokun-andash__seg-bar">' + seg + '</div><div class="bokun-andash__legend">' + legend + '</div>';
                 }
-
                 function renderPaymentMix( data ) {
                     var list = groupSum( data, function ( r ) { return esc( r.payment_method ); } ).filter( function ( g ) { return g.label !== '—'; } );
                     list.sort( function ( a, b ) { return b.count - a.count; } );
                     var cols = [ 'var(--an-c1)', 'var(--an-c2)', 'var(--an-c3)', 'var(--an-c4)', 'var(--an-c5)', 'var(--an-c6)' ];
                     var max = list.reduce( function ( m, g ) { return Math.max( m, g.count ); }, 0 );
-                    // Payment mix is always count-based; align the bar metric to the
-                    // count so widths (g.metric / max) match the displayed values.
                     var items = list.map( function ( g, idx ) { g._c = cols[ idx % cols.length ]; g.metric = g.count; return g; } );
                     root.querySelector( '[data-paymentmix]' ).innerHTML = barList( items, max, function ( g ) { return g._c; }, function ( g ) { return fmtInt( g.count ); } );
                 }
 
                 var DETAIL_COLS = [
                     [ 'created_datetime', 'Created' ], [ 'travel_datetime', 'Travel' ], [ 'confirmation_code', 'Confirmation' ],
-                    [ 'product_title', 'Product' ], [ 'product_option', 'Option' ], [ 'result', 'Result' ], [ 'payment_method', 'Payment' ],
-                    [ '__parts', 'Pax' ], [ 'price_amount', 'Amount' ], [ 'currency', 'Cur' ], [ 'channel_title', 'Channel' ],
-                    [ 'seller_title', 'Seller' ], [ 'vendor_title', 'Vendor' ], [ 'pb_status', 'Status' ], [ 'language', 'Lang' ]
+                    [ 'product_title', 'Product' ], [ 'departure_city', 'City' ], [ 'partner_page_id', 'Partner' ],
+                    [ '__parts', 'Pax' ], [ 'price_amount', 'Gross' ], [ 'net_price', 'Net price' ], [ '__net_revenue', 'Net revenue' ],
+                    [ 'currency', 'Cur' ], [ 'result', 'Result' ], [ 'payment_method', 'Payment' ], [ 'channel_title', 'Channel' ], [ 'pb_status', 'Status' ]
                 ];
                 var DETAIL_CAP = 300;
-                function cell( r, key ) { if ( key === '__parts' ) { return fmtInt( parts( r ) ); } if ( key === 'price_amount' ) { var a = num( r.price_amount ); return a ? fmtMoney( a ) : ''; } return esc( r[ key ] ); }
+                function cell( r, key ) {
+                    if ( key === '__parts' ) { return fmtInt( parts( r ) ); }
+                    if ( key === 'price_amount' ) { var a = num( r.price_amount ); return a ? fmtMoney( a ) : ''; }
+                    if ( key === 'net_price' ) { return r.net_price !== null && r.net_price !== undefined ? fmtMoney( r.net_price ) : ''; }
+                    if ( key === '__net_revenue' ) { return r._net_revenue !== null && r._net_revenue !== undefined ? fmtMoney( r._net_revenue ) : ''; }
+                    return esc( r[ key ] );
+                }
                 function renderDetail( data ) {
                     var head = '<thead><tr>' + DETAIL_COLS.map( function ( c ) { return '<th>' + escHtml( c[ 1 ] ) + '</th>'; } ).join( '' ) + '</tr></thead>';
                     var body = data.slice( 0, DETAIL_CAP ).map( function ( r ) {
-                        return '<tr>' + DETAIL_COLS.map( function ( c ) { var cls = ( c[ 0 ] === 'price_amount' || c[ 0 ] === '__parts' ) ? ' class="bokun-andash__num"' : ''; return '<td' + cls + '>' + escHtml( cell( r, c[ 0 ] ) ) + '</td>'; } ).join( '' ) + '</tr>';
+                        return '<tr>' + DETAIL_COLS.map( function ( c ) {
+                            var numeric = ( c[ 0 ] === 'price_amount' || c[ 0 ] === '__parts' || c[ 0 ] === 'net_price' || c[ 0 ] === '__net_revenue' );
+                            var cls = numeric ? 'bokun-andash__num' : '';
+                            if ( c[ 0 ] === '__net_revenue' && r._net_revenue !== null && r._net_revenue < 0 ) { cls += ' bokun-andash__neg'; }
+                            return '<td' + ( cls ? ' class="' + cls.trim() + '"' : '' ) + '>' + escHtml( cell( r, c[ 0 ] ) ) + '</td>';
+                        } ).join( '' ) + '</tr>';
                     } ).join( '' );
                     root.querySelector( '[data-detail]' ).innerHTML = '<table>' + head + '<tbody>' + ( body || '<tr><td>—</td></tr>' ) + '</tbody></table>';
                     root.querySelector( '[data-detail-count]' ).textContent = data.length > DETAIL_CAP ? ( '(' + fmtInt( DETAIL_CAP ) + ' / ' + fmtInt( data.length ) + ')' ) : ( '(' + fmtInt( data.length ) + ')' );
@@ -3486,34 +3551,23 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 function renderBreakdown( data ) {
                     var key = root.querySelector( '[data-groupby]' ).value;
-                    var list = groupSum( data, function ( r ) {
-                        if ( key === '__created_month' ) { return dayStr( r.created_datetime ).slice( 0, 7 ); }
-                        if ( key === '__travel_month' ) { return dayStr( r.travel_datetime ).slice( 0, 7 ); }
-                        return esc( r[ key ] );
-                    } );
+                    var list = groupSum( data, function ( r ) { if ( key === '__created_month' ) { return dayStr( r.created_datetime ).slice( 0, 7 ); } if ( key === '__travel_month' ) { return dayStr( r.travel_datetime ).slice( 0, 7 ); } return esc( r[ key ] ); } );
                     list.sort( function ( a, b ) { return b.count - a.count; } );
                     var totalCount = data.length || 1;
                     var rowsHtml = list.map( function ( g ) {
                         var share = Math.round( ( g.count / totalCount ) * 100 );
-                        return '<tr><td>' + escHtml( g.label ) + '</td>' +
-                            '<td class="bokun-andash__num">' + fmtInt( g.count ) + '</td>' +
-                            '<td class="bokun-andash__num">' + share + '%</td>' +
-                            '<td class="bokun-andash__num">' + fmtInt( g.parts ) + '</td>' +
-                            '<td class="bokun-andash__num">' + fmtMoney( g.amount ) + '</td></tr>';
+                        // Distinguish "no computable net revenue" (no gross or no
+                        // catalog match) from a genuine 0.00, so missing data is
+                        // not shown as breakeven.
+                        var nrCell = g.netrevN ? fmtMoney( g.netrev ) : '—';
+                        var nrCls = ( g.netrevN && g.netrev < 0 ) ? ' bokun-andash__neg' : '';
+                        return '<tr><td>' + escHtml( g.label ) + '</td><td class="bokun-andash__num">' + fmtInt( g.count ) + '</td><td class="bokun-andash__num">' + share + '%</td><td class="bokun-andash__num">' + fmtInt( g.parts ) + '</td><td class="bokun-andash__num">' + fmtMoney( g.amount ) + '</td><td class="bokun-andash__num' + nrCls + '">' + nrCell + '</td></tr>';
                     } ).join( '' );
-                    root.querySelector( '[data-breakdown]' ).innerHTML = '<div class="bokun-andash__table-wrap"><table><thead><tr><th>' +
-                        escHtml( DIM_LABELS[ key ] || L.group ) + '</th><th class="bokun-andash__num">' + escHtml( L.bookings ) +
-                        '</th><th class="bokun-andash__num">' + escHtml( L.share ) + '</th><th class="bokun-andash__num">' + escHtml( L.participants ) +
-                        '</th><th class="bokun-andash__num">' + escHtml( L.amount ) + '</th></tr></thead><tbody>' +
-                        ( rowsHtml || '<tr><td colspan="5">—</td></tr>' ) + '</tbody></table></div>';
+                    var GL = Object.assign( {}, GROUP_DIMS, { __created_month: 'Created month', __travel_month: 'Travel month' } );
+                    root.querySelector( '[data-breakdown]' ).innerHTML = '<div class="bokun-andash__table-wrap"><table><thead><tr><th>' + escHtml( GL[ key ] || L.group ) + '</th><th class="bokun-andash__num">' + escHtml( L.bookings ) + '</th><th class="bokun-andash__num">' + escHtml( L.share ) + '</th><th class="bokun-andash__num">' + escHtml( L.participants ) + '</th><th class="bokun-andash__num">' + escHtml( L.amount ) + '</th><th class="bokun-andash__num">' + escHtml( L.netrev ) + '</th></tr></thead><tbody>' + ( rowsHtml || '<tr><td colspan="6">—</td></tr>' ) + '</tbody></table></div>';
                 }
 
                 var lastFiltered = ROWS;
-                function metricLabelFull() {
-                    var lbl = metricLabel();
-                    if ( metric === 'revenue' && revCur ) { lbl += ' (' + revCur + ( revMulti ? ', ' + L.mixedCur : '' ) + ')'; }
-                    return lbl;
-                }
                 function renderMetricTitles() {
                     root.querySelector( '[data-trend-title]' ).textContent = L.trend + ' — ' + metricLabelFull();
                     root.querySelector( '[data-topproducts-title]' ).textContent = L.topProducts + ' — ' + metricLabelFull();
@@ -3522,9 +3576,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 function recompute() {
                     var f = currentFilters();
                     lastFiltered = ROWS.filter( function ( r ) { return matches( r, f ); } );
-                    var pc = primaryCurrency( lastFiltered );
-                    revCur = pc.cur;
-                    revMulti = pc.multi;
+                    var pc = primaryCurrency( lastFiltered ); revCur = pc.cur; revMulti = pc.multi;
                     renderMetricTitles();
                     renderInsights( lastFiltered );
                     renderKpis( lastFiltered );
@@ -3537,44 +3589,27 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     renderDetail( lastFiltered );
                 }
 
-                // ---- events ----
-                root.querySelectorAll( '[data-filters] input, [data-filters] select' ).forEach( function ( el ) {
-                    el.addEventListener( 'input', recompute ); el.addEventListener( 'change', recompute );
-                } );
+                root.querySelector( '[data-f-search]' ).addEventListener( 'input', recompute );
+                root.querySelectorAll( '[data-f-dim], [data-f-date]' ).forEach( function ( el ) { el.addEventListener( 'change', recompute ); } );
                 root.querySelector( '[data-groupby]' ).addEventListener( 'change', function () { renderBreakdown( lastFiltered ); } );
-                root.querySelectorAll( '[data-metric]' ).forEach( function ( btn ) {
-                    btn.addEventListener( 'click', function () {
-                        metric = btn.getAttribute( 'data-metric' );
-                        root.querySelectorAll( '[data-metric]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } );
-                        recompute();
-                    } );
-                } );
-                root.querySelectorAll( '[data-preset]' ).forEach( function ( btn ) {
-                    btn.addEventListener( 'click', function () {
-                        root.querySelectorAll( '[data-preset]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } );
-                        var days = +btn.getAttribute( 'data-preset' );
-                        var from = root.querySelector( '[data-f-date="created_from"]' ), to = root.querySelector( '[data-f-date="created_to"]' );
-                        if ( ! days ) { from.value = ''; to.value = ''; }
-                        else { var d = new Date(); var f2 = new Date(); f2.setDate( d.getDate() - days ); from.value = f2.toISOString().slice( 0, 10 ); to.value = ''; }
-                        recompute();
-                    } );
-                } );
-                var ftoggle = root.querySelector( '[data-filters-toggle]' ), fwrap = root.querySelector( '[data-filters]' );
-                ftoggle.addEventListener( 'click', function () { var open = fwrap.hidden; fwrap.hidden = ! open; ftoggle.setAttribute( 'aria-expanded', open ? 'true' : 'false' ); } );
+                root.querySelectorAll( '[data-metric]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { metric = btn.getAttribute( 'data-metric' ); root.querySelectorAll( '[data-metric]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } ); recompute(); } ); } );
+                root.querySelectorAll( '[data-preset]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { root.querySelectorAll( '[data-preset]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } ); var days = +btn.getAttribute( 'data-preset' ); var from = root.querySelector( '[data-f-date="created_from"]' ), to = root.querySelector( '[data-f-date="created_to"]' ); if ( ! days ) { from.value = ''; to.value = ''; } else { var d = new Date(); var f2 = new Date(); f2.setDate( d.getDate() - days ); from.value = f2.toISOString().slice( 0, 10 ); to.value = ''; } recompute(); } ); } );
                 root.querySelector( '[data-reset]' ).addEventListener( 'click', function () {
-                    root.querySelectorAll( '[data-filters] input' ).forEach( function ( el ) { el.value = ''; } );
-                    root.querySelectorAll( '[data-filters] select' ).forEach( function ( el ) { el.value = ''; } );
+                    FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = {}; } );
+                    root.querySelectorAll( '.bokun-andash__item.is-on' ).forEach( function ( el ) { el.classList.remove( 'is-on' ); } );
+                    root.querySelectorAll( '[data-f-dim]' ).forEach( function ( el ) { el.value = ''; } );
+                    root.querySelectorAll( '[data-f-date]' ).forEach( function ( el ) { el.value = ''; } );
+                    root.querySelector( '[data-f-search]' ).value = '';
                     root.querySelectorAll( '[data-preset]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b.getAttribute( 'data-preset' ) === '0' ); } );
                     recompute();
                 } );
                 root.querySelector( '[data-export]' ).addEventListener( 'click', function () {
                     if ( ! lastFiltered.length ) { return; }
-                    var cols = Object.keys( lastFiltered[ 0 ] );
+                    var cols = Object.keys( lastFiltered[ 0 ] ).filter( function ( k ) { return k !== '_net_cost'; } );
                     var lines = [ cols.join( ',' ) ];
                     lastFiltered.forEach( function ( r ) { lines.push( cols.map( function ( k ) { var v = ( r[ k ] === null || r[ k ] === undefined ) ? '' : String( r[ k ] ); return '"' + v.replace( /"/g, '""' ) + '"'; } ).join( ',' ) ); } );
                     var blob = new Blob( [ lines.join( '\n' ) ], { type: 'text/csv;charset=utf-8;' } );
-                    var a = document.createElement( 'a' ); a.href = URL.createObjectURL( blob ); a.download = 'bokun-analytics.csv';
-                    document.body.appendChild( a ); a.click(); document.body.removeChild( a );
+                    var a = document.createElement( 'a' ); a.href = URL.createObjectURL( blob ); a.download = 'bokun-analytics.csv'; document.body.appendChild( a ); a.click(); document.body.removeChild( a );
                 } );
 
                 function init() { if ( started ) { return; } started = true; recompute(); }
