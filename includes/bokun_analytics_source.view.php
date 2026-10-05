@@ -401,11 +401,11 @@ if ( $table_exists && $row_count > 0 ) {
         // Totals accumulated across every batch of this run.
         var totals = { scanned: 0, eligible: 0, marked: 0, already: 0 };
 
-        function runPage( page ) {
+        function runBatch( afterId ) {
             var body = new URLSearchParams();
             body.append( 'action', 'bokun_mark_refunded_cancelled' );
             body.append( 'nonce', nonce );
-            body.append( 'page', page );
+            body.append( 'after_id', afterId );
 
             fetch( ajaxUrl, {
                 method: 'POST',
@@ -432,9 +432,9 @@ if ( $table_exists && $row_count > 0 ) {
                     count.textContent = json.data.row_count;
                 }
 
-                if ( ! json.data.done && json.data.next_page ) {
-                    message.textContent = workingText + ' (' + json.data.page + ' / ' + json.data.max_pages + ', ' + totals.marked + '+' + totals.already + ')';
-                    runPage( json.data.next_page );
+                if ( ! json.data.done && json.data.next_after ) {
+                    message.textContent = workingText + ' (' + totals.marked + '+' + totals.already + ')';
+                    runBatch( json.data.next_after );
                 } else {
                     finish( true );
                     message.textContent = doneText + ' ' + totals.marked + ' (' + totals.already + ' already) ' + ofText + ' ' + totals.eligible + '/' + totals.scanned + ' ' + backlogText;
@@ -447,7 +447,7 @@ if ( $table_exists && $row_count > 0 ) {
             } );
         }
 
-        runPage( 1 );
+        runBatch( 0 );
     } );
 } )();
 </script>

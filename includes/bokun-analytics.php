@@ -905,35 +905,35 @@ function bokun_analytics_backfill_batch_size() {
 }
 
 /**
- * Backfill one page: mark cancelled bookings that were "made" (Full/Partial, so
+ * Backfill one batch: mark cancelled bookings that were "made" (Full/Partial, so
  * the partner was paid) as "Refunded by Partner", for the backlog created
  * before that checkbox existed. Each affected booking gets the term, a
  * booking-history entry, and an analytics re-sync so its net revenue flips from
  * the negative cancellation loss to neutral (null).
  *
- * Processes only one bounded batch per call and reports whether more pages
- * remain, so a large backlog never has to complete inside a single request. The
- * cancelled set is stable across pages (the backfill never removes the
- * "cancelled" term it filters on), and ordering is fixed by post ID, so paging
- * is deterministic. Idempotent — bookings already marked are counted, not
+ * Processes one bounded batch per call, continuing from the last processed post
+ * ID (keyset pagination) so a large backlog never has to complete in a single
+ * request and a concurrent change to the cancelled set can't make a later batch
+ * skip eligible bookings. Idempotent — bookings already marked are counted, not
  * re-tagged.
  *
- * @param int $page       1-based page to process.
- * @param int $batch_size Bookings per page.
- * @return array{scanned:int,eligible:int,marked:int,already:int,page:int,max_pages:int,done:bool}
+ * @param int $after_id   Process bookings with a greater post ID.
+ * @param int $batch_size Bookings per batch.
+ * @return array{scanned:int,eligible:int,marked:int,already:int,last_id:int,done:bool}
  */
-function bokun_analytics_mark_cancelled_made_refunded( $page = 1, $batch_size = 0 ) {
-    $page       = max( 1, (int) $page );
+function bokun_analytics_mark_cancelled_made_refunded( $after_id = 0, $batch_size = 0 ) {
+    global $wpdb;
+
+    $after_id   = max( 0, (int) $after_id );
     $batch_size = (int) $batch_size > 0 ? (int) $batch_size : bokun_analytics_backfill_batch_size();
 
     $stats = array(
-        'scanned'   => 0,
-        'eligible'  => 0,
-        'marked'    => 0,
-        'already'   => 0,
-        'page'      => $page,
-        'max_pages' => 0,
-        'done'      => true,
+        'scanned'  => 0,
+        'eligible' => 0,
+        'marked'   => 0,
+        'already'  => 0,
+        'last_id'  => $after_id,
+        'done'     => true,
     );
 
     // Match the dashboard's cancelled detection: any booking_status term whose
@@ -958,33 +958,35 @@ function bokun_analytics_mark_cancelled_made_refunded( $page = 1, $batch_size = 
         return $stats;
     }
 
-    $query = new WP_Query(
-        array(
-            'post_type'        => 'bokun_booking',
-            'post_status'      => array( 'publish', 'draft', 'pending', 'private' ),
-            'posts_per_page'   => $batch_size,
-            'paged'            => $page,
-            'orderby'          => 'ID',
-            'order'            => 'ASC',
-            'fields'           => 'ids',
-            'no_found_rows'    => false,
-            'suppress_filters' => true,
-            'tax_query'        => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
-                array(
-                    'taxonomy' => 'booking_status',
-                    'field'    => 'term_id',
-                    'terms'    => $cancel_term_ids,
-                ),
-            ),
-        )
-    );
+    $statuses            = array( 'publish', 'draft', 'pending', 'private' );
+    $status_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+    $term_placeholders   = implode( ', ', array_fill( 0, count( $cancel_term_ids ), '%d' ) );
 
-    $stats['max_pages'] = (int) $query->max_num_pages;
+    // Keyset pagination by post ID (prefiltered to any "cancel" status), so a
+    // shifting set can never skip unprocessed rows.
+    $sql = "SELECT DISTINCT p.ID
+        FROM {$wpdb->posts} p
+        INNER JOIN {$wpdb->term_relationships} tr ON tr.object_id = p.ID
+        INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id AND tt.taxonomy = 'booking_status'
+        WHERE p.post_type = 'bokun_booking'
+          AND p.post_status IN ( {$status_placeholders} )
+          AND p.ID > %d
+          AND tt.term_id IN ( {$term_placeholders} )
+        ORDER BY p.ID ASC
+        LIMIT %d";
 
-    if ( $query->have_posts() ) {
-        foreach ( $query->posts as $post_id ) {
+    $params = array_merge( $statuses, array( $after_id ), $cancel_term_ids, array( $batch_size ) );
+
+    // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+    $ids = $wpdb->get_col( $wpdb->prepare( $sql, $params ) );
+
+    $returned = is_array( $ids ) ? count( $ids ) : 0;
+
+    if ( is_array( $ids ) ) {
+        foreach ( $ids as $post_id ) {
             $post_id = (int) $post_id;
             $stats['scanned']++;
+            $stats['last_id'] = $post_id;
 
             // Apply the exact eligibility the dashboard refund controls and the
             // status-change handler use: the booking must currently be both
@@ -1021,16 +1023,15 @@ function bokun_analytics_mark_cancelled_made_refunded( $page = 1, $batch_size = 
         }
     }
 
-    wp_reset_postdata();
-
-    $stats['done'] = ( 0 === $stats['max_pages'] ) || ( $page >= $stats['max_pages'] );
+    // A short batch (fewer than requested) means no rows remain after it.
+    $stats['done'] = ( $returned < $batch_size );
 
     return $stats;
 }
 
 /**
- * AJAX: run one page of the cancelled-made -> refunded-by-partner backfill. The
- * admin screen calls this repeatedly, advancing `page` until `done` is true.
+ * AJAX: run one batch of the cancelled-made -> refunded-by-partner backfill. The
+ * admin screen calls this repeatedly, advancing `after_id` until `done` is true.
  *
  * @return void
  */
@@ -1041,17 +1042,16 @@ function bokun_analytics_ajax_mark_refunded() {
 
     check_ajax_referer( 'bokun_analytics_mark_refunded', 'nonce' );
 
-    $page  = isset( $_POST['page'] ) ? max( 1, (int) $_POST['page'] ) : 1;
-    $stats = bokun_analytics_mark_cancelled_made_refunded( $page );
+    $after_id = isset( $_POST['after_id'] ) ? max( 0, (int) $_POST['after_id'] ) : 0;
+    $stats    = bokun_analytics_mark_cancelled_made_refunded( $after_id );
 
     wp_send_json_success(
         array(
-            'stats'     => $stats,
-            'page'      => (int) $stats['page'],
-            'max_pages' => (int) $stats['max_pages'],
-            'done'      => (bool) $stats['done'],
-            'next_page' => $stats['done'] ? 0 : ( (int) $stats['page'] + 1 ),
-            'row_count' => bokun_analytics_get_row_count(),
+            'stats'      => $stats,
+            'last_id'    => (int) $stats['last_id'],
+            'done'       => (bool) $stats['done'],
+            'next_after' => $stats['done'] ? 0 : (int) $stats['last_id'],
+            'row_count'  => bokun_analytics_get_row_count(),
         )
     );
 }
