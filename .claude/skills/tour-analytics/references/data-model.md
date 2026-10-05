@@ -24,6 +24,7 @@ meta ("N/A" and "" treated as null).
 | `partner_page_id` | product tag `partnerpageid` term meta (via `bokun_partners_products_resolve_partner_page_id()`) |
 | `result` | `booking_status` taxonomy: `full` / `partial` / `not-available` |
 | `partner_refunded` | 1 when the `refunded-by-partner` `booking_status` term is set ("Cancelled and refunded by Partner"), else 0 — neutralizes net revenue for a client-cancelled booking the partner refunded. Note this is the *completed-refund* term, distinct from `refund-requested-from-partner` ("Refund requested"), which only records that a refund was asked for and does not affect net revenue |
+| `is_cancelled` | 1 when any `booking_status` term's slug or name contains "cancel" (via `bokun_analytics_is_cancelled()`, mirroring the dashboard), else 0 — a cancelled booking earned no revenue, so net revenue treats its gross as 0 |
 | `payment_method` | `booking_status` taxonomy: Amex / PayPal / Other (`amex`,`paypal`,`other-payment`) |
 | `product_title` | `_product_title` / `productBookings_0_product_title` |
 | `product_option` | `productBookings_0_fields_rateTitle` / `productBookings_0_rateTitle` |
@@ -74,15 +75,23 @@ Computed per row after joining the partners map by `partner_page_id`
 - `_net_cost` = `net_price × participants`.
 - `_net_revenue` = `price_amount − net_price × participants` (null unless both
   present). Currency-scoped to `revCur` in all aggregates.
-- **Partner-refunded cancellations.** When `partner_refunded` is set, the
-  client cancelled a reserved booking but the partner refunded the cost, so the
-  line has no profit or loss: `_net_cost` is forced to `0`, `_net_revenue` to
-  `null` (neutral — it contributes nothing to the net-revenue total instead of
-  the negative it would otherwise be while the partner payment was unrecovered),
-  and `_refunded` is set true. Refunded rows are excluded from **both** sides of
-  the net-revenue margin in `renderInsights()` — `sumNetRev()` drops them via the
-  null `_net_revenue`, and the `grossPrim` denominator skips `_refunded` rows —
-  so a neutral refund never understates the margin.
+- **Cancelled bookings earn no gross.** A client-cancelled booking
+  (`is_cancelled`) earned no revenue, so net revenue treats its gross as 0:
+  - **Refunded by partner** (`partner_refunded`): the partner refunded the
+    cost, so the line is neutral — `_net_cost` 0, `_net_revenue` null,
+    `_refunded` true.
+  - **Cancelled, not refunded, and the booking was made** (result Full/Partial,
+    so we reserved and paid the partner): the whole partner cost is a loss —
+    `_net_revenue = −(net_price × participants)`, a negative value counted in
+    the totals.
+  - **Cancelled but not made** (not-available / no result): nothing to report —
+    `_net_revenue` null.
+- **`_grossEarned`** is the gross a line actually earned and is the net-revenue
+  margin denominator in `renderInsights()` (`grossNet`). It is 0 for cancelled
+  and refunded rows (even though the Gross column still shows the booking's face
+  value), and `price_amount` otherwise, so a loss or neutral refund never
+  distorts the margin. `sumNetRev()` still sums `_net_revenue` (including the
+  negative cancellation losses).
 
 ## Taxonomies
 
