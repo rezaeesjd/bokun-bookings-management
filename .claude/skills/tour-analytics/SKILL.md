@@ -148,7 +148,17 @@ Important dimensions are **clickable multi-select item lists** in the left
 sidebar (`$facets`); secondary ones are dropdowns under "More filters"
 (`$more`). Both feed one `f.dims` map of arrays that `matches()` checks by
 membership. Add the key + label to the right array — the item list / dropdown
-and the group-by option are generated from it.
+and the group-by option are generated from it. Status (`pb_status`) lives in
+`$facets` because it is used constantly.
+
+To offer an **empty-value** option (e.g. the Result facet's "No result" for
+bookings with no result chosen yet), append a synthetic item with
+`v: ''` and a display `label` to that facet's value list. No `matches()` change
+is needed — it already compares against `''` for an empty cell, so selecting the
+empty value filters to exactly those rows. The **quick filter** button
+(`applyQuick`) is just a programmatic facet selection: it clears `facetSel`,
+sets values discovered from the data by pattern (so "CONFIRMED"/"Viator.com"
+casing isn't hardcoded), then calls `syncFacetItemClasses()` + `recompute()`.
 
 ### Add a chart
 Follow `renderTrend` (SVG line/area with hover crosshair) or `barList`
