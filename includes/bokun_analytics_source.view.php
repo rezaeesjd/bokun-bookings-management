@@ -26,6 +26,7 @@ $window_months = bokun_analytics_get_window_months();
 $row_count     = $table_exists ? bokun_analytics_get_row_count() : 0;
 $last_built    = get_option( BOKUN_ANALYTICS_LAST_BUILT_OPTION, '' );
 $rebuild_nonce = wp_create_nonce( 'bokun_analytics_rebuild' );
+$mark_refunded_nonce = wp_create_nonce( 'bokun_analytics_mark_refunded' );
 
 // Partners products reference table.
 $pp_available   = function_exists( 'bokun_partners_products_get_row_count' );
@@ -151,6 +152,18 @@ if ( $table_exists && $row_count > 0 ) {
         </button>
         <span class="spinner" id="bokun-analytics-spinner" style="float:none;margin-top:0;"></span>
         <span id="bokun-analytics-message" style="margin-left:8px;"></span>
+    </p>
+
+    <h2 style="margin-top:24px;"><?php esc_html_e( 'Backfill partner refunds', 'BOKUN_text_domain' ); ?></h2>
+    <p class="description">
+        <?php esc_html_e( 'One-time cleanup for the backlog created before the "Cancelled and refunded by Partner" checkbox existed. Marks every cancelled booking that was "booking made" (Full/Partial) as refunded by partner, and re-syncs it, so its net revenue becomes neutral (null) instead of the negative cancellation loss. Run this once if you have already requested refunds from the partner for all cancelled bookings. Safe to re-run; already-marked bookings are left as-is.', 'BOKUN_text_domain' ); ?>
+    </p>
+    <p>
+        <button type="button" class="button" id="bokun-mark-refunded">
+            <?php esc_html_e( 'Mark cancelled “booking made” as refunded by partner', 'BOKUN_text_domain' ); ?>
+        </button>
+        <span class="spinner" id="bokun-mark-refunded-spinner" style="float:none;margin-top:0;"></span>
+        <span id="bokun-mark-refunded-message" style="margin-left:8px;"></span>
     </p>
 
     <hr style="margin:24px 0;" />
@@ -346,6 +359,62 @@ if ( $table_exists && $row_count > 0 ) {
             spinner.classList.remove( 'is-active' );
             message.style.color = '#d63638';
             message.textContent = '<?php echo esc_js( __( 'Rebuild failed.', 'BOKUN_text_domain' ) ); ?>';
+        } );
+    } );
+} )();
+</script>
+
+<script type="text/javascript">
+( function () {
+    var button  = document.getElementById( 'bokun-mark-refunded' );
+    var spinner = document.getElementById( 'bokun-mark-refunded-spinner' );
+    var message = document.getElementById( 'bokun-mark-refunded-message' );
+    var count   = document.querySelector( '[data-analytics-count]' );
+
+    if ( ! button ) {
+        return;
+    }
+
+    button.addEventListener( 'click', function () {
+        if ( ! window.confirm( '<?php echo esc_js( __( 'Mark all cancelled “booking made” bookings as refunded by partner? This updates their net revenue to neutral.', 'BOKUN_text_domain' ) ); ?>' ) ) {
+            return;
+        }
+
+        button.disabled = true;
+        spinner.classList.add( 'is-active' );
+        message.textContent = '';
+
+        var body = new URLSearchParams();
+        body.append( 'action', 'bokun_mark_refunded_cancelled' );
+        body.append( 'nonce', '<?php echo esc_js( $mark_refunded_nonce ); ?>' );
+
+        fetch( '<?php echo esc_url_raw( admin_url( 'admin-ajax.php' ) ); ?>', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: body.toString()
+        } )
+        .then( function ( response ) { return response.json(); } )
+        .then( function ( json ) {
+            button.disabled = false;
+            spinner.classList.remove( 'is-active' );
+
+            if ( json && json.success ) {
+                message.style.color = '#1a7f37';
+                message.textContent = json.data.message || '<?php echo esc_js( __( 'Done.', 'BOKUN_text_domain' ) ); ?>';
+                if ( count && typeof json.data.row_count !== 'undefined' ) {
+                    count.textContent = json.data.row_count;
+                }
+            } else {
+                message.style.color = '#d63638';
+                message.textContent = ( json && json.data && json.data.message ) ? json.data.message : '<?php echo esc_js( __( 'Failed.', 'BOKUN_text_domain' ) ); ?>';
+            }
+        } )
+        .catch( function () {
+            button.disabled = false;
+            spinner.classList.remove( 'is-active' );
+            message.style.color = '#d63638';
+            message.textContent = '<?php echo esc_js( __( 'Failed.', 'BOKUN_text_domain' ) ); ?>';
         } );
     } );
 } )();

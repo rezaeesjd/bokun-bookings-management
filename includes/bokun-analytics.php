@@ -741,3 +741,137 @@ function bokun_analytics_ajax_rebuild() {
     );
 }
 add_action( 'wp_ajax_bokun_rebuild_analytics', 'bokun_analytics_ajax_rebuild' );
+
+/**
+ * Backfill: mark every cancelled booking that was "made" (Full/Partial, so the
+ * partner was paid) as "Refunded by Partner", for the backlog created before
+ * that checkbox existed. Each affected booking gets the term, a booking-history
+ * entry, and an analytics re-sync so its net revenue flips from the negative
+ * cancellation loss to neutral (null). Idempotent — bookings already marked are
+ * left as-is and only counted.
+ *
+ * @return array{scanned:int,eligible:int,marked:int,already:int}
+ */
+function bokun_analytics_mark_cancelled_made_refunded() {
+    $stats = array(
+        'scanned'  => 0,
+        'eligible' => 0,
+        'marked'   => 0,
+        'already'  => 0,
+    );
+
+    // Match the dashboard's cancelled detection: any booking_status term whose
+    // slug or name contains "cancel".
+    $cancel_term_ids = array();
+    $status_terms    = get_terms(
+        array(
+            'taxonomy'   => 'booking_status',
+            'hide_empty' => false,
+        )
+    );
+
+    if ( is_array( $status_terms ) ) {
+        foreach ( $status_terms as $term ) {
+            if ( false !== stripos( $term->slug, 'cancel' ) || false !== stripos( $term->name, 'cancel' ) ) {
+                $cancel_term_ids[] = (int) $term->term_id;
+            }
+        }
+    }
+
+    if ( empty( $cancel_term_ids ) ) {
+        return $stats;
+    }
+
+    $paged = 1;
+
+    do {
+        $query = new WP_Query(
+            array(
+                'post_type'        => 'bokun_booking',
+                'post_status'      => array( 'publish', 'draft', 'pending', 'private' ),
+                'posts_per_page'   => 200,
+                'paged'            => $paged,
+                'fields'           => 'ids',
+                'no_found_rows'    => false,
+                'suppress_filters' => true,
+                'tax_query'        => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+                    array(
+                        'taxonomy' => 'booking_status',
+                        'field'    => 'term_id',
+                        'terms'    => $cancel_term_ids,
+                    ),
+                ),
+            )
+        );
+
+        if ( ! $query->have_posts() ) {
+            break;
+        }
+
+        $total_pages = (int) $query->max_num_pages;
+
+        foreach ( $query->posts as $post_id ) {
+            $post_id = (int) $post_id;
+            $stats['scanned']++;
+
+            // "Booking made" = we reserved and paid the partner (Full/Partial).
+            $result = bokun_analytics_get_result( $post_id );
+            if ( 'full' !== $result && 'partial' !== $result ) {
+                continue;
+            }
+            $stats['eligible']++;
+
+            if ( has_term( 'refunded-by-partner', 'booking_status', $post_id ) ) {
+                $stats['already']++;
+            } elseif ( function_exists( 'bokun_assign_tag_to_post' ) ) {
+                bokun_assign_tag_to_post( $post_id, 'Refunded by Partner', 'booking_status' );
+                $stats['marked']++;
+
+                if ( function_exists( 'bokun_record_booking_history' ) ) {
+                    $booking_id = get_post_meta( $post_id, '_confirmation_code', true );
+                    bokun_record_booking_history( $post_id, $booking_id, 'refunded-partner', true );
+                }
+            }
+
+            // Re-sync so the analytics row reflects the refund immediately.
+            bokun_analytics_sync_booking( $post_id );
+        }
+
+        $paged++;
+    } while ( $paged <= $total_pages );
+
+    wp_reset_postdata();
+
+    return $stats;
+}
+
+/**
+ * AJAX: run the cancelled-made -> refunded-by-partner backfill.
+ *
+ * @return void
+ */
+function bokun_analytics_ajax_mark_refunded() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'You do not have permission to do this.', 'BOKUN_text_domain' ) ), 403 );
+    }
+
+    check_ajax_referer( 'bokun_analytics_mark_refunded', 'nonce' );
+
+    $stats = bokun_analytics_mark_cancelled_made_refunded();
+
+    wp_send_json_success(
+        array(
+            'stats'     => $stats,
+            'row_count' => bokun_analytics_get_row_count(),
+            /* translators: 1: newly marked, 2: already marked, 3: eligible booking-made, 4: cancelled scanned. */
+            'message'   => sprintf(
+                __( 'Marked %1$d cancelled booking(s) as refunded by partner (%2$d already set). %3$d of %4$d cancelled bookings scanned were "booking made".', 'BOKUN_text_domain' ),
+                (int) $stats['marked'],
+                (int) $stats['already'],
+                (int) $stats['eligible'],
+                (int) $stats['scanned']
+            ),
+        )
+    );
+}
+add_action( 'wp_ajax_bokun_mark_refunded_cancelled', 'bokun_analytics_ajax_mark_refunded' );
