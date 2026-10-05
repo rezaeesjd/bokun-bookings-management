@@ -125,6 +125,19 @@ jQuery(document).ready(function($) {
             }).insertAfter($checkbox);
         }
 
+        // The same booking is rendered in several panels (All, Cancelled, the
+        // follow-up list), each with its own checkbox DOM. Mirror this booking's
+        // "Cancelled and refunded by Partner" state onto every copy so the
+        // remaining cards reflect the persisted value — otherwise the Cancelled
+        // copy would still look un-ticked and clicking it would re-send
+        // checked=true instead of reversing the refund.
+        function syncRefundedCheckboxes( checked ) {
+            $( '.booking-checkbox' ).filter( function () {
+                return String( $( this ).data( 'type' ) ) === 'refunded-partner'
+                    && String( $( this ).data( 'booking-id' ) ) === String( bookingId );
+            } ).prop( 'checked', checked );
+        }
+
         // Once a cancelled booking is marked "Cancelled and refunded by Partner"
         // it is fully resolved, so drop its card from the "Booking made and
         // Cancelled" follow-up list (the server already excludes it on reload).
@@ -188,6 +201,10 @@ jQuery(document).ready(function($) {
                 showMessage(ok ? 'Saved' : (serverMessage || 'Error'));
 
                 if (ok && type === 'refunded-partner' && isChecked) {
+                    // Mirror the checked state onto the booking's other card
+                    // copies before removing the follow-up one, so the Cancelled
+                    // copy can be un-ticked without a reload.
+                    syncRefundedCheckboxes( true );
                     resolveDualStatusCard();
                 }
             },

@@ -85,6 +85,13 @@ function bokun_analytics_install_table() {
     $table_name      = bokun_analytics_get_table_name();
     $charset_collate = $wpdb->get_charset_collate();
 
+    // Detect whether this call UPGRADES an already-populated table (vs. a first
+    // install), so the migration flag is set no matter which path reached here
+    // — the admin ensure-schema path or the activation hook, which both call
+    // this function directly.
+    $previous_version = get_option( BOKUN_ANALYTICS_DB_VERSION_OPTION );
+    $table_existed    = ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table_name ) ) ) === $table_name );
+
     $sql = "CREATE TABLE $table_name (
         post_id BIGINT(20) UNSIGNED NOT NULL,
         confirmation_code VARCHAR(191) NULL,
@@ -133,6 +140,16 @@ function bokun_analytics_install_table() {
     dbDelta( $sql );
 
     update_option( BOKUN_ANALYTICS_DB_VERSION_OPTION, BOKUN_ANALYTICS_DB_VERSION );
+
+    // An existing populated table whose version actually changed needs its rows
+    // repopulated so new/changed columns are filled. Flag a one-time rebuild and
+    // reset any in-progress migration cursor; the admin upgrade path turns the
+    // flag into a scheduled batched rebuild. A first install has nothing to
+    // migrate, so it is skipped.
+    if ( $table_existed && $previous_version && $previous_version !== BOKUN_ANALYTICS_DB_VERSION ) {
+        update_option( 'bokun_analytics_pending_rebuild', 1, false );
+        delete_option( 'bokun_analytics_rebuild_cursor' );
+    }
 }
 
 /**
@@ -173,13 +190,91 @@ function bokun_analytics_maybe_schedule_rebuild() {
 }
 
 /**
- * wp-cron callback: run the pending post-upgrade rebuild. The rebuild clears the
- * pending flag itself.
+ * Re-sync one page of in-window bookings in place (no truncate) so existing rows
+ * pick up new/changed columns after a schema upgrade, without emptying the table
+ * or having to finish in a single request. Ordering is fixed by post ID and
+ * sync does not change the booking's ID or creation date, so paging is
+ * deterministic across batches.
+ *
+ * @param int $page       1-based page.
+ * @param int $batch_size Bookings per page.
+ * @return array{page:int,max_pages:int,done:bool}
+ */
+function bokun_analytics_migrate_batch( $page, $batch_size ) {
+    $page       = max( 1, (int) $page );
+    $batch_size = (int) $batch_size > 0 ? (int) $batch_size : bokun_analytics_backfill_batch_size();
+
+    $window_start_local = bokun_analytics_get_window_start();
+
+    $query = new WP_Query(
+        array(
+            'post_type'        => 'bokun_booking',
+            'post_status'      => array( 'publish', 'draft', 'pending', 'private' ),
+            'posts_per_page'   => $batch_size,
+            'paged'            => $page,
+            'orderby'          => 'ID',
+            'order'            => 'ASC',
+            'fields'           => 'ids',
+            'no_found_rows'    => false,
+            'suppress_filters' => true,
+            'meta_query'       => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+                array(
+                    'key'     => 'bookingcreationdate',
+                    'value'   => $window_start_local,
+                    'compare' => '>=',
+                    'type'    => 'DATETIME',
+                ),
+            ),
+        )
+    );
+
+    $max_pages = (int) $query->max_num_pages;
+
+    if ( $query->have_posts() ) {
+        foreach ( $query->posts as $post_id ) {
+            bokun_analytics_sync_booking( (int) $post_id );
+        }
+    }
+
+    wp_reset_postdata();
+
+    return array(
+        'page'      => $page,
+        'max_pages' => $max_pages,
+        'done'      => ( 0 === $max_pages || $page >= $max_pages ),
+    );
+}
+
+/**
+ * wp-cron callback: process one batch of the pending post-upgrade rebuild and
+ * reschedule the next, so a large backlog never has to repopulate inside a
+ * single cron run (a timeout would otherwise leave the table partial and
+ * restart from scratch). A cursor option tracks the next page; when the last
+ * page is done it prunes aged-out rows and clears the flag.
  *
  * @return void
  */
 function bokun_analytics_do_pending_rebuild() {
-    bokun_analytics_rebuild();
+    if ( ! get_option( 'bokun_analytics_pending_rebuild' ) ) {
+        delete_option( 'bokun_analytics_rebuild_cursor' );
+        return;
+    }
+
+    $page   = (int) get_option( 'bokun_analytics_rebuild_cursor', 1 );
+    $page   = $page > 0 ? $page : 1;
+    $result = bokun_analytics_migrate_batch( $page, bokun_analytics_backfill_batch_size() );
+
+    if ( $result['done'] ) {
+        bokun_analytics_prune_window();
+        update_option( BOKUN_ANALYTICS_LAST_BUILT_OPTION, current_time( 'mysql', true ) );
+        delete_option( 'bokun_analytics_rebuild_cursor' );
+        delete_option( 'bokun_analytics_pending_rebuild' );
+    } else {
+        update_option( 'bokun_analytics_rebuild_cursor', $page + 1, false );
+        if ( ! wp_next_scheduled( 'bokun_analytics_run_pending_rebuild' ) ) {
+            wp_schedule_single_event( time() + 60, 'bokun_analytics_run_pending_rebuild' );
+        }
+    }
 }
 add_action( 'bokun_analytics_run_pending_rebuild', 'bokun_analytics_do_pending_rebuild' );
 
@@ -199,12 +294,9 @@ function bokun_analytics_ensure_schema() {
         return;
     }
 
+    // install_table() flags a one-time rebuild when it upgrades an existing
+    // populated table (this runs on any write path and on activation).
     bokun_analytics_install_table();
-
-    // The schema changed, so rows already in the table predate the new/changed
-    // columns and must be repopulated from source. Flag a one-time rebuild; the
-    // next admin request schedules it on wp-cron.
-    update_option( 'bokun_analytics_pending_rebuild', 1, false );
 }
 
 /**
@@ -682,8 +774,10 @@ function bokun_analytics_rebuild() {
     update_option( BOKUN_ANALYTICS_LAST_BUILT_OPTION, current_time( 'mysql', true ) );
 
     // A full rebuild repopulates every column for every in-window row, so any
-    // pending post-upgrade rebuild (manual or scheduled) is satisfied.
+    // pending post-upgrade rebuild (manual or scheduled) is satisfied; also
+    // cancel any in-progress batched migration cursor.
     delete_option( 'bokun_analytics_pending_rebuild' );
+    delete_option( 'bokun_analytics_rebuild_cursor' );
 
     return $stats;
 }
