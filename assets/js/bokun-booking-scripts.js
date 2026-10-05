@@ -161,12 +161,17 @@ jQuery(document).ready(function($) {
 
         var resultTypes = ['full', 'partial', 'not-available'];
         var selected = [];
+        var hasFullPartial = false;
 
         $result.find('.booking-checkbox').each(function() {
             var type = String($(this).data('type'));
 
             if (resultTypes.indexOf(type) !== -1 && $(this).is(':checked')) {
                 selected.push($(this).closest('.bokun-booking-dashboard__toggle').find('span').first().text());
+
+                if (type === 'full' || type === 'partial') {
+                    hasFullPartial = true;
+                }
             }
         });
 
@@ -185,13 +190,15 @@ jQuery(document).ready(function($) {
                     $(this).trigger('change');
                 });
             }
+        }
 
-            // The refund controls only apply to a booking-made + cancelled
-            // booking. When the last result is cleared the booking is no longer
-            // "Booking made", and the server removes both refund terms in the
-            // same request, so just uncheck the controls to match — no extra
-            // persistence call is needed (unlike payments, which the server
-            // does not auto-remove).
+        // The refund controls only apply to a "Booking made" (Full/Partial) +
+        // cancelled booking. The server removes both refund terms as soon as no
+        // Full/Partial result remains — regardless of "Not available", which is
+        // not mutually exclusive — so key this reset on Full/Partial, not on any
+        // result. Just uncheck the controls to match; no extra persistence call
+        // is needed (unlike payments, which the server does not auto-remove).
+        if (persistClear && !hasFullPartial) {
             var $checkedRefunds = $result.find('.booking-checkbox:checked').filter(function() {
                 var refundType = String($(this).data('type'));
                 return refundType === 'refund-partner' || refundType === 'refunded-partner';
