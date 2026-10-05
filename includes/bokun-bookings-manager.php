@@ -3287,7 +3287,7 @@ function update_booking_status() {
         wp_die();
     }
 
-    $allowed_types = ['full', 'partial', 'not-available', 'refund-partner', 'amex', 'paypal', 'other'];
+    $allowed_types = ['full', 'partial', 'not-available', 'refund-partner', 'refunded-partner', 'amex', 'paypal', 'other'];
 
     if (!in_array($type, $allowed_types, true)) {
         wp_send_json_error(['message' => 'Invalid booking status type provided.']);
@@ -3328,6 +3328,13 @@ function update_booking_status() {
                         bokun_assign_tag_to_post($post_id, 'Refund Requested from Partner', $taxonomy);
                     } else {
                         bokun_remove_tag_from_post($post_id, 'Refund Requested from Partner', $taxonomy);
+                    }
+                    break;
+                case 'refunded-partner':
+                    if ($checked) {
+                        bokun_assign_tag_to_post($post_id, 'Refunded by Partner', $taxonomy);
+                    } else {
+                        bokun_remove_tag_from_post($post_id, 'Refunded by Partner', $taxonomy);
                     }
                     break;
                 case 'amex':
@@ -3860,6 +3867,7 @@ function bokun_get_booking_checkbox_data() {
             'full'              => has_term('full', 'booking_status', $post->ID) ? 'checked' : '',
             'partial'           => has_term('partial', 'booking_status', $post->ID) ? 'checked' : '',
             'refund-partner'    => has_term('refund-requested-from-partner', 'booking_status', $post->ID) ? 'checked' : '',
+            'refunded-partner'  => has_term('refunded-by-partner', 'booking_status', $post->ID) ? 'checked' : '',
             'not-available'     => has_term('not-available', 'booking_status', $post->ID) ? 'checked' : '',
         ),
     );
@@ -3904,7 +3912,7 @@ function refund_checkbox_shortcode($atts) {
     <div class="elementor-widget-container">
         <label>
             <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_id); ?>" data-type="refund-partner" <?php echo $checked['refund-partner']; ?>>
-            Cancelled and refunded by Partner
+            Refund Requested from Partner
         </label>
     </div>
     <?php

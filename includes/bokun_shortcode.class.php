@@ -922,6 +922,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     'partial'        => has_term('partial', 'booking_status', $post_id),
                     'not-available'  => has_term('not-available', 'booking_status', $post_id),
                     'refund-partner' => has_term('refund-requested-from-partner', 'booking_status', $post_id),
+                    'refunded-partner' => has_term('refunded-by-partner', 'booking_status', $post_id),
                     'amex'           => has_term('amex', 'booking_status', $post_id),
                     'paypal'         => has_term('paypal', 'booking_status', $post_id),
                     'other'          => has_term('other-payment', 'booking_status', $post_id),
@@ -1146,7 +1147,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 </div>
                                 <?php if ($show_refund_toggle) : ?>
                                     <div class="bokun-booking-dashboard__toggle">
-                                        <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refund-partner" aria-label="<?php esc_attr_e('Cancelled and refunded by Partner', 'BOKUN_txt_domain'); ?>" <?php echo checked($checkbox_states['refund-partner'], true, false); ?> />
+                                        <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refund-partner" aria-label="<?php esc_attr_e('Refund requested', 'BOKUN_txt_domain'); ?>" <?php echo checked($checkbox_states['refund-partner'], true, false); ?> />
+                                        <span><?php esc_html_e('Refund requested', 'BOKUN_txt_domain'); ?></span>
+                                    </div>
+                                    <div class="bokun-booking-dashboard__toggle">
+                                        <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refunded-partner" aria-label="<?php esc_attr_e('Cancelled and refunded by Partner', 'BOKUN_txt_domain'); ?>" <?php echo checked($checkbox_states['refunded-partner'], true, false); ?> />
                                         <span><?php esc_html_e('Cancelled and refunded by Partner', 'BOKUN_txt_domain'); ?></span>
                                     </div>
                                 <?php endif; ?>

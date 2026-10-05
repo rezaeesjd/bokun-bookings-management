@@ -451,7 +451,7 @@ function bokun_analytics_build_row( $post_id ) {
         'product_id'                => $product_id,
         'partner_page_id'           => ( '' !== $partner_page_id ) ? $partner_page_id : null,
         'result'                    => bokun_analytics_get_result( $post_id ),
-        'partner_refunded'          => has_term( 'refund-requested-from-partner', 'booking_status', $post_id ) ? 1 : 0,
+        'partner_refunded'          => has_term( 'refunded-by-partner', 'booking_status', $post_id ) ? 1 : 0,
         'payment_method'            => bokun_analytics_get_payment_method( $post_id ),
         'product_title'             => bokun_analytics_meta( $post_id, array( '_product_title', 'productBookings_0_product_title' ) ),
         'product_option'            => bokun_analytics_meta( $post_id, array( 'productBookings_0_fields_rateTitle', 'productBookings_0_rateTitle' ) ),
