@@ -63,6 +63,15 @@ net_revenue = gross_amount − (net_price × participants)
 - `net_price` is per person; `participants` = adult + child + infant.
 - It is only defined when the line has a gross amount **and** its product is in
   the partners catalog; otherwise leave it null (don't coerce to 0 per row).
+- **Cancelled bookings earn no gross** (`is_cancelled`). The formula above is
+  for live bookings only. A client-cancelled booking earned nothing, so net
+  revenue treats its gross as 0: if it was *made* (Full/Partial, so we reserved
+  and paid the partner) and not refunded, the whole partner cost is a loss and
+  `net_revenue = −(net_price × participants)` — a negative value in the totals;
+  if the partner refunded it, it's neutral (see below); if it was never made,
+  net revenue is null. `_grossEarned` (0 for cancelled/refunded rows,
+  `price_amount` otherwise) is the net-revenue margin denominator so these
+  losses and neutral refunds don't distort the margin.
 - **Partner-refunded cancellations are neutral.** On bookings tagged both
   "Booking made" and "Cancelled", the dashboard card shows two separate
   checkboxes: "Refund requested" (the legacy `refund-requested-from-partner`

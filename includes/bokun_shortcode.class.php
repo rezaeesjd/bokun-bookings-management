@@ -3327,20 +3327,45 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     // when it already carries a value.
                     if ( isEmpty( r.departure_city ) && p.departure_city ) { r.departure_city = p.departure_city; }
                     var pax = parts( r );
-                    // "Cancelled and refunded by Partner": the client cancelled a
-                    // booking we had reserved (and paid the partner for), but the
-                    // partner refunded that cost — so the line has no profit and no
-                    // loss. Treat the partner cost as recovered (0) and leave net
-                    // revenue null (neutral) instead of the negative it would be
-                    // while we were still out the partner payment.
                     var partnerRefunded = ( r.partner_refunded === 1 || r.partner_refunded === '1' || r.partner_refunded === true );
+                    var isCancelled = ( r.is_cancelled === 1 || r.is_cancelled === '1' || r.is_cancelled === true );
+                    // "Booking made" means we reserved the tour and paid the
+                    // partner, i.e. a Full or Partial result.
+                    var wasMade = ( esc( r.result ) === 'full' || esc( r.result ) === 'partial' );
+                    var netCostFull = ( r.net_price !== null ) ? ( r.net_price * pax ) : null;
+                    // _grossEarned is the gross this line actually earned, used as
+                    // the net-revenue margin denominator. A cancelled or refunded
+                    // booking earned nothing, so it contributes 0 there even though
+                    // the Gross column still shows the booking's face value.
                     r._refunded = partnerRefunded;
-                    r._net_cost = partnerRefunded ? 0 : ( ( r.net_price !== null ) ? ( r.net_price * pax ) : null );
-                    // A numeric zero gross (complimentary/fully-discounted) is a
-                    // real value, so test presence, not truthiness.
-                    r._net_revenue = partnerRefunded
-                        ? null
-                        : ( ( hasNum( r.price_amount ) && r.net_price !== null ) ? ( num( r.price_amount ) - r.net_price * pax ) : null );
+                    if ( partnerRefunded ) {
+                        // Client cancelled a booking we paid the partner for, but
+                        // the partner refunded that cost — no profit and no loss.
+                        // Leave net revenue null (neutral) and the cost recovered.
+                        r._net_cost = 0;
+                        r._net_revenue = null;
+                        r._grossEarned = 0;
+                    } else if ( isCancelled ) {
+                        // Client cancelled and the partner has NOT refunded us. No
+                        // revenue was earned, so if the booking was made (we paid
+                        // the partner) the whole partner cost is a loss; otherwise
+                        // there is nothing to report.
+                        r._grossEarned = 0;
+                        if ( wasMade && netCostFull !== null ) {
+                            r._net_cost = netCostFull;
+                            r._net_revenue = 0 - netCostFull;
+                        } else {
+                            r._net_cost = null;
+                            r._net_revenue = null;
+                        }
+                    } else {
+                        // Live booking: net revenue is the gross minus the partner
+                        // cost. A numeric zero gross (complimentary/fully-discounted)
+                        // is a real value, so test presence, not truthiness.
+                        r._net_cost = netCostFull;
+                        r._net_revenue = ( hasNum( r.price_amount ) && r.net_price !== null ) ? ( num( r.price_amount ) - netCostFull ) : null;
+                        r._grossEarned = hasNum( r.price_amount ) ? num( r.price_amount ) : 0;
+                    }
                 } );
 
                 function primaryCurrency( data ) {
@@ -3481,7 +3506,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         // the gross of non-refunded rows in that same currency.
                         // Refunded rows are excluded (their net revenue is null, so
                         // counting their gross would understate the margin).
-                        var grossNet = data.reduce( function ( s, r ) { return ( esc( r.currency ) === netRevCur && ! r._refunded ) ? s + num( r.price_amount ) : s; }, 0 );
+                        var grossNet = data.reduce( function ( s, r ) { return ( esc( r.currency ) === netRevCur ) ? s + ( r._grossEarned || 0 ) : s; }, 0 );
                         var margin = grossNet ? Math.round( ( netrev / grossNet ) * 100 ) : 0;
                         cards.push( { label: L.netrev, value: fmtMoney( netrev ) + ( netRevCur ? ' ' + netRevCur : '' ), sub: L.margin + ' ' + margin + '%' + ( netRevMulti ? ' · ' + L.mixedCur : '' ) } );
                     }
