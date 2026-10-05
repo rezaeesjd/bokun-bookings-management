@@ -3467,6 +3467,19 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     ROWS.forEach( function ( r ) { var v = esc( r[ key ] ); if ( v && re.test( v ) ) { out[ v ] = 1; } } );
                     return Object.keys( out );
                 }
+                // A value no booking column can hold, used so a required quick-filter
+                // dimension with no matching data excludes every row rather than
+                // silently dropping the constraint.
+                var QUICK_NONE = '\u0000__no_match__';
+                // Set a quick-filter facet to the matching values, or — when none
+                // exist in the data — to a sentinel that matches nothing, so the
+                // constraint still applies (an empty selection would be read by
+                // currentFilters() as "no filter on this dimension").
+                function setQuickDim( key, vals ) {
+                    if ( ! facetSel[ key ] ) { return; }
+                    if ( vals.length ) { vals.forEach( function ( v ) { facetSel[ key ][ v ] = 1; } ); }
+                    else { facetSel[ key ][ QUICK_NONE ] = 1; }
+                }
                 // Predefined quick filter: confirmed status, Viator.com channel, and
                 // a result already selected (any non-empty result). Values are read
                 // from the data so the exact casing of "CONFIRMED"/"Viator.com" does
@@ -3474,9 +3487,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 // range and search box are left as the user had them.
                 function applyQuick() {
                     FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = {}; } );
-                    if ( facetSel.pb_status ) { distinctMatch( 'pb_status', /confirm/i ).forEach( function ( v ) { facetSel.pb_status[ v ] = 1; } ); }
-                    if ( facetSel.channel_title ) { distinctMatch( 'channel_title', /viator/i ).forEach( function ( v ) { facetSel.channel_title[ v ] = 1; } ); }
-                    if ( facetSel.result ) { distinctMatch( 'result', /\S/ ).forEach( function ( v ) { facetSel.result[ v ] = 1; } ); }
+                    setQuickDim( 'pb_status', distinctMatch( 'pb_status', /confirm/i ) );
+                    setQuickDim( 'channel_title', distinctMatch( 'channel_title', /viator/i ) );
+                    setQuickDim( 'result', distinctMatch( 'result', /\S/ ) );
                     syncFacetItemClasses();
                     recompute();
                 }
@@ -3682,10 +3695,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 // shown on the total so it reads honestly.
                 function renderDetailFoot( data ) {
                     if ( ! data.length ) { return ''; }
-                    var sumParts = 0, sumGross = 0, sumNet = 0, netAny = false, counts = {};
+                    var sumParts = 0, sumGross = 0, sumNet = 0, grossAny = false, netAny = false, counts = {};
                     data.forEach( function ( r ) {
                         sumParts += parts( r );
-                        if ( esc( r.currency ) === revCur ) { sumGross += num( r.price_amount ); }
+                        if ( esc( r.currency ) === revCur ) { sumGross += num( r.price_amount ); grossAny = true; }
                         if ( r._net_revenue !== null && esc( r.currency ) === netRevCur ) { sumNet += r._net_revenue; netAny = true; }
                         DETAIL_COLS.forEach( function ( c ) { if ( ! detailNumeric( c[ 0 ] ) && ! isEmpty( r[ c[ 0 ] ] ) ) { counts[ c[ 0 ] ] = ( counts[ c[ 0 ] ] || 0 ) + 1; } } );
                     } );
@@ -3695,7 +3708,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         var key = c[ 0 ];
                         if ( idx === 0 ) { return '<td>' + escHtml( L.totals ) + '</td>'; }
                         if ( key === '__parts' ) { return '<td class="bokun-andash__num">' + fmtInt( sumParts ) + '</td>'; }
-                        if ( key === 'price_amount' ) { return '<td class="bokun-andash__num">' + ( sumGross ? fmtMoney( sumGross ) + curGross : '' ) + '</td>'; }
+                        if ( key === 'price_amount' ) { return '<td class="bokun-andash__num">' + ( grossAny ? fmtMoney( sumGross ) + curGross : '' ) + '</td>'; }
                         if ( key === '__net_revenue' ) { return '<td class="bokun-andash__num' + ( netAny && sumNet < 0 ? ' bokun-andash__neg' : '' ) + '">' + ( netAny ? fmtMoney( sumNet ) + curNet : '' ) + '</td>'; }
                         // net_price is a per-person rate, not an additive amount, so it has no total.
                         if ( key === 'net_price' ) { return '<td class="bokun-andash__num"></td>'; }
