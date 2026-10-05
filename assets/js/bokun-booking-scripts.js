@@ -185,6 +185,21 @@ jQuery(document).ready(function($) {
                     $(this).trigger('change');
                 });
             }
+
+            // The refund controls only apply to a booking-made + cancelled
+            // booking. When the last result is cleared the booking is no longer
+            // "Booking made", and the server removes both refund terms in the
+            // same request, so just uncheck the controls to match — no extra
+            // persistence call is needed (unlike payments, which the server
+            // does not auto-remove).
+            var $checkedRefunds = $result.find('.booking-checkbox:checked').filter(function() {
+                var refundType = String($(this).data('type'));
+                return refundType === 'refund-partner' || refundType === 'refunded-partner';
+            });
+
+            if ($checkedRefunds.length) {
+                $checkedRefunds.prop('checked', false);
+            }
         }
 
         var $payment = $result.find('[data-payment]').first();
