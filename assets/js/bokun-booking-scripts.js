@@ -101,6 +101,30 @@ jQuery(document).ready(function($) {
 
         $checkbox.after(loadingMessage);
 
+        // Roll the UI back to the persisted state when a change does not stick.
+        // First restore the refund controls the sibling handler may have
+        // unchecked for the attempted state (their clears were never persisted),
+        // then revert the triggering checkbox (so it wins if it is itself a
+        // refund control), then recompute the card. persistClear is false: a
+        // rollback must not trigger any further clears or persistence.
+        function rollback() {
+            refundSnapshot.forEach(function(snap) {
+                $(snap.el).prop('checked', snap.checked);
+            });
+            $checkbox.prop('checked', !isChecked);
+            updateResultState($resultCtx, false);
+        }
+
+        function showMessage(text) {
+            $('<span/>', {
+                class: 'save-message',
+                text: text
+            }).css({
+                color: text === 'Saved' ? 'green' : 'red',
+                marginLeft: '10px'
+            }).insertAfter($checkbox);
+        }
+
         // Send AJAX request to update booking status
         $.ajax({
             url: bbm_ajax.ajax_url,
@@ -120,42 +144,26 @@ jQuery(document).ready(function($) {
 
                 if (!ok) {
                     // The server rejected the change (e.g. an ineligible refund
-                    // tick, or a booking deleted after load). Roll the UI back to
-                    // the persisted state. First restore the refund controls the
-                    // sibling handler may have unchecked for the attempted state
-                    // (their clears were never persisted), then revert the
-                    // triggering checkbox (so it wins if it is itself a refund
-                    // control), then recompute the card. persistClear is false: a
-                    // rollback must not trigger any further clears or persistence.
-                    refundSnapshot.forEach(function(snap) {
-                        $(snap.el).prop('checked', snap.checked);
-                    });
-                    $checkbox.prop('checked', !isChecked);
-                    updateResultState($resultCtx, false);
+                    // tick, or a booking deleted after load).
+                    rollback();
                 }
 
                 var serverMessage = response && response.data && response.data.message
                     ? response.data.message
                     : '';
 
-                $('<span/>', {
-                    class: 'save-message',
-                    text: ok ? 'Saved' : (serverMessage || 'Error')
-                }).css({
-                    color: ok ? 'green' : 'red',
-                    marginLeft: '10px'
-                }).insertAfter($checkbox);
+                showMessage(ok ? 'Saved' : (serverMessage || 'Error'));
             },
             error: function() {
                 $checkbox.siblings('.loading-message').remove();
 
-                $('<span/>', {
-                    class: 'save-message',
-                    text: 'Error'
-                }).css({
-                    color: 'red',
-                    marginLeft: '10px'
-                }).insertAfter($checkbox);
+                // The request never reached the server (offline, HTTP/non-JSON
+                // error), so nothing persisted. Roll the UI back as well, or the
+                // optimistic clears from the sibling handler would contradict the
+                // still-stored result and refund terms until reload.
+                rollback();
+
+                showMessage('Error');
             }
         });
     });
