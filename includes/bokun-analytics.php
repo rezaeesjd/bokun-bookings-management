@@ -146,13 +146,28 @@ function bokun_analytics_maybe_upgrade() {
         return;
     }
 
+    bokun_analytics_ensure_schema();
+}
+add_action( 'admin_init', 'bokun_analytics_maybe_upgrade', 5 );
+
+/**
+ * Ensure the analytics table matches the current schema version, regardless of
+ * context. Gated by the stored version option, so it runs dbDelta only once per
+ * version change and then no-ops. Unlike {@see bokun_analytics_maybe_upgrade()}
+ * this is not admin-only: any write path (the status-change AJAX handler,
+ * scheduled imports) must call it first, because those can run before any
+ * admin request has upgraded the table and would otherwise write to a column
+ * that does not exist yet.
+ *
+ * @return void
+ */
+function bokun_analytics_ensure_schema() {
     if ( get_option( BOKUN_ANALYTICS_DB_VERSION_OPTION ) === BOKUN_ANALYTICS_DB_VERSION ) {
         return;
     }
 
     bokun_analytics_install_table();
 }
-add_action( 'admin_init', 'bokun_analytics_maybe_upgrade', 5 );
 
 /**
  * Normalize a raw meta value to a trimmed string, treating the plugin's "N/A"
@@ -503,6 +518,12 @@ function bokun_analytics_is_within_window( $created_datetime ) {
  */
 function bokun_analytics_sync_booking( $post_id ) {
     global $wpdb;
+
+    // A write can arrive before any admin request upgraded the table (the
+    // status-change AJAX handler and scheduled imports both run outside admin),
+    // so make sure the schema is current before replacing the row — otherwise
+    // the new columns would be silently dropped on an un-upgraded install.
+    bokun_analytics_ensure_schema();
 
     $row = bokun_analytics_build_row( $post_id );
 
