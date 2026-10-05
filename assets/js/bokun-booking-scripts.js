@@ -107,9 +107,17 @@ jQuery(document).ready(function($) {
 
                 if (!ok) {
                     // The server rejected the change (e.g. an ineligible refund
-                    // tick). Restore the checkbox to the persisted state so the
-                    // UI doesn't claim a change that did not happen.
+                    // tick, or a booking deleted after load). Restore the checkbox
+                    // to the persisted state so the UI doesn't claim a change that
+                    // did not happen.
                     $checkbox.prop('checked', !isChecked);
+
+                    // The synchronous change handler already recomputed the result
+                    // summary, payment visibility and refund controls for the
+                    // attempted state, so recompute them from the restored
+                    // checkbox. persistClear is false: a rollback must not trigger
+                    // any further clears or persistence.
+                    updateResultState($checkbox.closest('[data-result]'), false);
                 }
 
                 var serverMessage = response && response.data && response.data.message
