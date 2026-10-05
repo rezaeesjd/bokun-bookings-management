@@ -1434,7 +1434,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     $tabs['other']['items'][] = $card_html;
                 }
 
-                if ($requires_refund_followup) {
+                // Once the partner has refunded a cancelled booking it is fully
+                // resolved, so drop it from the follow-up list (it still appears
+                // in the Cancelled tab, where the refund can be un-ticked).
+                if ($requires_refund_followup && empty($checkbox_states['refunded-partner'])) {
                     $booking_made_cancelled_cards[] = $card_html;
                 }
             }

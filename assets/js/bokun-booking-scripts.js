@@ -125,6 +125,39 @@ jQuery(document).ready(function($) {
             }).insertAfter($checkbox);
         }
 
+        // Once a cancelled booking is marked "Cancelled and refunded by Partner"
+        // it is fully resolved, so drop its card from the "Booking made and
+        // Cancelled" follow-up list (the server already excludes it on reload).
+        // It stays in the Cancelled tab, where the refund can be un-ticked.
+        function resolveDualStatusCard() {
+            $('[data-dashboard-dual-status]').each(function() {
+                var $section = $(this);
+                var $cards = $section
+                    .find('[data-dashboard-dual-status-panel] article[data-booking-id]')
+                    .filter(function() {
+                        return String($(this).attr('data-booking-id')) === String(bookingId);
+                    });
+
+                if (!$cards.length) {
+                    return;
+                }
+
+                $cards.remove();
+
+                var remaining = $section
+                    .find('[data-dashboard-dual-status-panel] article[data-booking-id]').length;
+
+                var $count = $section.find('.bokun-booking-dashboard__dual-status-count');
+                if ($count.length) {
+                    $count.text(remaining);
+                }
+
+                if (remaining === 0) {
+                    $section.remove();
+                }
+            });
+        }
+
         // Send AJAX request to update booking status
         $.ajax({
             url: bbm_ajax.ajax_url,
@@ -153,6 +186,10 @@ jQuery(document).ready(function($) {
                     : '';
 
                 showMessage(ok ? 'Saved' : (serverMessage || 'Error'));
+
+                if (ok && type === 'refunded-partner' && isChecked) {
+                    resolveDualStatusCard();
+                }
             },
             error: function() {
                 $checkbox.siblings('.loading-message').remove();
