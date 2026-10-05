@@ -3006,9 +3006,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             $uid      = 'bokun-andash-' . wp_rand( 1000, 9999 );
 
             // Important dimensions shown as clickable item lists in the sidebar.
+            // Status sits right under Channel in the sidebar: it is used a lot,
+            // so it is a clickable item list rather than a "More filters" dropdown.
             $facets = array(
                 'product_title'   => __( 'Product', 'BOKUN_txt_domain' ),
                 'channel_title'   => __( 'Channel', 'BOKUN_txt_domain' ),
+                'pb_status'       => __( 'Status', 'BOKUN_txt_domain' ),
                 'partner_page_id' => __( 'Partner page', 'BOKUN_txt_domain' ),
                 'result'          => __( 'Result', 'BOKUN_txt_domain' ),
                 'payment_method'  => __( 'Payment', 'BOKUN_txt_domain' ),
@@ -3023,7 +3026,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'seller_title'         => __( 'Seller', 'BOKUN_txt_domain' ),
                 'vendor_title'         => __( 'Vendor', 'BOKUN_txt_domain' ),
                 'pb_seller_title'      => __( 'Product-booking seller', 'BOKUN_txt_domain' ),
-                'pb_status'            => __( 'Status', 'BOKUN_txt_domain' ),
                 'language'             => __( 'Language', 'BOKUN_txt_domain' ),
             );
 
@@ -3045,6 +3047,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'topChannel'   => __( 'Top channel', 'BOKUN_txt_domain' ),
                 'fullRate'     => __( 'Full-result rate', 'BOKUN_txt_domain' ),
                 'margin'       => __( 'Margin', 'BOKUN_txt_domain' ),
+                'perMonth'     => __( 'per month', 'BOKUN_txt_domain' ),
+                'noResult'     => __( 'No result', 'BOKUN_txt_domain' ),
+                'totals'       => __( 'Totals', 'BOKUN_txt_domain' ),
                 'ofTotal'      => __( 'of total', 'BOKUN_txt_domain' ),
                 'trend'        => __( 'Trend over time', 'BOKUN_txt_domain' ),
                 'topProducts'  => __( 'Product performance', 'BOKUN_txt_domain' ),
@@ -3086,6 +3091,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         <aside class="bokun-andash__side" data-filters>
                             <div class="bokun-andash__side-row">
                                 <input type="search" class="bokun-andash__search" data-f-search placeholder="<?php esc_attr_e( 'Search…', 'BOKUN_txt_domain' ); ?>" />
+                            </div>
+                            <div class="bokun-andash__side-row bokun-andash__quick">
+                                <button type="button" class="bokun-andash__quickbtn" data-quick="viator-confirmed-resulted" title="<?php esc_attr_e( 'Confirmed Viator.com bookings that already have a result selected', 'BOKUN_txt_domain' ); ?>"><?php esc_html_e( 'Viator · Confirmed · with result', 'BOKUN_txt_domain' ); ?></button>
                             </div>
                             <div class="bokun-andash__side-row bokun-andash__presets" role="group" aria-label="<?php esc_attr_e( 'Date range', 'BOKUN_txt_domain' ); ?>">
                                 <button type="button" class="bokun-andash__chip" data-preset="7"><?php esc_html_e( '7d', 'BOKUN_txt_domain' ); ?></button>
@@ -3215,6 +3223,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash__presets { display:flex; gap:4px; }
                 .bokun-andash__chip, .bokun-andash__seg { appearance:none; background:transparent; border:1px solid var(--an-line); border-radius:999px; padding:6px 12px; font-size:13px; font-weight:600; color:var(--an-ink-2); cursor:pointer; }
                 .bokun-andash__chip.is-active, .bokun-andash__seg.is-active { background:var(--an-blue); color:#fff; border-color:var(--an-blue); }
+                .bokun-andash__quickbtn { width:100%; appearance:none; text-align:left; background:var(--an-blue-soft); border:1px solid var(--an-blue); border-radius:6px; padding:7px 10px; font-size:13px; font-weight:600; color:var(--an-blue); cursor:pointer; }
+                .bokun-andash__quickbtn:hover { background:var(--an-blue); color:#fff; }
                 .bokun-andash__dates { display:flex; flex-direction:column; gap:10px; }
                 .bokun-andash__daterow { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
                 .bokun-andash__daterow-label { grid-column:1 / -1; font-size:12px; font-weight:600; color:var(--an-ink-2); }
@@ -3266,6 +3276,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash th { color:var(--an-ink-2); font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
                 .bokun-andash__num { text-align:right; font-variant-numeric:tabular-nums; }
                 .bokun-andash__neg { color:var(--an-crit); }
+                .bokun-andash tfoot td { font-weight:700; border-top:2px solid var(--an-line); border-bottom:none; background:var(--an-surface); position:sticky; bottom:0; }
                 .bokun-andash__table-wrap { overflow:auto; max-height:520px; margin-top:10px; }
                 .bokun-andash__trend svg { width:100%; height:auto; display:block; }
                 .bokun-andash__tip { position:absolute; pointer-events:none; background:var(--an-ink); color:var(--an-surface); font-size:12px; padding:5px 8px; border-radius:6px; white-space:nowrap; transform:translate(-50%,-120%); opacity:0; transition:opacity .08s; z-index:5; }
@@ -3406,12 +3417,23 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var wrap = facetEl ? facetEl.querySelector( '[data-facet-items]' ) : null;
                     if ( ! wrap ) { return; }
                     var values = uniqueCounts( key );
+                    // "No result" is a selectable item on the Result facet for the
+                    // bookings that have no result chosen yet (empty result). Its
+                    // data-val is the empty string, which matches() already treats
+                    // as the value of an empty cell, so it needs no special case
+                    // in the filter — only this synthetic list item.
+                    if ( key === 'result' ) {
+                        var emptyN = 0;
+                        ROWS.forEach( function ( r ) { if ( isEmpty( r.result ) ) { emptyN++; } } );
+                        if ( emptyN ) { values = values.concat( [ { v: '', n: emptyN, label: L.noResult } ] ); }
+                    }
                     if ( ! values.length ) { facetEl.hidden = true; return; }
                     values.forEach( function ( o ) {
+                        var disp = o.label || o.v;
                         var el = document.createElement( 'div' );
                         el.className = 'bokun-andash__item';
                         el.setAttribute( 'data-val', o.v );
-                        el.innerHTML = '<span class="lab" title="' + escHtml( o.v ) + '">' + escHtml( o.v ) + '</span><span class="cnt">' + fmtInt( o.n ) + '</span>';
+                        el.innerHTML = '<span class="lab" title="' + escHtml( disp ) + '">' + escHtml( disp ) + '</span><span class="cnt">' + fmtInt( o.n ) + '</span>';
                         el.addEventListener( 'click', function () {
                             if ( facetSel[ key ][ o.v ] ) { delete facetSel[ key ][ o.v ]; el.classList.remove( 'is-on' ); }
                             else { facetSel[ key ][ o.v ] = 1; el.classList.add( 'is-on' ); }
@@ -3427,6 +3449,50 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     if ( ! sel ) { return; }
                     uniqueCounts( key ).forEach( function ( o ) { var opt = document.createElement( 'option' ); opt.value = o.v; opt.textContent = o.v + ' (' + o.n + ')'; sel.appendChild( opt ); } );
                 } );
+
+                // Reflect the current facetSel state onto the sidebar item-list
+                // highlights, so a programmatic selection (quick filter) shows up.
+                function syncFacetItemClasses() {
+                    root.querySelectorAll( '.bokun-andash__facet' ).forEach( function ( facetEl ) {
+                        var key = facetEl.getAttribute( 'data-facet' );
+                        facetEl.querySelectorAll( '.bokun-andash__item' ).forEach( function ( el ) {
+                            var v = el.getAttribute( 'data-val' );
+                            el.classList.toggle( 'is-on', !! ( facetSel[ key ] && facetSel[ key ][ v ] ) );
+                        } );
+                    } );
+                }
+                // Distinct non-empty values of a column whose text matches a pattern.
+                function distinctMatch( key, re ) {
+                    var out = {};
+                    ROWS.forEach( function ( r ) { var v = esc( r[ key ] ); if ( v && re.test( v ) ) { out[ v ] = 1; } } );
+                    return Object.keys( out );
+                }
+                // A value no booking column can hold, used so a required quick-filter
+                // dimension with no matching data excludes every row rather than
+                // silently dropping the constraint.
+                var QUICK_NONE = '\u0000__no_match__';
+                // Set a quick-filter facet to the matching values, or — when none
+                // exist in the data — to a sentinel that matches nothing, so the
+                // constraint still applies (an empty selection would be read by
+                // currentFilters() as "no filter on this dimension").
+                function setQuickDim( key, vals ) {
+                    if ( ! facetSel[ key ] ) { return; }
+                    if ( vals.length ) { vals.forEach( function ( v ) { facetSel[ key ][ v ] = 1; } ); }
+                    else { facetSel[ key ][ QUICK_NONE ] = 1; }
+                }
+                // Predefined quick filter: confirmed status, Viator.com channel, and
+                // a result already selected (any non-empty result). Values are read
+                // from the data so the exact casing of "CONFIRMED"/"Viator.com" does
+                // not have to be hardcoded. Only facet selections are set; the date
+                // range and search box are left as the user had them.
+                function applyQuick() {
+                    FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = {}; } );
+                    setQuickDim( 'pb_status', distinctMatch( 'pb_status', /confirm/i ) );
+                    setQuickDim( 'channel_title', distinctMatch( 'channel_title', /viator/i ) );
+                    setQuickDim( 'result', distinctMatch( 'result', /\S/ ) );
+                    syncFacetItemClasses();
+                    recompute();
+                }
 
                 function currentFilters() {
                     var f = { search: '', dims: {}, dates: {} };
@@ -3511,7 +3577,19 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         // counting their gross would understate the margin).
                         var grossNet = data.reduce( function ( s, r ) { return ( esc( r.currency ) === netRevCur ) ? s + ( r._grossEarned || 0 ) : s; }, 0 );
                         var margin = grossNet ? Math.round( ( netrev / grossNet ) * 100 ) : 0;
-                        cards.push( { label: L.netrev, value: fmtMoney( netrev ) + ( netRevCur ? ' ' + netRevCur : '' ), sub: L.margin + ' ' + margin + '%' + ( netRevMulti ? ' · ' + L.mixedCur : '' ) } );
+                        // Average monthly net revenue: the total spread over the
+                        // number of distinct calendar months (by creation date)
+                        // that actually contributed net revenue, so a filter
+                        // narrowing to one month shows that month, not a /3 of it.
+                        var nrMonths = {};
+                        data.forEach( function ( r ) { if ( r._net_revenue !== null && esc( r.currency ) === netRevCur ) { var mk = dayStr( r.created_datetime ).slice( 0, 7 ); if ( mk ) { nrMonths[ mk ] = 1; } } } );
+                        var monthsN = Object.keys( nrMonths ).length;
+                        var avgMonthly = monthsN ? ( netrev / monthsN ) : netrev;
+                        var curSuffix = netRevCur ? ' ' + netRevCur : '';
+                        var sub = L.margin + ' ' + margin + '%' +
+                            ' · ' + fmtMoney( avgMonthly ) + curSuffix + ' ' + L.perMonth +
+                            ( netRevMulti ? ' · ' + L.mixedCur : '' );
+                        cards.push( { label: L.netrev, value: fmtMoney( netrev ) + curSuffix, sub: sub } );
                     }
                     var revRows = data.filter( function ( r ) { return esc( r.currency ) === pc.cur && num( r.price_amount ); } );
                     var totalRev = revRows.reduce( function ( s, r ) { return s + num( r.price_amount ); }, 0 );
@@ -3608,17 +3686,46 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     if ( key === '__net_revenue' ) { return r._net_revenue !== null && r._net_revenue !== undefined ? fmtMoney( r._net_revenue ) : ''; }
                     return esc( r[ key ] );
                 }
+                function detailNumeric( key ) { return ( key === 'price_amount' || key === '__parts' || key === 'net_price' || key === '__net_revenue' ); }
+                // Totals row under the records table, computed over the FULL filtered
+                // set (not just the capped rows shown). Amount/count columns get a
+                // sum; text columns get a count of populated cells. Money sums stay
+                // within the primary currency (revCur / netRevCur) — gross and net
+                // revenue are never added across currencies — and the currency is
+                // shown on the total so it reads honestly.
+                function renderDetailFoot( data ) {
+                    if ( ! data.length ) { return ''; }
+                    var sumParts = 0, sumGross = 0, sumNet = 0, grossAny = false, netAny = false, counts = {};
+                    data.forEach( function ( r ) {
+                        sumParts += parts( r );
+                        if ( esc( r.currency ) === revCur ) { sumGross += num( r.price_amount ); grossAny = true; }
+                        if ( r._net_revenue !== null && esc( r.currency ) === netRevCur ) { sumNet += r._net_revenue; netAny = true; }
+                        DETAIL_COLS.forEach( function ( c ) { if ( ! detailNumeric( c[ 0 ] ) && ! isEmpty( r[ c[ 0 ] ] ) ) { counts[ c[ 0 ] ] = ( counts[ c[ 0 ] ] || 0 ) + 1; } } );
+                    } );
+                    var curGross = revCur ? ' ' + revCur : '';
+                    var curNet = netRevCur ? ' ' + netRevCur : '';
+                    var cells = DETAIL_COLS.map( function ( c, idx ) {
+                        var key = c[ 0 ];
+                        if ( idx === 0 ) { return '<td>' + escHtml( L.totals ) + '</td>'; }
+                        if ( key === '__parts' ) { return '<td class="bokun-andash__num">' + fmtInt( sumParts ) + '</td>'; }
+                        if ( key === 'price_amount' ) { return '<td class="bokun-andash__num">' + ( grossAny ? fmtMoney( sumGross ) + curGross : '' ) + '</td>'; }
+                        if ( key === '__net_revenue' ) { return '<td class="bokun-andash__num' + ( netAny && sumNet < 0 ? ' bokun-andash__neg' : '' ) + '">' + ( netAny ? fmtMoney( sumNet ) + curNet : '' ) + '</td>'; }
+                        // net_price is a per-person rate, not an additive amount, so it has no total.
+                        if ( key === 'net_price' ) { return '<td class="bokun-andash__num"></td>'; }
+                        return '<td>' + fmtInt( counts[ key ] || 0 ) + '</td>';
+                    } ).join( '' );
+                    return '<tfoot><tr>' + cells + '</tr></tfoot>';
+                }
                 function renderDetail( data ) {
                     var head = '<thead><tr>' + DETAIL_COLS.map( function ( c ) { return '<th>' + escHtml( c[ 1 ] ) + '</th>'; } ).join( '' ) + '</tr></thead>';
                     var body = data.slice( 0, DETAIL_CAP ).map( function ( r ) {
                         return '<tr>' + DETAIL_COLS.map( function ( c ) {
-                            var numeric = ( c[ 0 ] === 'price_amount' || c[ 0 ] === '__parts' || c[ 0 ] === 'net_price' || c[ 0 ] === '__net_revenue' );
-                            var cls = numeric ? 'bokun-andash__num' : '';
+                            var cls = detailNumeric( c[ 0 ] ) ? 'bokun-andash__num' : '';
                             if ( c[ 0 ] === '__net_revenue' && r._net_revenue !== null && r._net_revenue < 0 ) { cls += ' bokun-andash__neg'; }
                             return '<td' + ( cls ? ' class="' + cls.trim() + '"' : '' ) + '>' + escHtml( cell( r, c[ 0 ] ) ) + '</td>';
                         } ).join( '' ) + '</tr>';
                     } ).join( '' );
-                    root.querySelector( '[data-detail]' ).innerHTML = '<table>' + head + '<tbody>' + ( body || '<tr><td>—</td></tr>' ) + '</tbody></table>';
+                    root.querySelector( '[data-detail]' ).innerHTML = '<table>' + head + '<tbody>' + ( body || '<tr><td>—</td></tr>' ) + '</tbody>' + renderDetailFoot( data ) + '</table>';
                     root.querySelector( '[data-detail-count]' ).textContent = data.length > DETAIL_CAP ? ( '(' + fmtInt( DETAIL_CAP ) + ' / ' + fmtInt( data.length ) + ')' ) : ( '(' + fmtInt( data.length ) + ')' );
                 }
 
@@ -3668,6 +3775,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 root.querySelector( '[data-groupby]' ).addEventListener( 'change', function () { renderBreakdown( lastFiltered ); } );
                 root.querySelectorAll( '[data-metric]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { metric = btn.getAttribute( 'data-metric' ); root.querySelectorAll( '[data-metric]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } ); recompute(); } ); } );
                 root.querySelectorAll( '[data-preset]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { root.querySelectorAll( '[data-preset]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } ); var days = +btn.getAttribute( 'data-preset' ); var from = root.querySelector( '[data-f-date="created_from"]' ), to = root.querySelector( '[data-f-date="created_to"]' ); if ( ! days ) { from.value = ''; to.value = ''; } else { var d = new Date(); var f2 = new Date(); f2.setDate( d.getDate() - days ); from.value = f2.toISOString().slice( 0, 10 ); to.value = ''; } recompute(); } ); } );
+                var quickBtn = root.querySelector( '[data-quick]' );
+                if ( quickBtn ) { quickBtn.addEventListener( 'click', applyQuick ); }
                 root.querySelector( '[data-reset]' ).addEventListener( 'click', function () {
                     FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = {}; } );
                     root.querySelectorAll( '.bokun-andash__item.is-on' ).forEach( function ( el ) { el.classList.remove( 'is-on' ); } );
