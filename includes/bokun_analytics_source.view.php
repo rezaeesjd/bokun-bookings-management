@@ -375,6 +375,19 @@ if ( $table_exists && $row_count > 0 ) {
         return;
     }
 
+    var ajaxUrl     = '<?php echo esc_url_raw( admin_url( 'admin-ajax.php' ) ); ?>';
+    var nonce       = '<?php echo esc_js( $mark_refunded_nonce ); ?>';
+    var failedText  = '<?php echo esc_js( __( 'Failed.', 'BOKUN_text_domain' ) ); ?>';
+    var workingText = '<?php echo esc_js( __( 'Working…', 'BOKUN_text_domain' ) ); ?>';
+    var doneText    = '<?php echo esc_js( __( 'Marked', 'BOKUN_text_domain' ) ); ?>';
+    var ofText      = '<?php echo esc_js( __( 'of', 'BOKUN_text_domain' ) ); ?>';
+    var backlogText = '<?php echo esc_js( __( 'cancelled “booking made” bookings as refunded by partner.', 'BOKUN_text_domain' ) ); ?>';
+
+    function finish( enabled ) {
+        button.disabled = ! enabled;
+        spinner.classList.remove( 'is-active' );
+    }
+
     button.addEventListener( 'click', function () {
         if ( ! window.confirm( '<?php echo esc_js( __( 'Mark all cancelled “booking made” bookings as refunded by partner? This updates their net revenue to neutral.', 'BOKUN_text_domain' ) ); ?>' ) ) {
             return;
@@ -382,40 +395,59 @@ if ( $table_exists && $row_count > 0 ) {
 
         button.disabled = true;
         spinner.classList.add( 'is-active' );
-        message.textContent = '';
+        message.style.color = '#1a7f37';
+        message.textContent = workingText;
 
-        var body = new URLSearchParams();
-        body.append( 'action', 'bokun_mark_refunded_cancelled' );
-        body.append( 'nonce', '<?php echo esc_js( $mark_refunded_nonce ); ?>' );
+        // Totals accumulated across every batch of this run.
+        var totals = { scanned: 0, eligible: 0, marked: 0, already: 0 };
 
-        fetch( '<?php echo esc_url_raw( admin_url( 'admin-ajax.php' ) ); ?>', {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-            body: body.toString()
-        } )
-        .then( function ( response ) { return response.json(); } )
-        .then( function ( json ) {
-            button.disabled = false;
-            spinner.classList.remove( 'is-active' );
+        function runPage( page ) {
+            var body = new URLSearchParams();
+            body.append( 'action', 'bokun_mark_refunded_cancelled' );
+            body.append( 'nonce', nonce );
+            body.append( 'page', page );
 
-            if ( json && json.success ) {
-                message.style.color = '#1a7f37';
-                message.textContent = json.data.message || '<?php echo esc_js( __( 'Done.', 'BOKUN_text_domain' ) ); ?>';
+            fetch( ajaxUrl, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+                body: body.toString()
+            } )
+            .then( function ( response ) { return response.json(); } )
+            .then( function ( json ) {
+                if ( ! json || ! json.success ) {
+                    finish( true );
+                    message.style.color = '#d63638';
+                    message.textContent = ( json && json.data && json.data.message ) ? json.data.message : failedText;
+                    return;
+                }
+
+                var s = json.data.stats || {};
+                totals.scanned  += ( s.scanned  || 0 );
+                totals.eligible += ( s.eligible || 0 );
+                totals.marked   += ( s.marked   || 0 );
+                totals.already  += ( s.already  || 0 );
+
                 if ( count && typeof json.data.row_count !== 'undefined' ) {
                     count.textContent = json.data.row_count;
                 }
-            } else {
+
+                if ( ! json.data.done && json.data.next_page ) {
+                    message.textContent = workingText + ' (' + json.data.page + ' / ' + json.data.max_pages + ', ' + totals.marked + '+' + totals.already + ')';
+                    runPage( json.data.next_page );
+                } else {
+                    finish( true );
+                    message.textContent = doneText + ' ' + totals.marked + ' (' + totals.already + ' already) ' + ofText + ' ' + totals.eligible + '/' + totals.scanned + ' ' + backlogText;
+                }
+            } )
+            .catch( function () {
+                finish( true );
                 message.style.color = '#d63638';
-                message.textContent = ( json && json.data && json.data.message ) ? json.data.message : '<?php echo esc_js( __( 'Failed.', 'BOKUN_text_domain' ) ); ?>';
-            }
-        } )
-        .catch( function () {
-            button.disabled = false;
-            spinner.classList.remove( 'is-active' );
-            message.style.color = '#d63638';
-            message.textContent = '<?php echo esc_js( __( 'Failed.', 'BOKUN_text_domain' ) ); ?>';
-        } );
+                message.textContent = failedText;
+            } );
+        }
+
+        runPage( 1 );
     } );
 } )();
 </script>

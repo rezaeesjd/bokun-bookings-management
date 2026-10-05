@@ -743,21 +743,46 @@ function bokun_analytics_ajax_rebuild() {
 add_action( 'wp_ajax_bokun_rebuild_analytics', 'bokun_analytics_ajax_rebuild' );
 
 /**
- * Backfill: mark every cancelled booking that was "made" (Full/Partial, so the
- * partner was paid) as "Refunded by Partner", for the backlog created before
- * that checkbox existed. Each affected booking gets the term, a booking-history
- * entry, and an analytics re-sync so its net revenue flips from the negative
- * cancellation loss to neutral (null). Idempotent — bookings already marked are
- * left as-is and only counted.
- *
- * @return array{scanned:int,eligible:int,marked:int,already:int}
+ * Default number of cancelled bookings processed per backfill request. Kept
+ * small so a single admin-AJAX call stays well under PHP/proxy timeouts; the
+ * admin screen walks the pages until the backfill reports done.
  */
-function bokun_analytics_mark_cancelled_made_refunded() {
+function bokun_analytics_backfill_batch_size() {
+    $size = (int) apply_filters( 'bokun_analytics_backfill_batch_size', 100 );
+
+    return $size > 0 ? $size : 100;
+}
+
+/**
+ * Backfill one page: mark cancelled bookings that were "made" (Full/Partial, so
+ * the partner was paid) as "Refunded by Partner", for the backlog created
+ * before that checkbox existed. Each affected booking gets the term, a
+ * booking-history entry, and an analytics re-sync so its net revenue flips from
+ * the negative cancellation loss to neutral (null).
+ *
+ * Processes only one bounded batch per call and reports whether more pages
+ * remain, so a large backlog never has to complete inside a single request. The
+ * cancelled set is stable across pages (the backfill never removes the
+ * "cancelled" term it filters on), and ordering is fixed by post ID, so paging
+ * is deterministic. Idempotent — bookings already marked are counted, not
+ * re-tagged.
+ *
+ * @param int $page       1-based page to process.
+ * @param int $batch_size Bookings per page.
+ * @return array{scanned:int,eligible:int,marked:int,already:int,page:int,max_pages:int,done:bool}
+ */
+function bokun_analytics_mark_cancelled_made_refunded( $page = 1, $batch_size = 0 ) {
+    $page       = max( 1, (int) $page );
+    $batch_size = (int) $batch_size > 0 ? (int) $batch_size : bokun_analytics_backfill_batch_size();
+
     $stats = array(
-        'scanned'  => 0,
-        'eligible' => 0,
-        'marked'   => 0,
-        'already'  => 0,
+        'scanned'   => 0,
+        'eligible'  => 0,
+        'marked'    => 0,
+        'already'   => 0,
+        'page'      => $page,
+        'max_pages' => 0,
+        'done'      => true,
     );
 
     // Match the dashboard's cancelled detection: any booking_status term whose
@@ -782,34 +807,30 @@ function bokun_analytics_mark_cancelled_made_refunded() {
         return $stats;
     }
 
-    $paged = 1;
-
-    do {
-        $query = new WP_Query(
-            array(
-                'post_type'        => 'bokun_booking',
-                'post_status'      => array( 'publish', 'draft', 'pending', 'private' ),
-                'posts_per_page'   => 200,
-                'paged'            => $paged,
-                'fields'           => 'ids',
-                'no_found_rows'    => false,
-                'suppress_filters' => true,
-                'tax_query'        => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
-                    array(
-                        'taxonomy' => 'booking_status',
-                        'field'    => 'term_id',
-                        'terms'    => $cancel_term_ids,
-                    ),
+    $query = new WP_Query(
+        array(
+            'post_type'        => 'bokun_booking',
+            'post_status'      => array( 'publish', 'draft', 'pending', 'private' ),
+            'posts_per_page'   => $batch_size,
+            'paged'            => $page,
+            'orderby'          => 'ID',
+            'order'            => 'ASC',
+            'fields'           => 'ids',
+            'no_found_rows'    => false,
+            'suppress_filters' => true,
+            'tax_query'        => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query
+                array(
+                    'taxonomy' => 'booking_status',
+                    'field'    => 'term_id',
+                    'terms'    => $cancel_term_ids,
                 ),
-            )
-        );
+            ),
+        )
+    );
 
-        if ( ! $query->have_posts() ) {
-            break;
-        }
+    $stats['max_pages'] = (int) $query->max_num_pages;
 
-        $total_pages = (int) $query->max_num_pages;
-
+    if ( $query->have_posts() ) {
         foreach ( $query->posts as $post_id ) {
             $post_id = (int) $post_id;
             $stats['scanned']++;
@@ -836,17 +857,18 @@ function bokun_analytics_mark_cancelled_made_refunded() {
             // Re-sync so the analytics row reflects the refund immediately.
             bokun_analytics_sync_booking( $post_id );
         }
-
-        $paged++;
-    } while ( $paged <= $total_pages );
+    }
 
     wp_reset_postdata();
+
+    $stats['done'] = ( 0 === $stats['max_pages'] ) || ( $page >= $stats['max_pages'] );
 
     return $stats;
 }
 
 /**
- * AJAX: run the cancelled-made -> refunded-by-partner backfill.
+ * AJAX: run one page of the cancelled-made -> refunded-by-partner backfill. The
+ * admin screen calls this repeatedly, advancing `page` until `done` is true.
  *
  * @return void
  */
@@ -857,20 +879,17 @@ function bokun_analytics_ajax_mark_refunded() {
 
     check_ajax_referer( 'bokun_analytics_mark_refunded', 'nonce' );
 
-    $stats = bokun_analytics_mark_cancelled_made_refunded();
+    $page  = isset( $_POST['page'] ) ? max( 1, (int) $_POST['page'] ) : 1;
+    $stats = bokun_analytics_mark_cancelled_made_refunded( $page );
 
     wp_send_json_success(
         array(
             'stats'     => $stats,
+            'page'      => (int) $stats['page'],
+            'max_pages' => (int) $stats['max_pages'],
+            'done'      => (bool) $stats['done'],
+            'next_page' => $stats['done'] ? 0 : ( (int) $stats['page'] + 1 ),
             'row_count' => bokun_analytics_get_row_count(),
-            /* translators: 1: newly marked, 2: already marked, 3: eligible booking-made, 4: cancelled scanned. */
-            'message'   => sprintf(
-                __( 'Marked %1$d cancelled booking(s) as refunded by partner (%2$d already set). %3$d of %4$d cancelled bookings scanned were "booking made".', 'BOKUN_text_domain' ),
-                (int) $stats['marked'],
-                (int) $stats['already'],
-                (int) $stats['eligible'],
-                (int) $stats['scanned']
-            ),
         )
     );
 }
