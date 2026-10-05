@@ -149,6 +149,7 @@ function bokun_analytics_install_table() {
     if ( $table_existed && $previous_version && $previous_version !== BOKUN_ANALYTICS_DB_VERSION ) {
         update_option( 'bokun_analytics_pending_rebuild', 1, false );
         delete_option( 'bokun_analytics_rebuild_cursor' );
+        delete_option( 'bokun_analytics_rebuild_cutoff' );
     }
 }
 
@@ -200,48 +201,53 @@ function bokun_analytics_maybe_schedule_rebuild() {
  * @param int $batch_size Bookings per page.
  * @return array{page:int,max_pages:int,done:bool}
  */
-function bokun_analytics_migrate_batch( $page, $batch_size ) {
-    $page       = max( 1, (int) $page );
+function bokun_analytics_migrate_batch( $after_id, $cutoff, $batch_size ) {
+    global $wpdb;
+
+    $after_id   = max( 0, (int) $after_id );
     $batch_size = (int) $batch_size > 0 ? (int) $batch_size : bokun_analytics_backfill_batch_size();
+    $cutoff     = (string) $cutoff;
 
-    $window_start_local = bokun_analytics_get_window_start();
+    $statuses             = array( 'publish', 'draft', 'pending', 'private' );
+    $status_placeholders  = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
 
-    $query = new WP_Query(
-        array(
-            'post_type'        => 'bokun_booking',
-            'post_status'      => array( 'publish', 'draft', 'pending', 'private' ),
-            'posts_per_page'   => $batch_size,
-            'paged'            => $page,
-            'orderby'          => 'ID',
-            'order'            => 'ASC',
-            'fields'           => 'ids',
-            'no_found_rows'    => false,
-            'suppress_filters' => true,
-            'meta_query'       => array( // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-                array(
-                    'key'     => 'bookingcreationdate',
-                    'value'   => $window_start_local,
-                    'compare' => '>=',
-                    'type'    => 'DATETIME',
-                ),
-            ),
-        )
-    );
+    // Keyset pagination: always continue from the last processed post ID with a
+    // fixed creation-date cutoff, so a shifting result set (window advancing
+    // across midnight, deletions, concurrent edits) can never make a numbered
+    // page skip unprocessed rows. `bookingcreationdate` is stored as
+    // 'Y-m-d H:i:s', which compares correctly as a string.
+    $sql = "SELECT DISTINCT p.ID
+        FROM {$wpdb->posts} p
+        INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = 'bookingcreationdate'
+        WHERE p.post_type = 'bokun_booking'
+          AND p.post_status IN ( {$status_placeholders} )
+          AND p.ID > %d
+          AND m.meta_value >= %s
+        ORDER BY p.ID ASC
+        LIMIT %d";
 
-    $max_pages = (int) $query->max_num_pages;
+    $params = array_merge( $statuses, array( $after_id, $cutoff, $batch_size ) );
 
-    if ( $query->have_posts() ) {
-        foreach ( $query->posts as $post_id ) {
-            bokun_analytics_sync_booking( (int) $post_id );
+    // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+    $ids = $wpdb->get_col( $wpdb->prepare( $sql, $params ) );
+
+    $processed = 0;
+    $last_id   = $after_id;
+
+    if ( is_array( $ids ) ) {
+        foreach ( $ids as $post_id ) {
+            $post_id = (int) $post_id;
+            bokun_analytics_sync_booking( $post_id );
+            $last_id = $post_id;
+            $processed++;
         }
     }
 
-    wp_reset_postdata();
-
     return array(
-        'page'      => $page,
-        'max_pages' => $max_pages,
-        'done'      => ( 0 === $max_pages || $page >= $max_pages ),
+        'processed' => $processed,
+        'last_id'   => $last_id,
+        // A short page (fewer than requested) means no rows remain after it.
+        'done'      => ( $processed < $batch_size ),
     );
 }
 
@@ -249,28 +255,38 @@ function bokun_analytics_migrate_batch( $page, $batch_size ) {
  * wp-cron callback: process one batch of the pending post-upgrade rebuild and
  * reschedule the next, so a large backlog never has to repopulate inside a
  * single cron run (a timeout would otherwise leave the table partial and
- * restart from scratch). A cursor option tracks the next page; when the last
- * page is done it prunes aged-out rows and clears the flag.
+ * restart from scratch). A keyset cursor (last processed post ID) plus a fixed
+ * window cutoff make paging stable; when the last row is done it prunes
+ * aged-out rows and clears the flag.
  *
  * @return void
  */
 function bokun_analytics_do_pending_rebuild() {
     if ( ! get_option( 'bokun_analytics_pending_rebuild' ) ) {
         delete_option( 'bokun_analytics_rebuild_cursor' );
+        delete_option( 'bokun_analytics_rebuild_cutoff' );
         return;
     }
 
-    $page   = (int) get_option( 'bokun_analytics_rebuild_cursor', 1 );
-    $page   = $page > 0 ? $page : 1;
-    $result = bokun_analytics_migrate_batch( $page, bokun_analytics_backfill_batch_size() );
+    // Freeze the window cutoff for the whole migration so the set does not shift
+    // as time passes across batches.
+    $cutoff = get_option( 'bokun_analytics_rebuild_cutoff' );
+    if ( ! $cutoff ) {
+        $cutoff = bokun_analytics_get_window_start();
+        update_option( 'bokun_analytics_rebuild_cutoff', $cutoff, false );
+    }
+
+    $after_id = (int) get_option( 'bokun_analytics_rebuild_cursor', 0 );
+    $result   = bokun_analytics_migrate_batch( $after_id, $cutoff, bokun_analytics_backfill_batch_size() );
 
     if ( $result['done'] ) {
         bokun_analytics_prune_window();
         update_option( BOKUN_ANALYTICS_LAST_BUILT_OPTION, current_time( 'mysql', true ) );
         delete_option( 'bokun_analytics_rebuild_cursor' );
+        delete_option( 'bokun_analytics_rebuild_cutoff' );
         delete_option( 'bokun_analytics_pending_rebuild' );
     } else {
-        update_option( 'bokun_analytics_rebuild_cursor', $page + 1, false );
+        update_option( 'bokun_analytics_rebuild_cursor', (int) $result['last_id'], false );
         if ( ! wp_next_scheduled( 'bokun_analytics_run_pending_rebuild' ) ) {
             wp_schedule_single_event( time() + 60, 'bokun_analytics_run_pending_rebuild' );
         }
@@ -778,6 +794,7 @@ function bokun_analytics_rebuild() {
     // cancel any in-progress batched migration cursor.
     delete_option( 'bokun_analytics_pending_rebuild' );
     delete_option( 'bokun_analytics_rebuild_cursor' );
+    delete_option( 'bokun_analytics_rebuild_cutoff' );
 
     return $stats;
 }

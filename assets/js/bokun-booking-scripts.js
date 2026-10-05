@@ -138,11 +138,15 @@ jQuery(document).ready(function($) {
             } ).prop( 'checked', checked );
         }
 
-        // Once a cancelled booking is marked "Cancelled and refunded by Partner"
-        // it is fully resolved, so drop its card from the "Booking made and
-        // Cancelled" follow-up list (the server already excludes it on reload).
-        // It stays in the Cancelled tab, where the refund can be un-ticked.
-        function resolveDualStatusCard() {
+        // A refunded cancelled booking is fully resolved, so it leaves the
+        // "Booking made and Cancelled" follow-up list (the server already
+        // excludes it on reload). Hide rather than remove the card so an
+        // immediate un-tick can restore it without a reload; the count badge and
+        // the section's visibility track only the still-unresolved cards.
+        // Returns whether a follow-up card for this booking was found.
+        function updateDualStatusForRefund( refunded ) {
+            var found = false;
+
             $('[data-dashboard-dual-status]').each(function() {
                 var $section = $(this);
                 var $cards = $section
@@ -155,20 +159,29 @@ jQuery(document).ready(function($) {
                     return;
                 }
 
-                $cards.remove();
+                found = true;
+
+                if (refunded) {
+                    $cards.attr('data-refund-resolved', '1').css('display', 'none');
+                } else {
+                    $cards.removeAttr('data-refund-resolved').css('display', '');
+                }
 
                 var remaining = $section
-                    .find('[data-dashboard-dual-status-panel] article[data-booking-id]').length;
+                    .find('[data-dashboard-dual-status-panel] article[data-booking-id]')
+                    .filter(function() {
+                        return $(this).attr('data-refund-resolved') !== '1';
+                    }).length;
 
                 var $count = $section.find('.bokun-booking-dashboard__dual-status-count');
                 if ($count.length) {
                     $count.text(remaining);
                 }
 
-                if (remaining === 0) {
-                    $section.remove();
-                }
+                $section.css('display', remaining === 0 ? 'none' : '');
             });
+
+            return found;
         }
 
         // Send AJAX request to update booking status
@@ -200,12 +213,19 @@ jQuery(document).ready(function($) {
 
                 showMessage(ok ? 'Saved' : (serverMessage || 'Error'));
 
-                if (ok && type === 'refunded-partner' && isChecked) {
-                    // Mirror the checked state onto the booking's other card
-                    // copies before removing the follow-up one, so the Cancelled
-                    // copy can be un-ticked without a reload.
-                    syncRefundedCheckboxes( true );
-                    resolveDualStatusCard();
+                if (ok && type === 'refunded-partner') {
+                    // Mirror the persisted state onto the booking's other card
+                    // copies (All / Cancelled panels), then show/hide its
+                    // follow-up card to match.
+                    syncRefundedCheckboxes( isChecked );
+                    var found = updateDualStatusForRefund( isChecked );
+
+                    // Un-ticked, but the page was loaded with it already resolved
+                    // (no follow-up card to restore), so reload to bring the
+                    // server-rendered follow-up list back in sync.
+                    if ( ! isChecked && ! found ) {
+                        window.location.reload();
+                    }
                 }
             },
             error: function() {
