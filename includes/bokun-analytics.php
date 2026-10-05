@@ -149,8 +149,39 @@ function bokun_analytics_maybe_upgrade() {
     }
 
     bokun_analytics_ensure_schema();
+    bokun_analytics_maybe_schedule_rebuild();
 }
 add_action( 'admin_init', 'bokun_analytics_maybe_upgrade', 5 );
+
+/**
+ * Schedule the one-time post-upgrade rebuild on wp-cron when one is pending, so
+ * rows already in the table pick up new/changed columns automatically. Called
+ * from the admin-only upgrade path, so it never fires from a front-end or import
+ * request, and the heavy rebuild runs in the background rather than blocking a
+ * page load. The manual "Rebuild now" button remains as a fallback.
+ *
+ * @return void
+ */
+function bokun_analytics_maybe_schedule_rebuild() {
+    if ( ! get_option( 'bokun_analytics_pending_rebuild' ) ) {
+        return;
+    }
+
+    if ( ! wp_next_scheduled( 'bokun_analytics_run_pending_rebuild' ) ) {
+        wp_schedule_single_event( time() + 30, 'bokun_analytics_run_pending_rebuild' );
+    }
+}
+
+/**
+ * wp-cron callback: run the pending post-upgrade rebuild. The rebuild clears the
+ * pending flag itself.
+ *
+ * @return void
+ */
+function bokun_analytics_do_pending_rebuild() {
+    bokun_analytics_rebuild();
+}
+add_action( 'bokun_analytics_run_pending_rebuild', 'bokun_analytics_do_pending_rebuild' );
 
 /**
  * Ensure the analytics table matches the current schema version, regardless of
@@ -169,6 +200,11 @@ function bokun_analytics_ensure_schema() {
     }
 
     bokun_analytics_install_table();
+
+    // The schema changed, so rows already in the table predate the new/changed
+    // columns and must be repopulated from source. Flag a one-time rebuild; the
+    // next admin request schedules it on wp-cron.
+    update_option( 'bokun_analytics_pending_rebuild', 1, false );
 }
 
 /**
@@ -645,6 +681,10 @@ function bokun_analytics_rebuild() {
 
     update_option( BOKUN_ANALYTICS_LAST_BUILT_OPTION, current_time( 'mysql', true ) );
 
+    // A full rebuild repopulates every column for every in-window row, so any
+    // pending post-upgrade rebuild (manual or scheduled) is satisfied.
+    delete_option( 'bokun_analytics_pending_rebuild' );
+
     return $stats;
 }
 
@@ -835,9 +875,20 @@ function bokun_analytics_mark_cancelled_made_refunded( $page = 1, $batch_size = 
             $post_id = (int) $post_id;
             $stats['scanned']++;
 
-            // "Booking made" = we reserved and paid the partner (Full/Partial).
-            $result = bokun_analytics_get_result( $post_id );
-            if ( 'full' !== $result && 'partial' !== $result ) {
+            // Apply the exact eligibility the dashboard refund controls and the
+            // status-change handler use: the booking must currently be both
+            // "Booking made" and "Cancelled" (sanitize_title of the term name,
+            // not just any "cancel" term the broad prefilter matched, e.g.
+            // "Cancelled by supplier"). Otherwise the refund term we assign
+            // would be hidden and could not be reversed through the dashboard.
+            $term_values = array();
+            $post_terms  = get_the_terms( $post_id, 'booking_status' );
+            if ( $post_terms && ! is_wp_error( $post_terms ) ) {
+                foreach ( $post_terms as $post_term ) {
+                    $term_values[] = sanitize_title( $post_term->name );
+                }
+            }
+            if ( ! in_array( 'booking-made', $term_values, true ) || ! in_array( 'cancelled', $term_values, true ) ) {
                 continue;
             }
             $stats['eligible']++;
