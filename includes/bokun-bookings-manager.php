@@ -3326,21 +3326,19 @@ function update_booking_status() {
                     }
                     break;
                 case 'refund-partner':
-                    if ($checked) {
-                        bokun_assign_tag_to_post($post_id, 'Refund Requested from Partner', $taxonomy);
-                    } else {
-                        bokun_remove_tag_from_post($post_id, 'Refund Requested from Partner', $taxonomy);
-                    }
-                    break;
                 case 'refunded-partner':
+                    $refund_term = ($type === 'refund-partner')
+                        ? 'Refund Requested from Partner'
+                        : 'Refunded by Partner';
                     if ($checked) {
-                        // A completed partner refund only applies to a booking that
-                        // is both "Booking made" and "Cancelled". Enforce that here
-                        // so a stale (still-rendered) control can't recreate the
-                        // term on a booking that no longer qualifies — which would
-                        // keep the row out of net revenue behind a hidden toggle.
-                        // Mirror the dashboard's eligibility test exactly: it keys
-                        // on sanitize_title( term name ), not the raw slug.
+                        // Both refund states only apply to a booking that is
+                        // currently "Booking made" and "Cancelled". Enforce that
+                        // here so a stale or disabled control can't persist a
+                        // refund term (or history) on a booking that no longer
+                        // qualifies — which would keep the row mis-stated while
+                        // its control is hidden after reload. Mirror the
+                        // dashboard's eligibility test exactly: it keys on
+                        // sanitize_title( term name ), not the raw slug.
                         $current_terms  = get_the_terms($post_id, $taxonomy);
                         $current_values = [];
                         if ($current_terms && !is_wp_error($current_terms)) {
@@ -3351,7 +3349,7 @@ function update_booking_status() {
                         if (in_array('booking-made', $current_values, true)
                             && in_array('cancelled', $current_values, true)
                         ) {
-                            bokun_assign_tag_to_post($post_id, 'Refunded by Partner', $taxonomy);
+                            bokun_assign_tag_to_post($post_id, $refund_term, $taxonomy);
                         } else {
                             // Ineligible: don't assign, and don't record history,
                             // sync, or report success for a change that did not
@@ -3361,7 +3359,7 @@ function update_booking_status() {
                             $rejected = true;
                         }
                     } else {
-                        bokun_remove_tag_from_post($post_id, 'Refunded by Partner', $taxonomy);
+                        bokun_remove_tag_from_post($post_id, $refund_term, $taxonomy);
                     }
                     break;
                 case 'amex':

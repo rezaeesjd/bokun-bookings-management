@@ -76,6 +76,19 @@ jQuery(document).ready(function($) {
             return;
         }
 
+        // Snapshot the refund controls before the sibling change handler runs
+        // (it may uncheck them for the attempted state). This handler is bound
+        // first, so the checkboxes are still in their pre-change state here, and
+        // the snapshot lets a rejected change roll their selections back — the
+        // server never persists these visual clears on its own.
+        var $resultCtx = $checkbox.closest('[data-result]');
+        var refundSnapshot = $resultCtx.find('.booking-checkbox').filter(function() {
+            var refundType = String($(this).data('type'));
+            return refundType === 'refund-partner' || refundType === 'refunded-partner';
+        }).map(function() {
+            return { el: this, checked: $(this).is(':checked') };
+        }).get();
+
         $checkbox.siblings('.save-message, .loading-message').remove();
 
         var loadingMessage = $('<span/>', {
@@ -107,17 +120,18 @@ jQuery(document).ready(function($) {
 
                 if (!ok) {
                     // The server rejected the change (e.g. an ineligible refund
-                    // tick, or a booking deleted after load). Restore the checkbox
-                    // to the persisted state so the UI doesn't claim a change that
-                    // did not happen.
+                    // tick, or a booking deleted after load). Roll the UI back to
+                    // the persisted state. First restore the refund controls the
+                    // sibling handler may have unchecked for the attempted state
+                    // (their clears were never persisted), then revert the
+                    // triggering checkbox (so it wins if it is itself a refund
+                    // control), then recompute the card. persistClear is false: a
+                    // rollback must not trigger any further clears or persistence.
+                    refundSnapshot.forEach(function(snap) {
+                        $(snap.el).prop('checked', snap.checked);
+                    });
                     $checkbox.prop('checked', !isChecked);
-
-                    // The synchronous change handler already recomputed the result
-                    // summary, payment visibility and refund controls for the
-                    // attempted state, so recompute them from the restored
-                    // checkbox. persistClear is false: a rollback must not trigger
-                    // any further clears or persistence.
-                    updateResultState($checkbox.closest('[data-result]'), false);
+                    updateResultState($resultCtx, false);
                 }
 
                 var serverMessage = response && response.data && response.data.message
@@ -201,20 +215,23 @@ jQuery(document).ready(function($) {
         }
 
         // The refund controls only apply to a "Booking made" (Full/Partial) +
-        // cancelled booking. The server removes both refund terms as soon as no
-        // Full/Partial result remains — regardless of "Not available", which is
-        // not mutually exclusive — so key this reset on Full/Partial, not on any
-        // result. Just uncheck the controls to match; no extra persistence call
-        // is needed (unlike payments, which the server does not auto-remove).
-        if (persistClear && !hasFullPartial) {
-            var $checkedRefunds = $result.find('.booking-checkbox:checked').filter(function() {
-                var refundType = String($(this).data('type'));
-                return refundType === 'refund-partner' || refundType === 'refunded-partner';
-            });
+        // cancelled booking. Key this on whether a Full/Partial result remains
+        // (not on any result — "Not available" is not mutually exclusive), to
+        // match the server, which removes both refund terms as soon as no
+        // Full/Partial remains. Disable the controls when they don't apply, so
+        // staff can't persist a refund state on a non-qualifying booking, and
+        // when the last Full/Partial is cleared, uncheck them to match the
+        // server's removal (no extra persistence call is needed for them,
+        // unlike payments, which the server does not auto-remove).
+        var $refundControls = $result.find('.booking-checkbox').filter(function() {
+            var refundType = String($(this).data('type'));
+            return refundType === 'refund-partner' || refundType === 'refunded-partner';
+        });
 
-            if ($checkedRefunds.length) {
-                $checkedRefunds.prop('checked', false);
-            }
+        $refundControls.prop('disabled', !hasFullPartial);
+
+        if (persistClear && !hasFullPartial) {
+            $refundControls.filter(':checked').prop('checked', false);
         }
 
         var $payment = $result.find('[data-payment]').first();
