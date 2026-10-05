@@ -103,17 +103,26 @@ jQuery(document).ready(function($) {
             success: function(response) {
                 $checkbox.siblings('.loading-message').remove();
 
-                var messageOptions = {
+                var ok = !!(response && response.success);
+
+                if (!ok) {
+                    // The server rejected the change (e.g. an ineligible refund
+                    // tick). Restore the checkbox to the persisted state so the
+                    // UI doesn't claim a change that did not happen.
+                    $checkbox.prop('checked', !isChecked);
+                }
+
+                var serverMessage = response && response.data && response.data.message
+                    ? response.data.message
+                    : '';
+
+                $('<span/>', {
                     class: 'save-message',
-                    text: response && response.success ? 'Saved' : 'Error'
-                };
-
-                var messageStyles = {
-                    color: response && response.success ? 'green' : 'red',
+                    text: ok ? 'Saved' : (serverMessage || 'Error')
+                }).css({
+                    color: ok ? 'green' : 'red',
                     marginLeft: '10px'
-                };
-
-                $('<span/>', messageOptions).css(messageStyles).insertAfter($checkbox);
+                }).insertAfter($checkbox);
             },
             error: function() {
                 $checkbox.siblings('.loading-message').remove();

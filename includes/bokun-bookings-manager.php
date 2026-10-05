@@ -3306,14 +3306,16 @@ function update_booking_status() {
         ],
     ];
 
-    $query   = new WP_Query($args);
-    $updated = false;
+    $query    = new WP_Query($args);
+    $updated  = false;
+    $rejected = false;
 
     if ($query->have_posts()) {
         while ($query->have_posts()) {
             $query->the_post();
             $post_id  = get_the_ID();
             $taxonomy = 'booking_status';
+            $applied  = true;
 
             switch ($type) {
                 case 'not-available':
@@ -3350,6 +3352,13 @@ function update_booking_status() {
                             && in_array('cancelled', $current_values, true)
                         ) {
                             bokun_assign_tag_to_post($post_id, 'Refunded by Partner', $taxonomy);
+                        } else {
+                            // Ineligible: don't assign, and don't record history,
+                            // sync, or report success for a change that did not
+                            // happen — otherwise the UI shows "Saved" and leaves
+                            // the box checked while nothing persisted.
+                            $applied  = false;
+                            $rejected = true;
                         }
                     } else {
                         bokun_remove_tag_from_post($post_id, 'Refunded by Partner', $taxonomy);
@@ -3397,6 +3406,10 @@ function update_booking_status() {
                     break;
             }
 
+            if (!$applied) {
+                continue;
+            }
+
             bokun_record_booking_history($post_id, $booking_id, $type, $checked);
 
             // Result/payment columns in the analytics source are snapshots of
@@ -3412,6 +3425,8 @@ function update_booking_status() {
 
     if ($updated) {
         wp_send_json_success(['message' => 'Booking status updated']);
+    } elseif ($rejected) {
+        wp_send_json_error(['message' => 'Mark the booking as Booking made and Cancelled before marking it refunded by the partner.']);
     } else {
         wp_send_json_error(['message' => 'Booking ID not found.']);
     }
