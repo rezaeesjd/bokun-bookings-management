@@ -3366,6 +3366,14 @@ function update_booking_status() {
                         if (!in_array('Full', $remaining_terms) && !in_array('Partial', $remaining_terms)) {
                             bokun_assign_tag_to_post($post_id, 'Booking Not Made', $taxonomy);
                             bokun_remove_tag_from_post($post_id, 'Booking Made', $taxonomy);
+                            // The booking is no longer a "Booking made" reservation,
+                            // so any partner-refund state no longer applies. Clear
+                            // both refund terms, otherwise a residual
+                            // "Refunded by Partner" would keep the line excluded
+                            // from net revenue while its toggle is hidden (the
+                            // refund toggles only show for booking-made + cancelled).
+                            bokun_remove_tag_from_post($post_id, 'Refunded by Partner', $taxonomy);
+                            bokun_remove_tag_from_post($post_id, 'Refund Requested from Partner', $taxonomy);
                         }
                     }
                     break;
