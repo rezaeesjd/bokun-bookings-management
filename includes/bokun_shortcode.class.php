@@ -3592,6 +3592,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 var DETAIL_COLS = [
                     [ 'created_datetime', 'Created' ], [ 'travel_datetime', 'Travel' ], [ 'confirmation_code', 'Confirmation' ],
+                    [ 'external_booking_reference', 'Ext. ref' ],
                     [ 'product_title', 'Product' ], [ 'departure_city', 'City' ], [ 'partner_page_id', 'Partner' ],
                     [ '__parts', 'Pax' ], [ 'price_amount', 'Gross' ], [ 'net_price', 'Net price' ], [ '__net_revenue', 'Net revenue' ],
                     [ 'currency', 'Cur' ], [ 'result', 'Result' ], [ 'payment_method', 'Payment' ], [ 'channel_title', 'Channel' ], [ 'pb_status', 'Status' ]

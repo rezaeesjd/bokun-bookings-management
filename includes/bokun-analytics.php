@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Schema version for the analytics source table. Bump when columns change so
  * installed sites re-run dbDelta on the next admin request.
  */
-define( 'BOKUN_ANALYTICS_DB_VERSION', '1.4.0' );
+define( 'BOKUN_ANALYTICS_DB_VERSION', '1.5.0' );
 
 /** Option key tracking the installed analytics schema version. */
 define( 'BOKUN_ANALYTICS_DB_VERSION_OPTION', 'bokun_analytics_db_version' );
@@ -88,6 +88,7 @@ function bokun_analytics_install_table() {
     $sql = "CREATE TABLE $table_name (
         post_id BIGINT(20) UNSIGNED NOT NULL,
         confirmation_code VARCHAR(191) NULL,
+        external_booking_reference VARCHAR(191) NULL,
         channel_title VARCHAR(191) NULL,
         channel_id VARCHAR(191) NULL,
         channel_channel_type VARCHAR(100) NULL,
@@ -478,6 +479,7 @@ function bokun_analytics_build_row( $post_id ) {
     $row = array(
         'post_id'                   => $post_id,
         'confirmation_code'         => bokun_analytics_meta( $post_id, array( 'confirmationCode', '_confirmation_code' ) ),
+        'external_booking_reference' => bokun_analytics_meta( $post_id, array( 'externalBookingReference', '_external_booking_reference' ) ),
         'channel_title'             => bokun_analytics_meta( $post_id, array( 'channel_title' ) ),
         'channel_id'                => bokun_analytics_meta( $post_id, array( 'channel_id' ) ),
         'channel_channel_type'      => bokun_analytics_meta( $post_id, array( 'channel_channelType' ) ),
