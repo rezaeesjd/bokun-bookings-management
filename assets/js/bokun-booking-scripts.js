@@ -157,13 +157,16 @@ jQuery(document).ready(function($) {
             error: function() {
                 $checkbox.siblings('.loading-message').remove();
 
-                // The request never reached the server (offline, HTTP/non-JSON
-                // error), so nothing persisted. Roll the UI back as well, or the
-                // optimistic clears from the sibling handler would contradict the
-                // still-stored result and refund terms until reload.
-                rollback();
-
-                showMessage('Error');
+                // Unlike an explicit success:false (which the server only returns
+                // when nothing was persisted), a transport/HTTP/parse error is
+                // ambiguous: the server may have committed the taxonomy changes
+                // before the response failed (e.g. a later fatal, a proxy error
+                // after commit, or an unparsable body). Rolling back would then
+                // contradict the persisted state, and keeping the optimistic
+                // clears would be wrong if nothing was saved — so don't guess.
+                // Reconcile with authoritative state by reloading the page.
+                showMessage('Save could not be confirmed — refreshing…');
+                window.setTimeout(function() { window.location.reload(); }, 1200);
             }
         });
     });

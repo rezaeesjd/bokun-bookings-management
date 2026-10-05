@@ -3397,8 +3397,18 @@ function update_booking_status() {
                             // "Refunded by Partner" would keep the line excluded
                             // from net revenue while its toggle is hidden (the
                             // refund toggles only show for booking-made + cancelled).
-                            bokun_remove_tag_from_post($post_id, 'Refunded by Partner', $taxonomy);
-                            bokun_remove_tag_from_post($post_id, 'Refund Requested from Partner', $taxonomy);
+                            // Record an Unchecked history entry for each term that
+                            // was actually present, so the audit trail doesn't keep
+                            // a dangling "Checked" refund event with no matching
+                            // "Unchecked".
+                            if (has_term('refunded-by-partner', $taxonomy, $post_id)) {
+                                bokun_remove_tag_from_post($post_id, 'Refunded by Partner', $taxonomy);
+                                bokun_record_booking_history($post_id, $booking_id, 'refunded-partner', false);
+                            }
+                            if (has_term('refund-requested-from-partner', $taxonomy, $post_id)) {
+                                bokun_remove_tag_from_post($post_id, 'Refund Requested from Partner', $taxonomy);
+                                bokun_record_booking_history($post_id, $booking_id, 'refund-partner', false);
+                            }
                         }
                     }
                     break;
