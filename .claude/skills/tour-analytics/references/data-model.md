@@ -10,6 +10,7 @@ meta ("N/A" and "" treated as null).
 |---|---|
 | `post_id` | booking post ID (primary key) |
 | `confirmation_code` | `confirmationCode` / `_confirmation_code` |
+| `external_booking_reference` | `externalBookingReference` / `_external_booking_reference` (channel booking reference, e.g. the Viator "Reference for booking") |
 | `channel_title` | `channel_title` |
 | `channel_id` | `channel_id` |
 | `channel_channel_type` | `channel_channelType` |

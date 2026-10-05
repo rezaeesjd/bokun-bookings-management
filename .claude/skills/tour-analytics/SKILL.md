@@ -179,6 +179,20 @@ These came out of code review on earlier PRs. Keep them true:
   double-shifted on non-UTC sites.
 
 ## After deploying changes
-Tell the user to run **Analytics Data → Rebuild now** (bookings source) and
-**Rebuild partners products** (catalog + partner ids) once, since net revenue
-needs both populated.
+A schema-version bump now **auto-schedules a one-time rebuild** on the next
+admin request (via wp-cron: `bokun_analytics_ensure_schema()` flags it,
+`bokun_analytics_maybe_schedule_rebuild()` queues
+`bokun_analytics_run_pending_rebuild`), so existing rows pick up new/changed
+columns without a manual step — the **Rebuild now** button is the fallback when
+wp-cron is disabled. Still tell the user to run **Rebuild partners products**
+(catalog + partner ids) once, since net revenue needs both populated.
+
+The **Analytics Data** screen also has a one-time **"Mark cancelled 'booking
+made' as refunded by partner"** backfill
+(`bokun_analytics_mark_cancelled_made_refunded()`), for operators who requested
+partner refunds for the whole cancelled backlog before the checkbox existed. It
+assigns the `refunded-by-partner` term to every cancelled Full/Partial booking,
+records history, and re-syncs each analytics row so net revenue flips from the
+negative cancellation loss to neutral. It is idempotent. A refund applied via
+the taxonomy term editor (not the dashboard checkbox or this backfill) will
+**not** update the analytics row until a re-sync/rebuild.

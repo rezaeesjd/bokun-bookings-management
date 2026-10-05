@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Schema version for the analytics source table. Bump when columns change so
  * installed sites re-run dbDelta on the next admin request.
  */
-define( 'BOKUN_ANALYTICS_DB_VERSION', '1.4.0' );
+define( 'BOKUN_ANALYTICS_DB_VERSION', '1.5.0' );
 
 /** Option key tracking the installed analytics schema version. */
 define( 'BOKUN_ANALYTICS_DB_VERSION_OPTION', 'bokun_analytics_db_version' );
@@ -85,9 +85,17 @@ function bokun_analytics_install_table() {
     $table_name      = bokun_analytics_get_table_name();
     $charset_collate = $wpdb->get_charset_collate();
 
+    // Detect whether this call UPGRADES an already-populated table (vs. a first
+    // install), so the migration flag is set no matter which path reached here
+    // — the admin ensure-schema path or the activation hook, which both call
+    // this function directly.
+    $previous_version = get_option( BOKUN_ANALYTICS_DB_VERSION_OPTION );
+    $table_existed    = ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table_name ) ) ) === $table_name );
+
     $sql = "CREATE TABLE $table_name (
         post_id BIGINT(20) UNSIGNED NOT NULL,
         confirmation_code VARCHAR(191) NULL,
+        external_booking_reference VARCHAR(191) NULL,
         channel_title VARCHAR(191) NULL,
         channel_id VARCHAR(191) NULL,
         channel_channel_type VARCHAR(100) NULL,
@@ -132,6 +140,17 @@ function bokun_analytics_install_table() {
     dbDelta( $sql );
 
     update_option( BOKUN_ANALYTICS_DB_VERSION_OPTION, BOKUN_ANALYTICS_DB_VERSION );
+
+    // An existing populated table whose version actually changed needs its rows
+    // repopulated so new/changed columns are filled. Flag a one-time rebuild and
+    // reset any in-progress migration cursor; the admin upgrade path turns the
+    // flag into a scheduled batched rebuild. A first install has nothing to
+    // migrate, so it is skipped.
+    if ( $table_existed && $previous_version && $previous_version !== BOKUN_ANALYTICS_DB_VERSION ) {
+        update_option( 'bokun_analytics_pending_rebuild', 1, false );
+        delete_option( 'bokun_analytics_rebuild_cursor' );
+        delete_option( 'bokun_analytics_rebuild_cutoff' );
+    }
 }
 
 /**
@@ -148,8 +167,132 @@ function bokun_analytics_maybe_upgrade() {
     }
 
     bokun_analytics_ensure_schema();
+    bokun_analytics_maybe_schedule_rebuild();
 }
 add_action( 'admin_init', 'bokun_analytics_maybe_upgrade', 5 );
+
+/**
+ * Schedule the one-time post-upgrade rebuild on wp-cron when one is pending, so
+ * rows already in the table pick up new/changed columns automatically. Called
+ * from the admin-only upgrade path, so it never fires from a front-end or import
+ * request, and the heavy rebuild runs in the background rather than blocking a
+ * page load. The manual "Rebuild now" button remains as a fallback.
+ *
+ * @return void
+ */
+function bokun_analytics_maybe_schedule_rebuild() {
+    if ( ! get_option( 'bokun_analytics_pending_rebuild' ) ) {
+        return;
+    }
+
+    if ( ! wp_next_scheduled( 'bokun_analytics_run_pending_rebuild' ) ) {
+        wp_schedule_single_event( time() + 30, 'bokun_analytics_run_pending_rebuild' );
+    }
+}
+
+/**
+ * Re-sync one page of in-window bookings in place (no truncate) so existing rows
+ * pick up new/changed columns after a schema upgrade, without emptying the table
+ * or having to finish in a single request. Ordering is fixed by post ID and
+ * sync does not change the booking's ID or creation date, so paging is
+ * deterministic across batches.
+ *
+ * @param int $page       1-based page.
+ * @param int $batch_size Bookings per page.
+ * @return array{page:int,max_pages:int,done:bool}
+ */
+function bokun_analytics_migrate_batch( $after_id, $cutoff, $batch_size ) {
+    global $wpdb;
+
+    $after_id   = max( 0, (int) $after_id );
+    $batch_size = (int) $batch_size > 0 ? (int) $batch_size : bokun_analytics_backfill_batch_size();
+    $cutoff     = (string) $cutoff;
+
+    $statuses             = array( 'publish', 'draft', 'pending', 'private' );
+    $status_placeholders  = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+
+    // Keyset pagination: always continue from the last processed post ID with a
+    // fixed creation-date cutoff, so a shifting result set (window advancing
+    // across midnight, deletions, concurrent edits) can never make a numbered
+    // page skip unprocessed rows. `bookingcreationdate` is stored as
+    // 'Y-m-d H:i:s', which compares correctly as a string.
+    $sql = "SELECT DISTINCT p.ID
+        FROM {$wpdb->posts} p
+        INNER JOIN {$wpdb->postmeta} m ON m.post_id = p.ID AND m.meta_key = 'bookingcreationdate'
+        WHERE p.post_type = 'bokun_booking'
+          AND p.post_status IN ( {$status_placeholders} )
+          AND p.ID > %d
+          AND m.meta_value >= %s
+        ORDER BY p.ID ASC
+        LIMIT %d";
+
+    $params = array_merge( $statuses, array( $after_id, $cutoff, $batch_size ) );
+
+    // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+    $ids = $wpdb->get_col( $wpdb->prepare( $sql, $params ) );
+
+    $processed = 0;
+    $last_id   = $after_id;
+
+    if ( is_array( $ids ) ) {
+        foreach ( $ids as $post_id ) {
+            $post_id = (int) $post_id;
+            bokun_analytics_sync_booking( $post_id );
+            $last_id = $post_id;
+            $processed++;
+        }
+    }
+
+    return array(
+        'processed' => $processed,
+        'last_id'   => $last_id,
+        // A short page (fewer than requested) means no rows remain after it.
+        'done'      => ( $processed < $batch_size ),
+    );
+}
+
+/**
+ * wp-cron callback: process one batch of the pending post-upgrade rebuild and
+ * reschedule the next, so a large backlog never has to repopulate inside a
+ * single cron run (a timeout would otherwise leave the table partial and
+ * restart from scratch). A keyset cursor (last processed post ID) plus a fixed
+ * window cutoff make paging stable; when the last row is done it prunes
+ * aged-out rows and clears the flag.
+ *
+ * @return void
+ */
+function bokun_analytics_do_pending_rebuild() {
+    if ( ! get_option( 'bokun_analytics_pending_rebuild' ) ) {
+        delete_option( 'bokun_analytics_rebuild_cursor' );
+        delete_option( 'bokun_analytics_rebuild_cutoff' );
+        return;
+    }
+
+    // Freeze the window cutoff for the whole migration so the set does not shift
+    // as time passes across batches.
+    $cutoff = get_option( 'bokun_analytics_rebuild_cutoff' );
+    if ( ! $cutoff ) {
+        $cutoff = bokun_analytics_get_window_start();
+        update_option( 'bokun_analytics_rebuild_cutoff', $cutoff, false );
+    }
+
+    $after_id = (int) get_option( 'bokun_analytics_rebuild_cursor', 0 );
+    $result   = bokun_analytics_migrate_batch( $after_id, $cutoff, bokun_analytics_backfill_batch_size() );
+
+    if ( $result['done'] ) {
+        bokun_analytics_prune_window();
+        update_option( BOKUN_ANALYTICS_LAST_BUILT_OPTION, current_time( 'mysql', true ) );
+        delete_option( 'bokun_analytics_rebuild_cursor' );
+        delete_option( 'bokun_analytics_rebuild_cutoff' );
+        delete_option( 'bokun_analytics_pending_rebuild' );
+    } else {
+        update_option( 'bokun_analytics_rebuild_cursor', (int) $result['last_id'], false );
+        if ( ! wp_next_scheduled( 'bokun_analytics_run_pending_rebuild' ) ) {
+            wp_schedule_single_event( time() + 60, 'bokun_analytics_run_pending_rebuild' );
+        }
+    }
+}
+add_action( 'bokun_analytics_run_pending_rebuild', 'bokun_analytics_do_pending_rebuild' );
 
 /**
  * Ensure the analytics table matches the current schema version, regardless of
@@ -167,6 +310,8 @@ function bokun_analytics_ensure_schema() {
         return;
     }
 
+    // install_table() flags a one-time rebuild when it upgrades an existing
+    // populated table (this runs on any write path and on activation).
     bokun_analytics_install_table();
 }
 
@@ -478,6 +623,7 @@ function bokun_analytics_build_row( $post_id ) {
     $row = array(
         'post_id'                   => $post_id,
         'confirmation_code'         => bokun_analytics_meta( $post_id, array( 'confirmationCode', '_confirmation_code' ) ),
+        'external_booking_reference' => bokun_analytics_meta( $post_id, array( 'externalBookingReference', '_external_booking_reference' ) ),
         'channel_title'             => bokun_analytics_meta( $post_id, array( 'channel_title' ) ),
         'channel_id'                => bokun_analytics_meta( $post_id, array( 'channel_id' ) ),
         'channel_channel_type'      => bokun_analytics_meta( $post_id, array( 'channel_channelType' ) ),
@@ -643,6 +789,13 @@ function bokun_analytics_rebuild() {
 
     update_option( BOKUN_ANALYTICS_LAST_BUILT_OPTION, current_time( 'mysql', true ) );
 
+    // A full rebuild repopulates every column for every in-window row, so any
+    // pending post-upgrade rebuild (manual or scheduled) is satisfied; also
+    // cancel any in-progress batched migration cursor.
+    delete_option( 'bokun_analytics_pending_rebuild' );
+    delete_option( 'bokun_analytics_rebuild_cursor' );
+    delete_option( 'bokun_analytics_rebuild_cutoff' );
+
     return $stats;
 }
 
@@ -739,3 +892,167 @@ function bokun_analytics_ajax_rebuild() {
     );
 }
 add_action( 'wp_ajax_bokun_rebuild_analytics', 'bokun_analytics_ajax_rebuild' );
+
+/**
+ * Default number of cancelled bookings processed per backfill request. Kept
+ * small so a single admin-AJAX call stays well under PHP/proxy timeouts; the
+ * admin screen walks the pages until the backfill reports done.
+ */
+function bokun_analytics_backfill_batch_size() {
+    $size = (int) apply_filters( 'bokun_analytics_backfill_batch_size', 100 );
+
+    return $size > 0 ? $size : 100;
+}
+
+/**
+ * Backfill one batch: mark cancelled bookings that were "made" (Full/Partial, so
+ * the partner was paid) as "Refunded by Partner", for the backlog created
+ * before that checkbox existed. Each affected booking gets the term, a
+ * booking-history entry, and an analytics re-sync so its net revenue flips from
+ * the negative cancellation loss to neutral (null).
+ *
+ * Processes one bounded batch per call, continuing from the last processed post
+ * ID (keyset pagination) so a large backlog never has to complete in a single
+ * request and a concurrent change to the cancelled set can't make a later batch
+ * skip eligible bookings. Idempotent — bookings already marked are counted, not
+ * re-tagged.
+ *
+ * @param int $after_id   Process bookings with a greater post ID.
+ * @param int $batch_size Bookings per batch.
+ * @return array{scanned:int,eligible:int,marked:int,already:int,last_id:int,done:bool}
+ */
+function bokun_analytics_mark_cancelled_made_refunded( $after_id = 0, $batch_size = 0 ) {
+    global $wpdb;
+
+    $after_id   = max( 0, (int) $after_id );
+    $batch_size = (int) $batch_size > 0 ? (int) $batch_size : bokun_analytics_backfill_batch_size();
+
+    $stats = array(
+        'scanned'  => 0,
+        'eligible' => 0,
+        'marked'   => 0,
+        'already'  => 0,
+        'last_id'  => $after_id,
+        'done'     => true,
+    );
+
+    // Match the dashboard's cancelled detection: any booking_status term whose
+    // slug or name contains "cancel".
+    $cancel_term_ids = array();
+    $status_terms    = get_terms(
+        array(
+            'taxonomy'   => 'booking_status',
+            'hide_empty' => false,
+        )
+    );
+
+    if ( is_array( $status_terms ) ) {
+        foreach ( $status_terms as $term ) {
+            if ( false !== stripos( $term->slug, 'cancel' ) || false !== stripos( $term->name, 'cancel' ) ) {
+                $cancel_term_ids[] = (int) $term->term_id;
+            }
+        }
+    }
+
+    if ( empty( $cancel_term_ids ) ) {
+        return $stats;
+    }
+
+    $statuses            = array( 'publish', 'draft', 'pending', 'private' );
+    $status_placeholders = implode( ', ', array_fill( 0, count( $statuses ), '%s' ) );
+    $term_placeholders   = implode( ', ', array_fill( 0, count( $cancel_term_ids ), '%d' ) );
+
+    // Keyset pagination by post ID (prefiltered to any "cancel" status), so a
+    // shifting set can never skip unprocessed rows.
+    $sql = "SELECT DISTINCT p.ID
+        FROM {$wpdb->posts} p
+        INNER JOIN {$wpdb->term_relationships} tr ON tr.object_id = p.ID
+        INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id AND tt.taxonomy = 'booking_status'
+        WHERE p.post_type = 'bokun_booking'
+          AND p.post_status IN ( {$status_placeholders} )
+          AND p.ID > %d
+          AND tt.term_id IN ( {$term_placeholders} )
+        ORDER BY p.ID ASC
+        LIMIT %d";
+
+    $params = array_merge( $statuses, array( $after_id ), $cancel_term_ids, array( $batch_size ) );
+
+    // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+    $ids = $wpdb->get_col( $wpdb->prepare( $sql, $params ) );
+
+    $returned = is_array( $ids ) ? count( $ids ) : 0;
+
+    if ( is_array( $ids ) ) {
+        foreach ( $ids as $post_id ) {
+            $post_id = (int) $post_id;
+            $stats['scanned']++;
+            $stats['last_id'] = $post_id;
+
+            // Apply the exact eligibility the dashboard refund controls and the
+            // status-change handler use: the booking must currently be both
+            // "Booking made" and "Cancelled" (sanitize_title of the term name,
+            // not just any "cancel" term the broad prefilter matched, e.g.
+            // "Cancelled by supplier"). Otherwise the refund term we assign
+            // would be hidden and could not be reversed through the dashboard.
+            $term_values = array();
+            $post_terms  = get_the_terms( $post_id, 'booking_status' );
+            if ( $post_terms && ! is_wp_error( $post_terms ) ) {
+                foreach ( $post_terms as $post_term ) {
+                    $term_values[] = sanitize_title( $post_term->name );
+                }
+            }
+            if ( ! in_array( 'booking-made', $term_values, true ) || ! in_array( 'cancelled', $term_values, true ) ) {
+                continue;
+            }
+            $stats['eligible']++;
+
+            if ( has_term( 'refunded-by-partner', 'booking_status', $post_id ) ) {
+                $stats['already']++;
+            } elseif ( function_exists( 'bokun_assign_tag_to_post' ) ) {
+                bokun_assign_tag_to_post( $post_id, 'Refunded by Partner', 'booking_status' );
+                $stats['marked']++;
+
+                if ( function_exists( 'bokun_record_booking_history' ) ) {
+                    $booking_id = get_post_meta( $post_id, '_confirmation_code', true );
+                    bokun_record_booking_history( $post_id, $booking_id, 'refunded-partner', true );
+                }
+            }
+
+            // Re-sync so the analytics row reflects the refund immediately.
+            bokun_analytics_sync_booking( $post_id );
+        }
+    }
+
+    // A short batch (fewer than requested) means no rows remain after it.
+    $stats['done'] = ( $returned < $batch_size );
+
+    return $stats;
+}
+
+/**
+ * AJAX: run one batch of the cancelled-made -> refunded-by-partner backfill. The
+ * admin screen calls this repeatedly, advancing `after_id` until `done` is true.
+ *
+ * @return void
+ */
+function bokun_analytics_ajax_mark_refunded() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'You do not have permission to do this.', 'BOKUN_text_domain' ) ), 403 );
+    }
+
+    check_ajax_referer( 'bokun_analytics_mark_refunded', 'nonce' );
+
+    $after_id = isset( $_POST['after_id'] ) ? max( 0, (int) $_POST['after_id'] ) : 0;
+    $stats    = bokun_analytics_mark_cancelled_made_refunded( $after_id );
+
+    wp_send_json_success(
+        array(
+            'stats'      => $stats,
+            'last_id'    => (int) $stats['last_id'],
+            'done'       => (bool) $stats['done'],
+            'next_after' => $stats['done'] ? 0 : (int) $stats['last_id'],
+            'row_count'  => bokun_analytics_get_row_count(),
+        )
+    );
+}
+add_action( 'wp_ajax_bokun_mark_refunded_cancelled', 'bokun_analytics_ajax_mark_refunded' );
