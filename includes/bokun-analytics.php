@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Schema version for the analytics source table. Bump when columns change so
  * installed sites re-run dbDelta on the next admin request.
  */
-define( 'BOKUN_ANALYTICS_DB_VERSION', '1.2.0' );
+define( 'BOKUN_ANALYTICS_DB_VERSION', '1.3.0' );
 
 /** Option key tracking the installed analytics schema version. */
 define( 'BOKUN_ANALYTICS_DB_VERSION_OPTION', 'bokun_analytics_db_version' );
@@ -101,6 +101,7 @@ function bokun_analytics_install_table() {
         product_id VARCHAR(191) NULL,
         partner_page_id VARCHAR(191) NULL,
         result VARCHAR(50) NULL,
+        partner_refunded TINYINT(1) NOT NULL DEFAULT 0,
         payment_method VARCHAR(100) NULL,
         product_title VARCHAR(255) NULL,
         product_option VARCHAR(255) NULL,
@@ -145,13 +146,28 @@ function bokun_analytics_maybe_upgrade() {
         return;
     }
 
+    bokun_analytics_ensure_schema();
+}
+add_action( 'admin_init', 'bokun_analytics_maybe_upgrade', 5 );
+
+/**
+ * Ensure the analytics table matches the current schema version, regardless of
+ * context. Gated by the stored version option, so it runs dbDelta only once per
+ * version change and then no-ops. Unlike {@see bokun_analytics_maybe_upgrade()}
+ * this is not admin-only: any write path (the status-change AJAX handler,
+ * scheduled imports) must call it first, because those can run before any
+ * admin request has upgraded the table and would otherwise write to a column
+ * that does not exist yet.
+ *
+ * @return void
+ */
+function bokun_analytics_ensure_schema() {
     if ( get_option( BOKUN_ANALYTICS_DB_VERSION_OPTION ) === BOKUN_ANALYTICS_DB_VERSION ) {
         return;
     }
 
     bokun_analytics_install_table();
 }
-add_action( 'admin_init', 'bokun_analytics_maybe_upgrade', 5 );
 
 /**
  * Normalize a raw meta value to a trimmed string, treating the plugin's "N/A"
@@ -450,6 +466,7 @@ function bokun_analytics_build_row( $post_id ) {
         'product_id'                => $product_id,
         'partner_page_id'           => ( '' !== $partner_page_id ) ? $partner_page_id : null,
         'result'                    => bokun_analytics_get_result( $post_id ),
+        'partner_refunded'          => has_term( 'refunded-by-partner', 'booking_status', $post_id ) ? 1 : 0,
         'payment_method'            => bokun_analytics_get_payment_method( $post_id ),
         'product_title'             => bokun_analytics_meta( $post_id, array( '_product_title', 'productBookings_0_product_title' ) ),
         'product_option'            => bokun_analytics_meta( $post_id, array( 'productBookings_0_fields_rateTitle', 'productBookings_0_rateTitle' ) ),
@@ -501,6 +518,12 @@ function bokun_analytics_is_within_window( $created_datetime ) {
  */
 function bokun_analytics_sync_booking( $post_id ) {
     global $wpdb;
+
+    // A write can arrive before any admin request upgraded the table (the
+    // status-change AJAX handler and scheduled imports both run outside admin),
+    // so make sure the schema is current before replacing the row — otherwise
+    // the new columns would be silently dropped on an un-upgraded install.
+    bokun_analytics_ensure_schema();
 
     $row = bokun_analytics_build_row( $post_id );
 

@@ -3287,7 +3287,7 @@ function update_booking_status() {
         wp_die();
     }
 
-    $allowed_types = ['full', 'partial', 'not-available', 'refund-partner', 'amex', 'paypal', 'other'];
+    $allowed_types = ['full', 'partial', 'not-available', 'refund-partner', 'refunded-partner', 'amex', 'paypal', 'other'];
 
     if (!in_array($type, $allowed_types, true)) {
         wp_send_json_error(['message' => 'Invalid booking status type provided.']);
@@ -3306,14 +3306,16 @@ function update_booking_status() {
         ],
     ];
 
-    $query   = new WP_Query($args);
-    $updated = false;
+    $query    = new WP_Query($args);
+    $updated  = false;
+    $rejected = false;
 
     if ($query->have_posts()) {
         while ($query->have_posts()) {
             $query->the_post();
             $post_id  = get_the_ID();
             $taxonomy = 'booking_status';
+            $applied  = true;
 
             switch ($type) {
                 case 'not-available':
@@ -3324,10 +3326,40 @@ function update_booking_status() {
                     }
                     break;
                 case 'refund-partner':
+                case 'refunded-partner':
+                    $refund_term = ($type === 'refund-partner')
+                        ? 'Refund Requested from Partner'
+                        : 'Refunded by Partner';
                     if ($checked) {
-                        bokun_assign_tag_to_post($post_id, 'Refund Requested from Partner', $taxonomy);
+                        // Both refund states only apply to a booking that is
+                        // currently "Booking made" and "Cancelled". Enforce that
+                        // here so a stale or disabled control can't persist a
+                        // refund term (or history) on a booking that no longer
+                        // qualifies — which would keep the row mis-stated while
+                        // its control is hidden after reload. Mirror the
+                        // dashboard's eligibility test exactly: it keys on
+                        // sanitize_title( term name ), not the raw slug.
+                        $current_terms  = get_the_terms($post_id, $taxonomy);
+                        $current_values = [];
+                        if ($current_terms && !is_wp_error($current_terms)) {
+                            foreach ($current_terms as $current_term) {
+                                $current_values[] = sanitize_title($current_term->name);
+                            }
+                        }
+                        if (in_array('booking-made', $current_values, true)
+                            && in_array('cancelled', $current_values, true)
+                        ) {
+                            bokun_assign_tag_to_post($post_id, $refund_term, $taxonomy);
+                        } else {
+                            // Ineligible: don't assign, and don't record history,
+                            // sync, or report success for a change that did not
+                            // happen — otherwise the UI shows "Saved" and leaves
+                            // the box checked while nothing persisted.
+                            $applied  = false;
+                            $rejected = true;
+                        }
                     } else {
-                        bokun_remove_tag_from_post($post_id, 'Refund Requested from Partner', $taxonomy);
+                        bokun_remove_tag_from_post($post_id, $refund_term, $taxonomy);
                     }
                     break;
                 case 'amex':
@@ -3359,9 +3391,31 @@ function update_booking_status() {
                         if (!in_array('Full', $remaining_terms) && !in_array('Partial', $remaining_terms)) {
                             bokun_assign_tag_to_post($post_id, 'Booking Not Made', $taxonomy);
                             bokun_remove_tag_from_post($post_id, 'Booking Made', $taxonomy);
+                            // The booking is no longer a "Booking made" reservation,
+                            // so any partner-refund state no longer applies. Clear
+                            // both refund terms, otherwise a residual
+                            // "Refunded by Partner" would keep the line excluded
+                            // from net revenue while its toggle is hidden (the
+                            // refund toggles only show for booking-made + cancelled).
+                            // Record an Unchecked history entry for each term that
+                            // was actually present, so the audit trail doesn't keep
+                            // a dangling "Checked" refund event with no matching
+                            // "Unchecked".
+                            if (has_term('refunded-by-partner', $taxonomy, $post_id)) {
+                                bokun_remove_tag_from_post($post_id, 'Refunded by Partner', $taxonomy);
+                                bokun_record_booking_history($post_id, $booking_id, 'refunded-partner', false);
+                            }
+                            if (has_term('refund-requested-from-partner', $taxonomy, $post_id)) {
+                                bokun_remove_tag_from_post($post_id, 'Refund Requested from Partner', $taxonomy);
+                                bokun_record_booking_history($post_id, $booking_id, 'refund-partner', false);
+                            }
                         }
                     }
                     break;
+            }
+
+            if (!$applied) {
+                continue;
             }
 
             bokun_record_booking_history($post_id, $booking_id, $type, $checked);
@@ -3379,6 +3433,8 @@ function update_booking_status() {
 
     if ($updated) {
         wp_send_json_success(['message' => 'Booking status updated']);
+    } elseif ($rejected) {
+        wp_send_json_error(['message' => 'Mark the booking as Booking made and Cancelled before marking it refunded by the partner.']);
     } else {
         wp_send_json_error(['message' => 'Booking ID not found.']);
     }
@@ -3860,6 +3916,7 @@ function bokun_get_booking_checkbox_data() {
             'full'              => has_term('full', 'booking_status', $post->ID) ? 'checked' : '',
             'partial'           => has_term('partial', 'booking_status', $post->ID) ? 'checked' : '',
             'refund-partner'    => has_term('refund-requested-from-partner', 'booking_status', $post->ID) ? 'checked' : '',
+            'refunded-partner'  => has_term('refunded-by-partner', 'booking_status', $post->ID) ? 'checked' : '',
             'not-available'     => has_term('not-available', 'booking_status', $post->ID) ? 'checked' : '',
         ),
     );

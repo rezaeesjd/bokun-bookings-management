@@ -922,6 +922,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     'partial'        => has_term('partial', 'booking_status', $post_id),
                     'not-available'  => has_term('not-available', 'booking_status', $post_id),
                     'refund-partner' => has_term('refund-requested-from-partner', 'booking_status', $post_id),
+                    'refunded-partner' => has_term('refunded-by-partner', 'booking_status', $post_id),
                     'amex'           => has_term('amex', 'booking_status', $post_id),
                     'paypal'         => has_term('paypal', 'booking_status', $post_id),
                     'other'          => has_term('other-payment', 'booking_status', $post_id),
@@ -1148,6 +1149,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                     <div class="bokun-booking-dashboard__toggle">
                                         <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refund-partner" aria-label="<?php esc_attr_e('Refund requested', 'BOKUN_txt_domain'); ?>" <?php echo checked($checkbox_states['refund-partner'], true, false); ?> />
                                         <span><?php esc_html_e('Refund requested', 'BOKUN_txt_domain'); ?></span>
+                                    </div>
+                                    <div class="bokun-booking-dashboard__toggle">
+                                        <input type="checkbox" class="booking-checkbox" data-booking-id="<?php echo esc_attr($booking_code); ?>" data-type="refunded-partner" aria-label="<?php esc_attr_e('Cancelled and refunded by Partner', 'BOKUN_txt_domain'); ?>" <?php echo checked($checkbox_states['refunded-partner'], true, false); ?> />
+                                        <span><?php esc_html_e('Cancelled and refunded by Partner', 'BOKUN_txt_domain'); ?></span>
                                     </div>
                                 <?php endif; ?>
                             </div>
@@ -3284,6 +3289,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 var started = false;
                 var revCur = '';
                 var revMulti = false;
+                // Net revenue is scoped to its own primary currency, chosen only
+                // from rows that actually have a net-revenue value. Partner-refunded
+                // rows are null and must not steer this choice, or a set of refunded
+                // rows in one currency could hide a real net-revenue result in another.
+                var netRevCur = '';
+                var netRevMulti = false;
 
                 function num( v ) { var n = parseFloat( v ); return isNaN( n ) ? 0 : n; }
                 function parts( r ) { return num( r.adult_participants ) + num( r.child_participants ) + num( r.infant_participants ); }
@@ -3316,10 +3327,20 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     // when it already carries a value.
                     if ( isEmpty( r.departure_city ) && p.departure_city ) { r.departure_city = p.departure_city; }
                     var pax = parts( r );
-                    r._net_cost = ( r.net_price !== null ) ? ( r.net_price * pax ) : null;
+                    // "Cancelled and refunded by Partner": the client cancelled a
+                    // booking we had reserved (and paid the partner for), but the
+                    // partner refunded that cost — so the line has no profit and no
+                    // loss. Treat the partner cost as recovered (0) and leave net
+                    // revenue null (neutral) instead of the negative it would be
+                    // while we were still out the partner payment.
+                    var partnerRefunded = ( r.partner_refunded === 1 || r.partner_refunded === '1' || r.partner_refunded === true );
+                    r._refunded = partnerRefunded;
+                    r._net_cost = partnerRefunded ? 0 : ( ( r.net_price !== null ) ? ( r.net_price * pax ) : null );
                     // A numeric zero gross (complimentary/fully-discounted) is a
                     // real value, so test presence, not truthiness.
-                    r._net_revenue = ( hasNum( r.price_amount ) && r.net_price !== null ) ? ( num( r.price_amount ) - r.net_price * pax ) : null;
+                    r._net_revenue = partnerRefunded
+                        ? null
+                        : ( ( hasNum( r.price_amount ) && r.net_price !== null ) ? ( num( r.price_amount ) - r.net_price * pax ) : null );
                 } );
 
                 function primaryCurrency( data ) {
@@ -3331,13 +3352,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 function metricVal( r ) {
                     if ( metric === 'participants' ) { return parts( r ); }
                     if ( metric === 'revenue' ) { return ( esc( r.currency ) === revCur ) ? num( r.price_amount ) : 0; }
-                    if ( metric === 'netrev' ) { return ( esc( r.currency ) === revCur && r._net_revenue !== null ) ? r._net_revenue : 0; }
+                    if ( metric === 'netrev' ) { return ( esc( r.currency ) === netRevCur && r._net_revenue !== null ) ? r._net_revenue : 0; }
                     return 1;
                 }
                 function metricLabel() { return metric === 'participants' ? L.participants : ( metric === 'revenue' ? L.revenue : ( metric === 'netrev' ? L.netrev : L.bookings ) ); }
                 function isMoney() { return metric === 'revenue' || metric === 'netrev'; }
                 function fmtMetric( n ) { return isMoney() ? fmtMoney( n ) : fmtInt( n ); }
-                function metricLabelFull() { var lbl = metricLabel(); if ( isMoney() && revCur ) { lbl += ' (' + revCur + ( revMulti ? ', ' + L.mixedCur : '' ) + ')'; } return lbl; }
+                function metricLabelFull() { var lbl = metricLabel(); if ( isMoney() ) { var cur = ( metric === 'netrev' ) ? netRevCur : revCur; var multi = ( metric === 'netrev' ) ? netRevMulti : revMulti; if ( cur ) { lbl += ' (' + cur + ( multi ? ', ' + L.mixedCur : '' ) + ')'; } } return lbl; }
 
                 // ---- facet filter state (multi-select) ----
                 var facetSel = {}; FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = {}; } );
@@ -3405,7 +3426,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         var k = keyFn( r ); if ( k === '' || k === null || k === undefined ) { k = '—'; }
                         if ( ! g[ k ] ) { g[ k ] = { label: String( k ), count: 0, parts: 0, amount: 0, netrev: 0, netrevN: 0, metric: 0 }; }
                         g[ k ].count++; g[ k ].parts += parts( r ); g[ k ].amount += num( r.price_amount );
-                        if ( r._net_revenue !== null && esc( r.currency ) === revCur ) { g[ k ].netrev += r._net_revenue; g[ k ].netrevN++; }
+                        if ( r._net_revenue !== null && esc( r.currency ) === netRevCur ) { g[ k ].netrev += r._net_revenue; g[ k ].netrevN++; }
                         g[ k ].metric += metricVal( r );
                     } );
                     return Object.keys( g ).map( function ( k ) { return g[ k ]; } );
@@ -3439,7 +3460,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     root.querySelector( el ).innerHTML = barList( top, max, null, null );
                 }
 
-                function sumNetRev( data ) { var s = 0, any = false; data.forEach( function ( r ) { if ( r._net_revenue !== null && esc( r.currency ) === revCur ) { s += r._net_revenue; any = true; } } ); return any ? s : null; }
+                function sumNetRev( data ) { var s = 0, any = false; data.forEach( function ( r ) { if ( r._net_revenue !== null && esc( r.currency ) === netRevCur ) { s += r._net_revenue; any = true; } } ); return any ? s : null; }
 
                 function renderInsights( data ) {
                     var pc = primaryCurrency( data );
@@ -3455,9 +3476,14 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     if ( chans.length ) { cards.push( { label: L.topChannel, value: chans[ 0 ].label, sub: fmtMetric( chans[ 0 ].metric ) + ' ' + metricLabel().toLowerCase() } ); }
                     var netrev = sumNetRev( data );
                     if ( netrev !== null ) {
-                        var grossPrim = data.reduce( function ( s, r ) { return ( esc( r.currency ) === pc.cur ) ? s + num( r.price_amount ) : s; }, 0 );
-                        var margin = grossPrim ? Math.round( ( netrev / grossPrim ) * 100 ) : 0;
-                        cards.push( { label: L.netrev, value: fmtMoney( netrev ) + ( pc.cur ? ' ' + pc.cur : '' ), sub: L.margin + ' ' + margin + '%' + ( pc.multi ? ' · ' + L.mixedCur : '' ) } );
+                        // Margin numerator and denominator must share one currency:
+                        // net revenue is summed in netRevCur, so the gross here is
+                        // the gross of non-refunded rows in that same currency.
+                        // Refunded rows are excluded (their net revenue is null, so
+                        // counting their gross would understate the margin).
+                        var grossNet = data.reduce( function ( s, r ) { return ( esc( r.currency ) === netRevCur && ! r._refunded ) ? s + num( r.price_amount ) : s; }, 0 );
+                        var margin = grossNet ? Math.round( ( netrev / grossNet ) * 100 ) : 0;
+                        cards.push( { label: L.netrev, value: fmtMoney( netrev ) + ( netRevCur ? ' ' + netRevCur : '' ), sub: L.margin + ' ' + margin + '%' + ( netRevMulti ? ' · ' + L.mixedCur : '' ) } );
                     }
                     var revRows = data.filter( function ( r ) { return esc( r.currency ) === pc.cur && num( r.price_amount ); } );
                     var totalRev = revRows.reduce( function ( s, r ) { return s + num( r.price_amount ); }, 0 );
@@ -3477,7 +3503,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         { label: L.bookings, value: fmtInt( count ) },
                         { label: L.participants, value: fmtInt( a + c + i ), sub: 'A ' + fmtInt( a ) + ' · C ' + fmtInt( c ) + ' · I ' + fmtInt( i ) },
                         { label: L.revenue, value: money.length ? money[ 0 ] : '—', sub: money.length > 1 ? money.slice( 1 ).join( ' · ' ) : '' },
-                        { label: L.netrev, value: netrev !== null ? ( fmtMoney( netrev ) + ( revCur ? ' ' + revCur : '' ) ) : '—' },
+                        { label: L.netrev, value: netrev !== null ? ( fmtMoney( netrev ) + ( netRevCur ? ' ' + netRevCur : '' ) ) : '—' },
                         { label: L.avgLead, value: avgLead( data ) !== null ? ( fmtInt( avgLead( data ) ) + ' ' + L.days ) : '—' }
                     ];
                     root.querySelector( '[data-kpis]' ).innerHTML = tiles.map( function ( t ) { return '<div class="bokun-andash__kpi"><div class="bokun-andash__kpi-label">' + escHtml( t.label ) + '</div><div class="bokun-andash__kpi-value">' + escHtml( t.value ) + '</div>' + ( t.sub ? '<div class="bokun-andash__kpi-sub">' + escHtml( t.sub ) + '</div>' : '' ) + '</div>'; } ).join( '' );
@@ -3595,6 +3621,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var f = currentFilters();
                     lastFiltered = ROWS.filter( function ( r ) { return matches( r, f ); } );
                     var pc = primaryCurrency( lastFiltered ); revCur = pc.cur; revMulti = pc.multi;
+                    var npc = primaryCurrency( lastFiltered.filter( function ( r ) { return r._net_revenue !== null; } ) ); netRevCur = npc.cur; netRevMulti = npc.multi;
                     renderMetricTitles();
                     renderInsights( lastFiltered );
                     renderKpis( lastFiltered );
