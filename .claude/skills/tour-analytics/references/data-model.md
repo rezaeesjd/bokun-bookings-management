@@ -76,9 +76,13 @@ Computed per row after joining the partners map by `partner_page_id`
   present). Currency-scoped to `revCur` in all aggregates.
 - **Partner-refunded cancellations.** When `partner_refunded` is set, the
   client cancelled a reserved booking but the partner refunded the cost, so the
-  line has no profit or loss: `_net_cost` is forced to `0` and `_net_revenue`
-  to `null` (neutral — it contributes nothing to the net-revenue total instead
-  of the negative it would otherwise be while the partner payment was unrecovered).
+  line has no profit or loss: `_net_cost` is forced to `0`, `_net_revenue` to
+  `null` (neutral — it contributes nothing to the net-revenue total instead of
+  the negative it would otherwise be while the partner payment was unrecovered),
+  and `_refunded` is set true. Refunded rows are excluded from **both** sides of
+  the net-revenue margin in `renderInsights()` — `sumNetRev()` drops them via the
+  null `_net_revenue`, and the `grossPrim` denominator skips `_refunded` rows —
+  so a neutral refund never understates the margin.
 
 ## Taxonomies
 

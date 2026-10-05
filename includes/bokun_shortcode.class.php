@@ -3328,6 +3328,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     // revenue null (neutral) instead of the negative it would be
                     // while we were still out the partner payment.
                     var partnerRefunded = ( r.partner_refunded === 1 || r.partner_refunded === '1' || r.partner_refunded === true );
+                    r._refunded = partnerRefunded;
                     r._net_cost = partnerRefunded ? 0 : ( ( r.net_price !== null ) ? ( r.net_price * pax ) : null );
                     // A numeric zero gross (complimentary/fully-discounted) is a
                     // real value, so test presence, not truthiness.
@@ -3469,7 +3470,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     if ( chans.length ) { cards.push( { label: L.topChannel, value: chans[ 0 ].label, sub: fmtMetric( chans[ 0 ].metric ) + ' ' + metricLabel().toLowerCase() } ); }
                     var netrev = sumNetRev( data );
                     if ( netrev !== null ) {
-                        var grossPrim = data.reduce( function ( s, r ) { return ( esc( r.currency ) === pc.cur ) ? s + num( r.price_amount ) : s; }, 0 );
+                        // Exclude partner-refunded rows from the margin denominator
+                        // too: their net revenue is null (dropped from the numerator),
+                        // so counting their gross here would understate the margin.
+                        var grossPrim = data.reduce( function ( s, r ) { return ( esc( r.currency ) === pc.cur && ! r._refunded ) ? s + num( r.price_amount ) : s; }, 0 );
                         var margin = grossPrim ? Math.round( ( netrev / grossPrim ) * 100 ) : 0;
                         cards.push( { label: L.netrev, value: fmtMoney( netrev ) + ( pc.cur ? ' ' + pc.cur : '' ), sub: L.margin + ' ' + margin + '%' + ( pc.multi ? ' · ' + L.mixedCur : '' ) } );
                     }

@@ -3332,7 +3332,25 @@ function update_booking_status() {
                     break;
                 case 'refunded-partner':
                     if ($checked) {
-                        bokun_assign_tag_to_post($post_id, 'Refunded by Partner', $taxonomy);
+                        // A completed partner refund only applies to a booking that
+                        // is both "Booking made" and "Cancelled". Enforce that here
+                        // so a stale (still-rendered) control can't recreate the
+                        // term on a booking that no longer qualifies — which would
+                        // keep the row out of net revenue behind a hidden toggle.
+                        // Mirror the dashboard's eligibility test exactly: it keys
+                        // on sanitize_title( term name ), not the raw slug.
+                        $current_terms  = get_the_terms($post_id, $taxonomy);
+                        $current_values = [];
+                        if ($current_terms && !is_wp_error($current_terms)) {
+                            foreach ($current_terms as $current_term) {
+                                $current_values[] = sanitize_title($current_term->name);
+                            }
+                        }
+                        if (in_array('booking-made', $current_values, true)
+                            && in_array('cancelled', $current_values, true)
+                        ) {
+                            bokun_assign_tag_to_post($post_id, 'Refunded by Partner', $taxonomy);
+                        }
                     } else {
                         bokun_remove_tag_from_post($post_id, 'Refunded by Partner', $taxonomy);
                     }
