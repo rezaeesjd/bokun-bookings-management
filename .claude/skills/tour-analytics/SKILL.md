@@ -202,6 +202,20 @@ These came out of code review on earlier PRs. Keep them true:
 - **Travel GMT.** Derive travel datetime from the raw `_original_start_datetime`
   meta via `bokun_analytics_raw_to_gmt()`, not `post_date_gmt`, which is
   double-shifted on non-UTC sites.
+- **Status comes from the whole payload, not just the product booking.** A
+  Viator/OTA refund or cancellation is often recorded at the booking or payment
+  level (e.g. a `paymentStatus` of REFUNDED) while `productBookings[0].status`
+  stays CONFIRMED — so reading only the product status leaves a refunded
+  booking showing as confirmed and still counted in revenue. The import scans
+  every `*status*` key in the payload (`bokun_scan_booking_terminal_status()`)
+  for a terminal channel state — cancelled / refunded / aborted / rejected /
+  declined / expired / voided / chargeback — and stores the result as
+  `_booking_effective_status`, which `pb_status` and
+  `bokun_analytics_is_cancelled()` then prefer. That detection keys on the
+  **channel** status only, never on a "refund" taxonomy term, so the operator's
+  own `refunded-by-partner` tag (a partner-side cost recovery) is never misread
+  as a customer refund. `_booking_effective_status` is populated on the next
+  fetch, so a re-fetch is what makes an already-refunded booking drop out.
 - **Import existing-post lookup must span all statuses.** The import
   (`bokun_save_bookings_as_posts`) matches an incoming booking to its existing
   post by `_confirmation_code`. That lookup uses `post_status => 'any'`: a
