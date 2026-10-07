@@ -462,11 +462,12 @@ function bokun_analytics_is_cancelled( $post_id ) {
         return true;
     }
 
-    // A user-applied "Refunded" marker (slug exactly 'refunded') means the sales
-    // channel refunded the customer — the booking earned nothing, so exclude it
-    // like a cancellation. The exact slug avoids matching the partner-side
-    // 'refunded-by-partner' tag.
-    if ( has_term( 'refunded', 'booking_status', $post_id ) ) {
+    // A user-applied channel-refund marker (the dedicated `_user_channel_refunded`
+    // meta flag, set only by the admin control) means the sales channel refunded
+    // the customer — the booking earned nothing, so exclude it like a
+    // cancellation. Keying on the flag (not a shared "Refunded" term) keeps a
+    // Bokun-generated term from being mistaken for a manual override.
+    if ( get_post_meta( $post_id, '_user_channel_refunded', true ) ) {
         return true;
     }
 
@@ -672,7 +673,7 @@ function bokun_analytics_build_row( $post_id ) {
         'child_participants'        => $participants['child'],
         'infant_participants'       => $participants['infant'],
         'language'                  => bokun_analytics_meta( $post_id, array( 'language' ) ),
-        'pb_status'                 => has_term( 'refunded', 'booking_status', $post_id ) ? 'REFUNDED' : bokun_analytics_meta( $post_id, array( '_booking_effective_status', 'productBookings_0_status', '_booking_status_origin' ) ),
+        'pb_status'                 => get_post_meta( $post_id, '_user_channel_refunded', true ) ? 'REFUNDED' : bokun_analytics_meta( $post_id, array( '_booking_effective_status', 'productBookings_0_status', '_booking_status_origin' ) ),
         'price_note'                => $price_note,
         'price_amount'              => bokun_analytics_parse_amount( $price_note ),
         'product_confirmation_code' => bokun_analytics_meta( $post_id, array( 'productBookings_0_productConfirmationCode' ) ),
@@ -1318,15 +1319,26 @@ function bokun_analytics_ajax_set_channel_refund() {
     foreach ( $posts as $pid ) {
         $pid = (int) $pid;
         if ( $refunded ) {
+            // The meta flag is the authoritative "user marked this refunded"
+            // signal the import keys on; the term is for display/filtering.
+            update_post_meta( $pid, '_user_channel_refunded', 1 );
             bokun_assign_tag_to_post( $pid, 'Refunded', 'booking_status' );
             update_post_meta( $pid, '_booking_effective_status', 'REFUNDED' );
             // Keep the status unambiguous: only "Refunded", not also CONFIRMED/CANCELLED.
             bokun_remove_tag_from_post( $pid, 'CONFIRMED', 'booking_status' );
             bokun_remove_tag_from_post( $pid, 'CANCELLED', 'booking_status' );
         } else {
+            delete_post_meta( $pid, '_user_channel_refunded' );
             bokun_remove_tag_from_post( $pid, 'Refunded', 'booking_status' );
-            // Revert the effective status to whatever Bokun last reported.
-            update_post_meta( $pid, '_booking_effective_status', (string) get_post_meta( $pid, 'productBookings_0_status', true ) );
+            // Revert to whatever Bokun last reported, and restore that status as a
+            // term too — the bookings dashboard builds its status labels, filters
+            // and tabs from booking_status terms, so it must not be left blank
+            // until the next import re-assigns it.
+            $restored = (string) get_post_meta( $pid, 'productBookings_0_status', true );
+            update_post_meta( $pid, '_booking_effective_status', $restored );
+            if ( '' !== $restored ) {
+                bokun_assign_tag_to_post( $pid, $restored, 'booking_status' );
+            }
         }
 
         bokun_analytics_sync_booking( $pid );
@@ -1337,7 +1349,7 @@ function bokun_analytics_ajax_set_channel_refund() {
         array(
             'message'   => $refunded ? __( 'Marked as refunded and excluded from revenue.', 'BOKUN_text_domain' ) : __( 'Refund marker removed.', 'BOKUN_text_domain' ),
             'posts'     => array_map( 'intval', $posts ),
-            'pb_status' => has_term( 'refunded', 'booking_status', $first ) ? 'REFUNDED' : (string) get_post_meta( $first, '_booking_effective_status', true ),
+            'pb_status' => get_post_meta( $first, '_user_channel_refunded', true ) ? 'REFUNDED' : (string) get_post_meta( $first, '_booking_effective_status', true ),
             'row_count' => bokun_analytics_get_row_count(),
         )
     );

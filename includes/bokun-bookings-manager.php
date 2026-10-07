@@ -1264,13 +1264,18 @@ function bokun_save_specific_fields($post_id, $booking, $context = 'default') {
     // revenue, and is assigned as the booking_status term for visibility.
     // A user can mark a booking "Refunded" when the sales channel (e.g. Viator)
     // refunded the customer but Bokun does not report it — Bokun keeps sending
-    // CONFIRMED. That manual "Refunded" marker is authoritative and must survive
-    // imports: keep it REFUNDED, do NOT re-add the Bokun status on top, and drop
-    // any stale CONFIRMED/CANCELLED term so the booking reads only "Refunded".
-    // The slug 'refunded' is distinct from the partner-side 'refunded-by-partner'
-    // tag, so the two are never confused.
-    if ( has_term( 'refunded', 'booking_status', $post_id ) ) {
+    // CONFIRMED. That manual marker is authoritative and must survive imports:
+    // keep it REFUNDED, do NOT re-add the Bokun status on top, and drop any
+    // stale CONFIRMED/CANCELLED term so the booking reads only "Refunded".
+    //
+    // The override is identified by the dedicated `_user_channel_refunded` meta
+    // flag — set only by the admin control — NOT by the presence of a "Refunded"
+    // term. A term alone is ambiguous: if Bokun itself ever reported REFUNDED the
+    // normal path below would create the same term, and keying on it would then
+    // pin the booking as refunded forever even after Bokun reverted to CONFIRMED.
+    if ( get_post_meta( $post_id, '_user_channel_refunded', true ) ) {
         update_post_meta( $post_id, '_booking_effective_status', 'REFUNDED' );
+        bokun_assign_tag_to_post( $post_id, 'Refunded', 'booking_status' );
         bokun_remove_tag_from_post( $post_id, 'CONFIRMED', 'booking_status' );
         bokun_remove_tag_from_post( $post_id, 'CANCELLED', 'booking_status' );
     } else {
