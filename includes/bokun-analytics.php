@@ -1091,3 +1091,170 @@ function bokun_analytics_ajax_mark_refunded() {
     );
 }
 add_action( 'wp_ajax_bokun_mark_refunded_cancelled', 'bokun_analytics_ajax_mark_refunded' );
+
+/**
+ * Recursively collect every scalar whose key path mentions status / refund /
+ * cancel / payment / state, so a diagnostic can show where a channel records a
+ * refund without hard-coding a field name.
+ *
+ * @param mixed  $data   Array/object (or scalar) to walk.
+ * @param string $prefix Dotted key path so far.
+ * @param array  $out    Accumulator of path => value.
+ * @return void
+ */
+function bokun_analytics_collect_statusish( $data, $prefix, &$out ) {
+    if ( is_object( $data ) ) {
+        $data = (array) $data;
+    }
+    if ( ! is_array( $data ) ) {
+        return;
+    }
+
+    foreach ( $data as $key => $value ) {
+        $path = ( '' === $prefix ) ? (string) $key : $prefix . '.' . $key;
+        if ( is_array( $value ) || is_object( $value ) ) {
+            bokun_analytics_collect_statusish( $value, $path, $out );
+        } elseif ( preg_match( '/status|refund|cancel|payment|state/i', (string) $key ) ) {
+            $out[ $path ] = is_scalar( $value ) ? (string) $value : wp_json_encode( $value );
+        }
+    }
+}
+
+/**
+ * AJAX: inspect one booking by confirmation code. Read-only diagnostic for the
+ * Analytics Data screen — it never writes. Reports what the plugin has stored
+ * for the booking (post, status meta, taxonomy terms, computed exclusion,
+ * analytics row) and, optionally, what Bokun's live booking-search currently
+ * returns for it and under which field — so we can see whether a refund is
+ * reaching the plugin and where its status lives.
+ *
+ * @return void
+ */
+function bokun_analytics_ajax_inspect_booking() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'You do not have permission to do this.', 'BOKUN_text_domain' ) ), 403 );
+    }
+
+    check_ajax_referer( 'bokun_analytics_inspect', 'nonce' );
+
+    $code = isset( $_POST['code'] ) ? sanitize_text_field( wp_unslash( $_POST['code'] ) ) : '';
+    $live = ! empty( $_POST['live'] );
+
+    if ( '' === $code ) {
+        wp_send_json_error( array( 'message' => __( 'Enter a confirmation code.', 'BOKUN_text_domain' ) ) );
+    }
+
+    $lines = array();
+    $lines[] = 'Confirmation code: ' . $code;
+
+    // ---- Stored posts ----
+    $posts = get_posts(
+        array(
+            'post_type'   => 'bokun_booking',
+            'post_status' => 'any',
+            'meta_query'  => array( array( 'key' => '_confirmation_code', 'value' => $code, 'compare' => '=' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+            'fields'      => 'ids',
+            'numberposts' => -1,
+        )
+    );
+
+    if ( empty( $posts ) ) {
+        $lines[] = '';
+        $lines[] = 'STORED: no bokun_booking post found with this confirmation code.';
+    } else {
+        $lines[] = '';
+        $lines[] = 'STORED: ' . count( $posts ) . ' post(s): ' . implode( ', ', array_map( 'intval', $posts ) );
+        global $wpdb;
+        $table = bokun_analytics_get_table_name();
+
+        foreach ( $posts as $pid ) {
+            $pid   = (int) $pid;
+            $lines[] = '';
+            $lines[] = '  Post #' . $pid . '  status=' . get_post_status( $pid ) . '  modified=' . get_post_modified_time( 'Y-m-d H:i:s', true, $pid );
+
+            $terms = wp_get_object_terms( $pid, 'booking_status', array( 'fields' => 'names' ) );
+            $lines[] = '    booking_status terms: ' . ( is_wp_error( $terms ) || empty( $terms ) ? '(none)' : implode( ' | ', $terms ) );
+            $lines[] = '    _booking_effective_status: ' . (string) get_post_meta( $pid, '_booking_effective_status', true );
+            $lines[] = '    _booking_status_origin:    ' . (string) get_post_meta( $pid, '_booking_status_origin', true );
+            $lines[] = '    productBookings_0_status:  ' . (string) get_post_meta( $pid, 'productBookings_0_status', true );
+            $lines[] = '    is_cancelled (computed):   ' . ( bokun_analytics_is_cancelled( $pid ) ? 'YES' : 'no' );
+
+            // Every stored meta key that mentions status/refund/cancel/payment/state.
+            $all_meta = get_post_meta( $pid );
+            $hits     = array();
+            foreach ( $all_meta as $mkey => $mvals ) {
+                if ( preg_match( '/status|refund|cancel|payment|state/i', (string) $mkey ) ) {
+                    $hits[ (string) $mkey ] = is_array( $mvals ) ? (string) reset( $mvals ) : (string) $mvals;
+                }
+            }
+            if ( $hits ) {
+                $lines[] = '    status-related meta:';
+                foreach ( $hits as $mk => $mv ) {
+                    $lines[] = '      ' . $mk . ' = ' . $mv;
+                }
+            }
+
+            $row = $wpdb->get_row( $wpdb->prepare( "SELECT pb_status, is_cancelled, result, price_amount, currency FROM {$table} WHERE post_id = %d", $pid ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+            if ( $row ) {
+                $lines[] = '    analytics row: pb_status=' . $row['pb_status'] . ' is_cancelled=' . $row['is_cancelled'] . ' result=' . $row['result'] . ' amount=' . $row['price_amount'] . ' ' . $row['currency'];
+            } else {
+                $lines[] = '    analytics row: (none — not in the source table)';
+            }
+        }
+    }
+
+    // ---- Live Bokun lookup ----
+    if ( $live && function_exists( 'bokun_fetch_bookings' ) ) {
+        $lines[] = '';
+        $lines[] = 'LIVE BOKUN (current booking-search window):';
+
+        $contexts = array( 'default' );
+        if ( function_exists( 'bokun_get_configured_api_credentials' ) ) {
+            $cfg = bokun_get_configured_api_credentials();
+            if ( is_array( $cfg ) && ! empty( $cfg ) ) {
+                $contexts = array_keys( $cfg );
+            }
+        }
+
+        $found_any = false;
+        foreach ( $contexts as $ctx ) {
+            $bookings = bokun_fetch_bookings( $ctx );
+            if ( ! is_array( $bookings ) ) {
+                $lines[] = '  [' . $ctx . '] ' . ( is_string( $bookings ) ? $bookings : 'no data' );
+                continue;
+            }
+            $match = null;
+            foreach ( $bookings as $b ) {
+                if ( isset( $b['confirmationCode'] ) && (string) $b['confirmationCode'] === $code ) {
+                    $match = $b;
+                    break;
+                }
+            }
+            if ( null === $match ) {
+                $lines[] = '  [' . $ctx . '] ' . count( $bookings ) . ' bookings returned; this code NOT among them.';
+                continue;
+            }
+
+            $found_any = true;
+            $lines[] = '  [' . $ctx . '] FOUND. Top-level keys: ' . implode( ', ', array_keys( $match ) );
+            $statusish = array();
+            bokun_analytics_collect_statusish( $match, '', $statusish );
+            if ( $statusish ) {
+                $lines[] = '  status/refund/payment fields in the live payload:';
+                foreach ( $statusish as $pth => $val ) {
+                    $lines[] = '    ' . $pth . ' = ' . $val;
+                }
+            } else {
+                $lines[] = '  (no status/refund/payment-named fields in the payload)';
+            }
+        }
+
+        if ( ! $found_any ) {
+            $lines[] = '  => Bokun\'s search did not return this booking in any context. The refund cannot be';
+            $lines[] = '     imported through this search; a different lookup (e.g. by booking id) would be needed.';
+        }
+    }
+
+    wp_send_json_success( array( 'report' => implode( "\n", $lines ) ) );
+}
+add_action( 'wp_ajax_bokun_inspect_booking', 'bokun_analytics_ajax_inspect_booking' );

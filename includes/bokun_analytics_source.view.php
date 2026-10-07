@@ -27,6 +27,7 @@ $row_count     = $table_exists ? bokun_analytics_get_row_count() : 0;
 $last_built    = get_option( BOKUN_ANALYTICS_LAST_BUILT_OPTION, '' );
 $rebuild_nonce = wp_create_nonce( 'bokun_analytics_rebuild' );
 $mark_refunded_nonce = wp_create_nonce( 'bokun_analytics_mark_refunded' );
+$inspect_nonce       = wp_create_nonce( 'bokun_analytics_inspect' );
 
 // Partners products reference table.
 $pp_available   = function_exists( 'bokun_partners_products_get_row_count' );
@@ -165,6 +166,22 @@ if ( $table_exists && $row_count > 0 ) {
         <span class="spinner" id="bokun-mark-refunded-spinner" style="float:none;margin-top:0;"></span>
         <span id="bokun-mark-refunded-message" style="margin-left:8px;"></span>
     </p>
+
+    <hr style="margin:24px 0;" />
+
+    <h2><?php esc_html_e( 'Inspect a booking', 'BOKUN_text_domain' ); ?></h2>
+    <p class="description">
+        <?php esc_html_e( 'Diagnostic: enter a booking confirmation code (e.g. VIA-104741414) to see what the plugin has stored for it — its status meta, booking-status terms, whether it counts as cancelled, and its analytics row. Tick “also query Bokun” to additionally show what Bokun’s current booking-search returns for it and which field holds the status, so a wrong/refunded status can be traced to its source. Read-only; it changes nothing.', 'BOKUN_text_domain' ); ?>
+    </p>
+    <p>
+        <input type="text" id="bokun-inspect-code" class="regular-text" placeholder="<?php esc_attr_e( 'Confirmation code', 'BOKUN_text_domain' ); ?>" />
+        <label style="margin-left:8px;"><input type="checkbox" id="bokun-inspect-live" /> <?php esc_html_e( 'also query Bokun (slower)', 'BOKUN_text_domain' ); ?></label>
+    </p>
+    <p>
+        <button type="button" class="button" id="bokun-inspect-btn"><?php esc_html_e( 'Inspect booking', 'BOKUN_text_domain' ); ?></button>
+        <span class="spinner" id="bokun-inspect-spinner" style="float:none;margin-top:0;"></span>
+    </p>
+    <pre id="bokun-inspect-output" style="display:none;max-width:900px;overflow:auto;background:#1d2327;color:#f0f0f1;padding:12px;border-radius:6px;white-space:pre-wrap;"></pre>
 
     <hr style="margin:24px 0;" />
 
@@ -448,6 +465,56 @@ if ( $table_exists && $row_count > 0 ) {
         }
 
         runBatch( 0 );
+    } );
+} )();
+</script>
+
+<script type="text/javascript">
+( function () {
+    var btn     = document.getElementById( 'bokun-inspect-btn' );
+    var codeEl  = document.getElementById( 'bokun-inspect-code' );
+    var liveEl  = document.getElementById( 'bokun-inspect-live' );
+    var spinner = document.getElementById( 'bokun-inspect-spinner' );
+    var out     = document.getElementById( 'bokun-inspect-output' );
+    if ( ! btn ) { return; }
+
+    var ajaxUrl = '<?php echo esc_url_raw( admin_url( 'admin-ajax.php' ) ); ?>';
+    var nonce   = '<?php echo esc_js( $inspect_nonce ); ?>';
+
+    btn.addEventListener( 'click', function () {
+        var code = ( codeEl.value || '' ).trim();
+        if ( ! code ) { codeEl.focus(); return; }
+        btn.disabled = true;
+        spinner.classList.add( 'is-active' );
+        out.style.display = 'block';
+        out.textContent = '<?php echo esc_js( __( 'Inspecting…', 'BOKUN_text_domain' ) ); ?>';
+
+        var body = new URLSearchParams();
+        body.append( 'action', 'bokun_inspect_booking' );
+        body.append( 'nonce', nonce );
+        body.append( 'code', code );
+        if ( liveEl && liveEl.checked ) { body.append( 'live', '1' ); }
+
+        fetch( ajaxUrl, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: body.toString()
+        } )
+        .then( function ( r ) { return r.json(); } )
+        .then( function ( json ) {
+            btn.disabled = false;
+            spinner.classList.remove( 'is-active' );
+            if ( json && json.success && json.data && typeof json.data.report !== 'undefined' ) {
+                out.textContent = json.data.report;
+            } else {
+                out.textContent = ( json && json.data && json.data.message ) ? json.data.message : '<?php echo esc_js( __( 'Inspection failed.', 'BOKUN_text_domain' ) ); ?>';
+            }
+        } )
+        .catch( function () {
+            btn.disabled = false;
+            spinner.classList.remove( 'is-active' );
+            out.textContent = '<?php echo esc_js( __( 'Inspection failed.', 'BOKUN_text_domain' ) ); ?>';
+        } );
     } );
 } )();
 </script>
