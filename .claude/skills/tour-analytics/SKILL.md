@@ -219,11 +219,13 @@ These came out of code review on earlier PRs. Keep them true:
 - **Channel refunds Bokun never reports → a manual "Refunded" marker.** Some
   refunds live only in the sales channel (e.g. Viator) and never reach Bokun —
   Bokun keeps returning CONFIRMED with no refund field anywhere, so there is
-  nothing to auto-detect. For these the operator uses the "Mark a booking
-  refunded (channel)" box on the Analytics Data screen (by confirmation code),
-  which sets the dedicated **`_user_channel_refunded`** post-meta flag (and a
-  "Refunded" term for display). That flag — NOT the term — is the authoritative
-  signal everything keys on, because a bare term is ambiguous: if Bokun itself
+  nothing to auto-detect. For these the operator applies a **"Refunded"**
+  `booking_status` term — via the "Mark a booking refunded (channel)" box on the
+  Analytics Data screen (by confirmation code), the dashboard, or the WP taxonomy
+  editor. A `set_object_terms` hook (`bokun_analytics_sync_refunded_marker`)
+  bridges adding/removing that term to the dedicated **`_user_channel_refunded`**
+  post-meta flag, which is the authoritative signal everything keys on. The flag
+  (not the bare term at read time) is used because a term alone is ambiguous: if Bokun itself
   ever reported REFUNDED the normal import would create the same term, and keying
   on it would pin the booking as refunded forever even after Bokun reverted. When
   the flag is set, the import (`bokun_save_specific_fields`) forces
@@ -231,10 +233,11 @@ These came out of code review on earlier PRs. Keep them true:
   and drops a stale CONFIRMED/CANCELLED term so the booking reads only "Refunded";
   `bokun_analytics_is_cancelled()` returns true and `pb_status` shows REFUNDED, so
   it is excluded from net and gross revenue like a cancellation. Un-marking clears
-  the flag, removes the term, and re-assigns the Bokun-reported status term so the
-  bookings dashboard (which builds labels/filters/tabs from `booking_status`
-  terms) isn't left blank until the next import. The marker survives every future
-  fetch. (A Bokun-reported terminal status is still handled separately via
+  the flag and reverts the effective status to what Bokun last reported. The
+  marker survives every future fetch. The term hook ignores import-driven term
+  writes (guarded by `$GLOBALS['bokun_import_in_progress']`), and the import drops
+  a stale auto-created "Refunded" term when Bokun reports a non-terminal status,
+  so a Bokun-generated REFUNDED is never promoted to a manual override. (A Bokun-reported terminal status is still handled separately via
   `_booking_effective_status`; the read-only **Inspect a booking** box dumps a
   booking's stored + live-Bokun status fields to trace where a status lives.)
 - **Import existing-post lookup must span all statuses.** The import

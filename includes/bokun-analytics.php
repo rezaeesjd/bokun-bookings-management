@@ -872,6 +872,50 @@ add_action( 'trashed_post', 'bokun_analytics_remove_booking_row' );
 add_action( 'before_delete_post', 'bokun_analytics_remove_booking_row' );
 
 /**
+ * Bridge the operator-facing "Refunded" booking_status term to the authoritative
+ * `_user_channel_refunded` marker, so adding the tag by hand (WP taxonomy editor,
+ * the dashboard, or anywhere) works the same as the admin "Mark refunded" box:
+ * the booking is excluded from revenue, shown as REFUNDED, and the marker is
+ * preserved across imports. Removing the term clears the marker and reverts the
+ * effective status to whatever Bokun last reported.
+ *
+ * Term writes made by the import itself are ignored (guarded by
+ * `$GLOBALS['bokun_import_in_progress']`), so an import-assigned REFUNDED status —
+ * which can only come from Bokun actually reporting it — is never mistaken for a
+ * manual override, and reverts normally if Bokun later changes it.
+ *
+ * @param int    $object_id Post whose terms changed.
+ * @param array  $terms     Unused.
+ * @param array  $tt_ids    Unused.
+ * @param string $taxonomy  Taxonomy that changed.
+ * @return void
+ */
+function bokun_analytics_sync_refunded_marker( $object_id, $terms, $tt_ids, $taxonomy ) {
+    if ( 'booking_status' !== $taxonomy || ! empty( $GLOBALS['bokun_import_in_progress'] ) ) {
+        return;
+    }
+    if ( 'bokun_booking' !== get_post_type( $object_id ) ) {
+        return;
+    }
+
+    $has_term = has_term( 'refunded', 'booking_status', $object_id );
+    $flagged  = (bool) get_post_meta( $object_id, '_user_channel_refunded', true );
+
+    if ( $has_term && ! $flagged ) {
+        update_post_meta( $object_id, '_user_channel_refunded', 1 );
+        update_post_meta( $object_id, '_booking_effective_status', 'REFUNDED' );
+    } elseif ( ! $has_term && $flagged ) {
+        delete_post_meta( $object_id, '_user_channel_refunded' );
+        update_post_meta( $object_id, '_booking_effective_status', (string) get_post_meta( $object_id, 'productBookings_0_status', true ) );
+    } else {
+        return;
+    }
+
+    bokun_analytics_sync_booking( $object_id );
+}
+add_action( 'set_object_terms', 'bokun_analytics_sync_refunded_marker', 20, 4 );
+
+/**
  * Fetch every analytics source row, newest booking first.
  *
  * Intended for the analytics dashboard, which filters and aggregates the rows
