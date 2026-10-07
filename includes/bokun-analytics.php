@@ -828,6 +828,25 @@ function bokun_analytics_prune_window() {
 add_action( BOKUN_DAILY_IMPORT_HOOK, 'bokun_analytics_prune_window', 5 );
 
 /**
+ * Remove a booking's analytics source row when its post is trashed or
+ * permanently deleted, so a removed post (e.g. a duplicate collapsed during
+ * import) never leaves an orphaned row behind in the dashboard.
+ *
+ * @param int $post_id Post ID being trashed or deleted.
+ * @return void
+ */
+function bokun_analytics_remove_booking_row( $post_id ) {
+    if ( 'bokun_booking' !== get_post_type( $post_id ) ) {
+        return;
+    }
+
+    global $wpdb;
+    $wpdb->delete( bokun_analytics_get_table_name(), array( 'post_id' => (int) $post_id ), array( '%d' ) );
+}
+add_action( 'trashed_post', 'bokun_analytics_remove_booking_row' );
+add_action( 'before_delete_post', 'bokun_analytics_remove_booking_row' );
+
+/**
  * Fetch every analytics source row, newest booking first.
  *
  * Intended for the analytics dashboard, which filters and aggregates the rows

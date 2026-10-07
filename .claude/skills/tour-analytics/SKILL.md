@@ -202,6 +202,17 @@ These came out of code review on earlier PRs. Keep them true:
 - **Travel GMT.** Derive travel datetime from the raw `_original_start_datetime`
   meta via `bokun_analytics_raw_to_gmt()`, not `post_date_gmt`, which is
   double-shifted on non-UTC sites.
+- **Import existing-post lookup must span all statuses.** The import
+  (`bokun_save_bookings_as_posts`) matches an incoming booking to its existing
+  post by `_confirmation_code`. That lookup uses `post_status => 'any'`: a
+  publish-only lookup misses a post an earlier run demoted to draft, so the
+  start-date look-back would re-insert a second, published copy — a duplicate
+  post (and a duplicate analytics row, since rows are keyed by `post_id`).
+  `bokun_dedupe_booking_posts()` collapses any duplicates sharing a confirmation
+  code to one primary (the post with the most `booking_status` terms, so the
+  dashboard-assigned result/payment survive; oldest ID wins ties) and trashes
+  the rest. Trashing/deleting a `bokun_booking` removes its analytics row via
+  the `trashed_post` / `before_delete_post` hook, so no orphan row is left.
 
 ## After deploying changes
 A schema-version bump now **auto-schedules a one-time rebuild** on the next
