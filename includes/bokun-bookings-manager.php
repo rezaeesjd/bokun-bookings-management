@@ -828,6 +828,46 @@ function bokun_ensure_booking_post_type_registered() {
 }
 
 // Save Bokun bookings as WordPress posts
+/**
+ * Collapse duplicate `bokun_booking` posts that share one confirmation code to a
+ * single primary post, trashing the others. A confirmation code identifies one
+ * Bokun booking, so extra posts are always duplicates. The primary kept is the
+ * post carrying the most `booking_status` terms — the dashboard-assigned
+ * result / payment / status tags live there — with the oldest (lowest) post ID
+ * winning ties, so the original post and its history are preserved. Duplicates
+ * are trashed (recoverable), and their analytics source rows are removed by the
+ * trashed_post / before_delete_post hook in bokun-analytics.php.
+ *
+ * @param int[] $post_ids Post IDs that all share one confirmation code.
+ * @return int The primary post ID to keep (0 if none given).
+ */
+function bokun_dedupe_booking_posts($post_ids) {
+    $post_ids = array_values(array_unique(array_map('intval', (array) $post_ids)));
+
+    if (count($post_ids) <= 1) {
+        return (int) reset($post_ids);
+    }
+
+    $primary    = 0;
+    $best_score = -1;
+    foreach ($post_ids as $pid) {
+        $terms = wp_get_object_terms($pid, 'booking_status', ['fields' => 'ids']);
+        $score = is_wp_error($terms) ? 0 : count($terms);
+        if ($score > $best_score || ($score === $best_score && ($primary === 0 || $pid < $primary))) {
+            $primary    = $pid;
+            $best_score = $score;
+        }
+    }
+
+    foreach ($post_ids as $pid) {
+        if ($pid !== $primary) {
+            wp_trash_post($pid);
+        }
+    }
+
+    return $primary;
+}
+
 function bokun_save_bookings_as_posts($bookings, $context = 'default') {
     $stats = array(
         'total'     => is_array($bookings) ? count($bookings) : 0,
@@ -969,20 +1009,30 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
             'post_date_gmt'  => get_gmt_from_date($post_date)
         ];
 
-        $existing_post = get_posts([
-            'post_type'  => 'bokun_booking',
-            'meta_query' => [
+        // Look across ALL post statuses, not just the default 'publish'. A past
+        // booking that an earlier run demoted to draft is invisible to a
+        // publish-only lookup, so re-fetching it (the start-date look-back does)
+        // would insert a second, published copy — a duplicate. Finding every
+        // status instead lets the existing post be reused, and lets us collapse
+        // any duplicates a prior build already created.
+        $existing_posts = get_posts([
+            'post_type'   => 'bokun_booking',
+            'post_status' => 'any',
+            'meta_query'  => [
                 [
                     'key'     => '_confirmation_code',
                     'value'   => $confirmationCode,
                     'compare' => '='
                 ]
             ],
-            'fields'     => 'ids'
+            'fields'      => 'ids',
+            'numberposts' => -1,
         ]);
 
-        if (!empty($existing_post)) {
-            $post_id = $existing_post[0];
+        if (!empty($existing_posts)) {
+            // Keep one primary post and trash the rest, so a booking is a single
+            // post and the dashboard-assigned result/payment tags survive.
+            $post_id = bokun_dedupe_booking_posts($existing_posts);
             $has_changes = bokun_check_for_changes($post_id, $booking, $startDateTimeRaw);
             if ($has_changes) {
                 $update_result = wp_update_post(array_merge(['ID' => $post_id], $post_data));
