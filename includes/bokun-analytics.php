@@ -1114,7 +1114,10 @@ function bokun_analytics_collect_statusish( $data, $prefix, &$out ) {
         $path = ( '' === $prefix ) ? (string) $key : $prefix . '.' . $key;
         if ( is_array( $value ) || is_object( $value ) ) {
             bokun_analytics_collect_statusish( $value, $path, $out );
-        } elseif ( preg_match( '/status|refund|cancel|payment|state/i', (string) $key ) ) {
+        } elseif ( preg_match( '/status|refund|cancel|payment|state/i', $path ) ) {
+            // Match the whole key path, not just the leaf, so a value nested
+            // under a matching container (refund.amount, statuses.0, …) is kept
+            // even when its own leaf key is generic or numeric.
             $out[ $path ] = is_scalar( $value ) ? (string) $value : wp_json_encode( $value );
         }
     }
@@ -1250,8 +1253,11 @@ function bokun_analytics_ajax_inspect_booking() {
         }
 
         if ( ! $found_any ) {
-            $lines[] = '  => Bokun\'s search did not return this booking in any context. The refund cannot be';
-            $lines[] = '     imported through this search; a different lookup (e.g. by booking id) would be needed.';
+            $lines[] = '  => This code was not among the bookings the current search returned in any context.';
+            $lines[] = '     Note: the booking-search is paginated and returns whatever it fetched even if a';
+            $lines[] = '     later page failed, so a single run is not conclusive — re-run to confirm. If the';
+            $lines[] = '     booking is genuinely never returned, the refund cannot be imported through this';
+            $lines[] = '     search and a lookup by booking id would be needed.';
         }
     }
 
