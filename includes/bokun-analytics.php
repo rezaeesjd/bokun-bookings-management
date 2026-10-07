@@ -462,6 +462,15 @@ function bokun_analytics_is_cancelled( $post_id ) {
         return true;
     }
 
+    // A user-applied channel-refund marker (the dedicated `_user_channel_refunded`
+    // meta flag, set only by the admin control) means the sales channel refunded
+    // the customer — the booking earned nothing, so exclude it like a
+    // cancellation. Keying on the flag (not a shared "Refunded" term) keeps a
+    // Bokun-generated term from being mistaken for a manual override.
+    if ( get_post_meta( $post_id, '_user_channel_refunded', true ) ) {
+        return true;
+    }
+
     $terms = get_the_terms( $post_id, 'booking_status' );
 
     if ( ! $terms || is_wp_error( $terms ) ) {
@@ -664,7 +673,7 @@ function bokun_analytics_build_row( $post_id ) {
         'child_participants'        => $participants['child'],
         'infant_participants'       => $participants['infant'],
         'language'                  => bokun_analytics_meta( $post_id, array( 'language' ) ),
-        'pb_status'                 => bokun_analytics_meta( $post_id, array( '_booking_effective_status', 'productBookings_0_status', '_booking_status_origin' ) ),
+        'pb_status'                 => get_post_meta( $post_id, '_user_channel_refunded', true ) ? 'REFUNDED' : bokun_analytics_meta( $post_id, array( '_booking_effective_status', 'productBookings_0_status', '_booking_status_origin' ) ),
         'price_note'                => $price_note,
         'price_amount'              => bokun_analytics_parse_amount( $price_note ),
         'product_confirmation_code' => bokun_analytics_meta( $post_id, array( 'productBookings_0_productConfirmationCode' ) ),
@@ -1264,3 +1273,85 @@ function bokun_analytics_ajax_inspect_booking() {
     wp_send_json_success( array( 'report' => implode( "\n", $lines ) ) );
 }
 add_action( 'wp_ajax_bokun_inspect_booking', 'bokun_analytics_ajax_inspect_booking' );
+
+/**
+ * AJAX: mark (or unmark) a booking as refunded by the sales channel, by
+ * confirmation code. For refunds that live only in the channel (e.g. Viator)
+ * and never reach Bokun — Bokun keeps reporting CONFIRMED — so there is nothing
+ * to auto-detect. This applies the authoritative "Refunded" marker the import
+ * preserves, excludes the booking from revenue, and re-syncs the analytics row
+ * immediately. Unmarking reverts it to the Bokun-reported status.
+ *
+ * @return void
+ */
+function bokun_analytics_ajax_set_channel_refund() {
+    if ( ! current_user_can( 'manage_options' ) ) {
+        wp_send_json_error( array( 'message' => __( 'You do not have permission to do this.', 'BOKUN_text_domain' ) ), 403 );
+    }
+
+    check_ajax_referer( 'bokun_analytics_channel_refund', 'nonce' );
+
+    $code     = isset( $_POST['code'] ) ? sanitize_text_field( wp_unslash( $_POST['code'] ) ) : '';
+    $refunded = ! empty( $_POST['refunded'] );
+
+    if ( '' === $code ) {
+        wp_send_json_error( array( 'message' => __( 'Enter a confirmation code.', 'BOKUN_text_domain' ) ) );
+    }
+
+    if ( ! function_exists( 'bokun_assign_tag_to_post' ) || ! function_exists( 'bokun_remove_tag_from_post' ) ) {
+        wp_send_json_error( array( 'message' => __( 'Booking tag functions are unavailable.', 'BOKUN_text_domain' ) ) );
+    }
+
+    $posts = get_posts(
+        array(
+            'post_type'   => 'bokun_booking',
+            'post_status' => 'any',
+            'meta_query'  => array( array( 'key' => '_confirmation_code', 'value' => $code, 'compare' => '=' ) ), // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+            'fields'      => 'ids',
+            'numberposts' => -1,
+        )
+    );
+
+    if ( empty( $posts ) ) {
+        wp_send_json_error( array( 'message' => __( 'No booking found with that confirmation code.', 'BOKUN_text_domain' ) ) );
+    }
+
+    foreach ( $posts as $pid ) {
+        $pid = (int) $pid;
+        if ( $refunded ) {
+            // The meta flag is the authoritative "user marked this refunded"
+            // signal the import keys on; the term is for display/filtering.
+            update_post_meta( $pid, '_user_channel_refunded', 1 );
+            bokun_assign_tag_to_post( $pid, 'Refunded', 'booking_status' );
+            update_post_meta( $pid, '_booking_effective_status', 'REFUNDED' );
+            // Keep the status unambiguous: only "Refunded", not also CONFIRMED/CANCELLED.
+            bokun_remove_tag_from_post( $pid, 'CONFIRMED', 'booking_status' );
+            bokun_remove_tag_from_post( $pid, 'CANCELLED', 'booking_status' );
+        } else {
+            delete_post_meta( $pid, '_user_channel_refunded' );
+            bokun_remove_tag_from_post( $pid, 'Refunded', 'booking_status' );
+            // Revert to whatever Bokun last reported, and restore that status as a
+            // term too — the bookings dashboard builds its status labels, filters
+            // and tabs from booking_status terms, so it must not be left blank
+            // until the next import re-assigns it.
+            $restored = (string) get_post_meta( $pid, 'productBookings_0_status', true );
+            update_post_meta( $pid, '_booking_effective_status', $restored );
+            if ( '' !== $restored ) {
+                bokun_assign_tag_to_post( $pid, $restored, 'booking_status' );
+            }
+        }
+
+        bokun_analytics_sync_booking( $pid );
+    }
+
+    $first = (int) $posts[0];
+    wp_send_json_success(
+        array(
+            'message'   => $refunded ? __( 'Marked as refunded and excluded from revenue.', 'BOKUN_text_domain' ) : __( 'Refund marker removed.', 'BOKUN_text_domain' ),
+            'posts'     => array_map( 'intval', $posts ),
+            'pb_status' => get_post_meta( $first, '_user_channel_refunded', true ) ? 'REFUNDED' : (string) get_post_meta( $first, '_booking_effective_status', true ),
+            'row_count' => bokun_analytics_get_row_count(),
+        )
+    );
+}
+add_action( 'wp_ajax_bokun_set_channel_refund', 'bokun_analytics_ajax_set_channel_refund' );

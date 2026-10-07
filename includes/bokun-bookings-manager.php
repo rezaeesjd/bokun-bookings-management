@@ -1262,17 +1262,35 @@ function bokun_save_specific_fields($post_id, $booking, $context = 'default') {
     // wins over a stale product-level CONFIRMED. The effective status is stored
     // so the analytics layer can surface it and exclude the booking from
     // revenue, and is assigned as the booking_status term for visibility.
-    $product_status   = sanitize_text_field($productBooking['status'] ?? '');
-    $terminal_status  = bokun_scan_booking_terminal_status($booking);
-    $effective_status = '' !== $terminal_status ? sanitize_text_field($terminal_status) : $product_status;
-
-    update_post_meta($post_id, '_booking_effective_status', $effective_status);
-
-    if (!empty($effective_status)) {
-        bokun_assign_tag_to_post($post_id, $effective_status, 'booking_status');
+    // A user can mark a booking "Refunded" when the sales channel (e.g. Viator)
+    // refunded the customer but Bokun does not report it — Bokun keeps sending
+    // CONFIRMED. That manual marker is authoritative and must survive imports:
+    // keep it REFUNDED, do NOT re-add the Bokun status on top, and drop any
+    // stale CONFIRMED/CANCELLED term so the booking reads only "Refunded".
+    //
+    // The override is identified by the dedicated `_user_channel_refunded` meta
+    // flag — set only by the admin control — NOT by the presence of a "Refunded"
+    // term. A term alone is ambiguous: if Bokun itself ever reported REFUNDED the
+    // normal path below would create the same term, and keying on it would then
+    // pin the booking as refunded forever even after Bokun reverted to CONFIRMED.
+    if ( get_post_meta( $post_id, '_user_channel_refunded', true ) ) {
+        update_post_meta( $post_id, '_booking_effective_status', 'REFUNDED' );
+        bokun_assign_tag_to_post( $post_id, 'Refunded', 'booking_status' );
+        bokun_remove_tag_from_post( $post_id, 'CONFIRMED', 'booking_status' );
+        bokun_remove_tag_from_post( $post_id, 'CANCELLED', 'booking_status' );
     } else {
-        // If no booking status is set, default to 'Booking Not Made'
-        bokun_assign_tag_to_post($post_id, 'Booking Not Made', 'booking_status');
+        $product_status   = sanitize_text_field($productBooking['status'] ?? '');
+        $terminal_status  = bokun_scan_booking_terminal_status($booking);
+        $effective_status = '' !== $terminal_status ? sanitize_text_field($terminal_status) : $product_status;
+
+        update_post_meta($post_id, '_booking_effective_status', $effective_status);
+
+        if (!empty($effective_status)) {
+            bokun_assign_tag_to_post($post_id, $effective_status, 'booking_status');
+        } else {
+            // If no booking status is set, default to 'Booking Not Made'
+            bokun_assign_tag_to_post($post_id, 'Booking Not Made', 'booking_status');
+        }
     }
 
     // Call the function after processing other tags
