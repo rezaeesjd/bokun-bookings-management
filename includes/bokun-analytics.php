@@ -438,14 +438,30 @@ function bokun_analytics_get_result( $post_id ) {
 }
 
 /**
- * Whether the booking is cancelled, matching the dashboard's detection: any
- * booking_status term whose slug or name contains "cancel". A cancelled booking
- * earned no revenue, so net revenue treats its gross as zero.
+ * Whether the booking earned nothing because it was cancelled or refunded by
+ * the customer/channel. Two signals:
+ *
+ *  1. A `booking_status` term whose slug or name contains "cancel" (the
+ *     dashboard's long-standing cancelled detection).
+ *  2. The effective booking status captured from the Bokun payload
+ *     (`_booking_effective_status`) naming a terminal channel state — a Viator/
+ *     OTA refund, abort, rejection, etc. — which can happen while the
+ *     product-booking status still reads CONFIRMED.
+ *
+ * This deliberately keys on the channel status, NOT on any "refund" taxonomy
+ * term, so the operator's own `refunded-by-partner` / `refund-requested-from-
+ * partner` tags (a partner-side cost recovery, handled separately) are never
+ * misread as a customer refund.
  *
  * @param int $post_id Booking post ID.
  * @return bool
  */
 function bokun_analytics_is_cancelled( $post_id ) {
+    $effective = get_post_meta( $post_id, '_booking_effective_status', true );
+    if ( is_string( $effective ) && function_exists( 'bokun_is_terminal_booking_status' ) && bokun_is_terminal_booking_status( $effective ) ) {
+        return true;
+    }
+
     $terms = get_the_terms( $post_id, 'booking_status' );
 
     if ( ! $terms || is_wp_error( $terms ) ) {
@@ -648,7 +664,7 @@ function bokun_analytics_build_row( $post_id ) {
         'child_participants'        => $participants['child'],
         'infant_participants'       => $participants['infant'],
         'language'                  => bokun_analytics_meta( $post_id, array( 'language' ) ),
-        'pb_status'                 => bokun_analytics_meta( $post_id, array( 'productBookings_0_status', '_booking_status_origin' ) ),
+        'pb_status'                 => bokun_analytics_meta( $post_id, array( '_booking_effective_status', 'productBookings_0_status', '_booking_status_origin' ) ),
         'price_note'                => $price_note,
         'price_amount'              => bokun_analytics_parse_amount( $price_note ),
         'product_confirmation_code' => bokun_analytics_meta( $post_id, array( 'productBookings_0_productConfirmationCode' ) ),

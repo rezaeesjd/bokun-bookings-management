@@ -1137,6 +1137,57 @@ function bokun_check_for_changes($post_id, $booking, $startDateTimeRaw = '') {
     return false; // Return false if nothing has changed
 }
 
+/**
+ * Terminal channel statuses that mean the booking earned nothing — a customer /
+ * OTA cancellation or refund, a rejected/expired/voided order, or a chargeback.
+ * These are Bokun/Viator *channel* statuses, distinct from the operator's own
+ * "refunded-by-partner" tag (a partner-side cost recovery), which this must
+ * never match.
+ *
+ * @param string $value A status value to test.
+ * @return bool Whether it names a terminal channel state.
+ */
+function bokun_is_terminal_booking_status($value) {
+    if (!is_string($value) || '' === $value) {
+        return false;
+    }
+
+    return (bool) preg_match('/\b(CANCELL?ED|REFUNDED|ABORTED|REJECTED|DECLINED|EXPIRED|VOIDED|CHARGEBACK|CHARGED_BACK)\b/i', $value);
+}
+
+/**
+ * Walk a booking payload and return the first terminal status value found on any
+ * key whose name contains "status" (at any depth: booking status, paymentStatus,
+ * productBookings[].status, invoice/payment statuses, …). Returns '' when the
+ * booking carries no terminal status, so a live booking is unaffected. Scanning
+ * by key name — rather than one hard-coded field — keeps the check working
+ * wherever a given channel records the refund.
+ *
+ * @param mixed $data Booking payload (array/object) or a nested part of it.
+ * @return string The terminal status value, or '' if none.
+ */
+function bokun_scan_booking_terminal_status($data) {
+    if (is_object($data)) {
+        $data = (array) $data;
+    }
+    if (!is_array($data)) {
+        return '';
+    }
+
+    foreach ($data as $key => $value) {
+        if (is_array($value) || is_object($value)) {
+            $found = bokun_scan_booking_terminal_status($value);
+            if ('' !== $found) {
+                return $found;
+            }
+        } elseif (is_string($value) && false !== stripos((string) $key, 'status') && bokun_is_terminal_booking_status($value)) {
+            return $value;
+        }
+    }
+
+    return '';
+}
+
 // Function to save specific fields of the booking
 function bokun_save_specific_fields($post_id, $booking, $context = 'default') {
     // Extract nested values
@@ -1201,11 +1252,24 @@ function bokun_save_specific_fields($post_id, $booking, $context = 'default') {
         bokun_sync_product_tag_metadata_from_booking($productBooking, $context);
     }
 
-    // Handle booking status
-    $booking_status = sanitize_text_field($productBooking['status'] ?? '');
+    // Handle booking status.
+    //
+    // Historically only the product-booking status was read, but a Viator/OTA
+    // refund or cancellation is often recorded at the booking or payment level
+    // (e.g. a REFUNDED payment) while productBookings[0].status stays CONFIRMED.
+    // So compute an "effective" status: if any status field anywhere in the
+    // payload reports a terminal state (cancelled / refunded / aborted / …), it
+    // wins over a stale product-level CONFIRMED. The effective status is stored
+    // so the analytics layer can surface it and exclude the booking from
+    // revenue, and is assigned as the booking_status term for visibility.
+    $product_status   = sanitize_text_field($productBooking['status'] ?? '');
+    $terminal_status  = bokun_scan_booking_terminal_status($booking);
+    $effective_status = '' !== $terminal_status ? sanitize_text_field($terminal_status) : $product_status;
 
-    if (!empty($booking_status)) {
-        bokun_assign_tag_to_post($post_id, $booking_status, 'booking_status');
+    update_post_meta($post_id, '_booking_effective_status', $effective_status);
+
+    if (!empty($effective_status)) {
+        bokun_assign_tag_to_post($post_id, $effective_status, 'booking_status');
     } else {
         // If no booking status is set, default to 'Booking Not Made'
         bokun_assign_tag_to_post($post_id, 'Booking Not Made', 'booking_status');
