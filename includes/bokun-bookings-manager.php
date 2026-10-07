@@ -172,6 +172,16 @@ function bokun_fetch_bookings($context = 'default') {
     $yesterday = (clone $today)->modify('-1 day');
     $oneMonthLater = (clone $today)->modify('+1 month');
 
+    // Look back as well as forward. The search is keyed on each booking's start
+    // (travel) date, so a forward-only range never re-fetches a booking whose
+    // tour has already happened — and a cancellation made *after* the tour date
+    // then never reaches the plugin, leaving the booking stuck as "confirmed"
+    // and still counted in the dashboard. Including a look-back window re-pulls
+    // those recently-departed bookings so their status and analytics refresh.
+    $lookback_days = apply_filters('bokun_booking_start_date_lookback_days', 60);
+    $lookback_days = (is_numeric($lookback_days) && (int) $lookback_days >= 0) ? (int) $lookback_days : 60;
+    $rangeStart = (clone $today)->modify('-' . $lookback_days . ' days');
+
     $all_bookings = [];
     $page = 1;
 
@@ -206,7 +216,7 @@ function bokun_fetch_bookings($context = 'default') {
             'page' => $page,
             'itemsPerPage' => $items_per_page,
             'startDateRange' => [
-                'from' => $today->format('Y-m-d\T00:00:00\Z'),
+                'from' => $rangeStart->format('Y-m-d\T00:00:00\Z'),
                 'includeLower' => true,
                 'includeUpper' => true,
                 'to' => $oneMonthLater->format('Y-m-d\TH:i:s\Z')

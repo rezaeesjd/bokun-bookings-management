@@ -33,7 +33,14 @@ Three layers, each in its own file under `includes/`:
    denormalizes the flattened post meta + `booking_status` taxonomy into
    query-ready columns. Kept current on import, on dashboard status edits, and
    pruned as rows age out; rebuilt in full from the **Analytics Data** admin
-   screen.
+   screen. The Bokun fetch (`bokun_fetch_bookings`) searches a `startDateRange`
+   that now looks **back** as well as forward (default 60 days, filter
+   `bokun_booking_start_date_lookback_days`), because the search is keyed on the
+   tour's start date: a forward-only window never re-fetches a booking whose
+   tour has passed, so a cancellation made after the tour date would otherwise
+   never reach the plugin and the booking would linger as "confirmed". A booking
+   cancelled in Bokun comes back with a "cancel" `booking_status` term, which is
+   what `bokun_analytics_is_cancelled()` keys on.
 2. **Partners catalog** — `bokun-partners-products.php` builds
    `wp_bokun_partners_products`, one row per product (`product_id`, `title`,
    `net_price`, `commission`, `departure_city`, `partner_page_id`). Seeded from
@@ -100,6 +107,14 @@ currency** — the most common one in the filtered set (`revCur`). Rows in other
 currencies contribute 0 to those metric sums, and the chart titles show the
 active currency and flag mixed sets. Never sum `price_amount`/net revenue
 across currencies as if interchangeable.
+
+The gross **Revenue** metric (the metric toggle, the Revenue KPI tile, and
+avg booking value) is gross *earned*: it sums `_grossEarned`, which is 0 for
+cancelled and partner-refunded bookings, so those stay out of revenue just as
+they stay out of net revenue. The raw **Gross** column and totals in the
+records table still show each booking's face `price_amount` (a ledger view),
+so a cancelled booking shows its original amount there while contributing 0 to
+the headline Revenue.
 
 ## Conventions that keep the dashboard coherent
 
