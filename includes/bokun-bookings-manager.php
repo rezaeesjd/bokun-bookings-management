@@ -1053,7 +1053,13 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
             $stats['created']++;
         }
 
+        // Mark that term writes below come from the import, so the "Refunded"
+        // term-change hook does NOT promote an import-assigned term into a user
+        // override (that would re-pin a booking as refunded — see the hook).
+        $GLOBALS['bokun_import_in_progress'] = true;
         bokun_save_specific_fields($post_id, $booking, $context);
+        $GLOBALS['bokun_import_in_progress'] = false;
+
         bokun_save_all_fields_as_meta($post_id, $booking);
         bokun_save_meeting_point_meta($post_id, $booking, $context);
         process_price_categories_and_save($post_id, $booking);
@@ -1290,6 +1296,14 @@ function bokun_save_specific_fields($post_id, $booking, $context = 'default') {
         } else {
             // If no booking status is set, default to 'Booking Not Made'
             bokun_assign_tag_to_post($post_id, 'Booking Not Made', 'booking_status');
+        }
+
+        // No user override (that path is above, keyed on the meta flag) and Bokun
+        // reports no terminal/refund status, so drop any stale "Refunded" term —
+        // e.g. one auto-created by an earlier Bokun REFUNDED that has since
+        // reverted — so it can never later be mistaken for a manual marker.
+        if ('' === $terminal_status) {
+            bokun_remove_tag_from_post($post_id, 'Refunded', 'booking_status');
         }
     }
 
