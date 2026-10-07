@@ -28,6 +28,7 @@ $last_built    = get_option( BOKUN_ANALYTICS_LAST_BUILT_OPTION, '' );
 $rebuild_nonce = wp_create_nonce( 'bokun_analytics_rebuild' );
 $mark_refunded_nonce = wp_create_nonce( 'bokun_analytics_mark_refunded' );
 $inspect_nonce       = wp_create_nonce( 'bokun_analytics_inspect' );
+$channel_refund_nonce = wp_create_nonce( 'bokun_analytics_channel_refund' );
 
 // Partners products reference table.
 $pp_available   = function_exists( 'bokun_partners_products_get_row_count' );
@@ -182,6 +183,20 @@ if ( $table_exists && $row_count > 0 ) {
         <span class="spinner" id="bokun-inspect-spinner" style="float:none;margin-top:0;"></span>
     </p>
     <pre id="bokun-inspect-output" style="display:none;max-width:900px;overflow:auto;background:#1d2327;color:#f0f0f1;padding:12px;border-radius:6px;white-space:pre-wrap;"></pre>
+
+    <hr style="margin:24px 0;" />
+
+    <h2><?php esc_html_e( 'Mark a booking refunded (channel)', 'BOKUN_text_domain' ); ?></h2>
+    <p class="description">
+        <?php esc_html_e( 'For a booking that the sales channel (e.g. Viator) refunded but Bokun still reports as CONFIRMED — so there is nothing to auto-detect. Enter the confirmation code and mark it refunded: the booking is tagged “Refunded”, shown as REFUNDED, and excluded from revenue, and that marker is preserved on every future import (the Bokun CONFIRMED status is no longer re-applied on top). Use “Remove” to revert it to the Bokun-reported status.', 'BOKUN_text_domain' ); ?>
+    </p>
+    <p>
+        <input type="text" id="bokun-refund-code" class="regular-text" placeholder="<?php esc_attr_e( 'Confirmation code', 'BOKUN_text_domain' ); ?>" />
+        <button type="button" class="button button-primary" id="bokun-refund-mark"><?php esc_html_e( 'Mark refunded', 'BOKUN_text_domain' ); ?></button>
+        <button type="button" class="button" id="bokun-refund-unmark"><?php esc_html_e( 'Remove', 'BOKUN_text_domain' ); ?></button>
+        <span class="spinner" id="bokun-refund-spinner" style="float:none;margin-top:0;"></span>
+        <span id="bokun-refund-message" style="margin-left:8px;"></span>
+    </p>
 
     <hr style="margin:24px 0;" />
 
@@ -516,5 +531,66 @@ if ( $table_exists && $row_count > 0 ) {
             out.textContent = '<?php echo esc_js( __( 'Inspection failed.', 'BOKUN_text_domain' ) ); ?>';
         } );
     } );
+} )();
+</script>
+
+<script type="text/javascript">
+( function () {
+    var codeEl  = document.getElementById( 'bokun-refund-code' );
+    var markBtn = document.getElementById( 'bokun-refund-mark' );
+    var unBtn   = document.getElementById( 'bokun-refund-unmark' );
+    var spinner = document.getElementById( 'bokun-refund-spinner' );
+    var message = document.getElementById( 'bokun-refund-message' );
+    var count   = document.querySelector( '[data-analytics-count]' );
+    if ( ! markBtn ) { return; }
+
+    var ajaxUrl    = '<?php echo esc_url_raw( admin_url( 'admin-ajax.php' ) ); ?>';
+    var nonce      = '<?php echo esc_js( $channel_refund_nonce ); ?>';
+    var failedText = '<?php echo esc_js( __( 'Failed.', 'BOKUN_text_domain' ) ); ?>';
+
+    function run( refunded ) {
+        var code = ( codeEl.value || '' ).trim();
+        if ( ! code ) { codeEl.focus(); return; }
+        markBtn.disabled = true;
+        unBtn.disabled = true;
+        spinner.classList.add( 'is-active' );
+        message.textContent = '';
+
+        var body = new URLSearchParams();
+        body.append( 'action', 'bokun_set_channel_refund' );
+        body.append( 'nonce', nonce );
+        body.append( 'code', code );
+        body.append( 'refunded', refunded ? '1' : '0' );
+
+        fetch( ajaxUrl, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+            body: body.toString()
+        } )
+        .then( function ( r ) { return r.json(); } )
+        .then( function ( json ) {
+            markBtn.disabled = false;
+            unBtn.disabled = false;
+            spinner.classList.remove( 'is-active' );
+            if ( json && json.success ) {
+                message.style.color = '#1a7f37';
+                message.textContent = ( json.data.message || '' ) + ( json.data.pb_status ? ' (' + json.data.pb_status + ')' : '' );
+                if ( count && typeof json.data.row_count !== 'undefined' ) { count.textContent = json.data.row_count; }
+            } else {
+                message.style.color = '#d63638';
+                message.textContent = ( json && json.data && json.data.message ) ? json.data.message : failedText;
+            }
+        } )
+        .catch( function () {
+            markBtn.disabled = false;
+            unBtn.disabled = false;
+            spinner.classList.remove( 'is-active' );
+            message.style.color = '#d63638';
+            message.textContent = failedText;
+        } );
+    }
+
+    markBtn.addEventListener( 'click', function () { run( true ); } );
+    unBtn.addEventListener( 'click', function () { run( false ); } );
 } )();
 </script>

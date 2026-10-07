@@ -216,6 +216,22 @@ These came out of code review on earlier PRs. Keep them true:
   own `refunded-by-partner` tag (a partner-side cost recovery) is never misread
   as a customer refund. `_booking_effective_status` is populated on the next
   fetch, so a re-fetch is what makes an already-refunded booking drop out.
+- **Channel refunds Bokun never reports → a manual "Refunded" marker.** Some
+  refunds live only in the sales channel (e.g. Viator) and never reach Bokun —
+  Bokun keeps returning CONFIRMED with no refund field anywhere, so there is
+  nothing to auto-detect. For these the operator applies a **`refunded`**
+  `booking_status` term (the "Mark a booking refunded (channel)" box on the
+  Analytics Data screen, by confirmation code). It is authoritative: the import
+  (`bokun_save_specific_fields`) preserves it, forces `_booking_effective_status`
+  to REFUNDED, does NOT re-apply the Bokun CONFIRMED status, and drops a stale
+  CONFIRMED/CANCELLED term so the booking reads only "Refunded". The analytics
+  layer keys on the exact slug `refunded` (never the partner `refunded-by-partner`
+  tag): `bokun_analytics_is_cancelled()` returns true for it and `pb_status`
+  shows REFUNDED, so it is excluded from net and gross revenue like a
+  cancellation. The admin control re-syncs the row immediately; the marker also
+  survives every future fetch. (The read-only **Inspect a booking** box on the
+  same screen dumps a booking's stored + live-Bokun status fields to trace where
+  a status actually lives.)
 - **Import existing-post lookup must span all statuses.** The import
   (`bokun_save_bookings_as_posts`) matches an incoming booking to its existing
   post by `_confirmation_code`. That lookup uses `post_status => 'any'`: a
