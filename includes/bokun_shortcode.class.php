@@ -898,6 +898,22 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     }
                 }
 
+                // A channel-refunded booking (the manual "Refunded" marker, or a
+                // Bokun-reported REFUNDED effective status) is treated like a
+                // cancellation for the dashboard grouping: it must drop out of the
+                // "Closest bookings" list and show under "Cancelled bookings".
+                // Keyed on the authoritative channel-refund signals only — the
+                // partner-side terms (refunded-by-partner / refund-requested-from-partner)
+                // are cost-recovery markers on already-cancelled bookings and must
+                // not, on their own, flip a live booking into cancelled, so the
+                // exact "refunded" status term is matched (not those hyphenated slugs).
+                $is_refunded = (bool) get_post_meta($post_id, '_user_channel_refunded', true)
+                    || 'REFUNDED' === strtoupper((string) get_post_meta($post_id, '_booking_effective_status', true))
+                    || in_array('refunded', $status_values, true);
+                if ($is_refunded) {
+                    $is_cancelled = true;
+                }
+
                 $team_terms = get_the_terms($post_id, 'team_member');
                 $team_labels = [];
                 $team_values = [];

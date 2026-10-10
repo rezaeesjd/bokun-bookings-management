@@ -302,7 +302,13 @@ These came out of code review on earlier PRs. Keep them true:
   `_booking_effective_status` to REFUNDED, does NOT re-apply the Bokun status,
   and drops a stale CONFIRMED/CANCELLED term so the booking reads only "Refunded";
   `bokun_analytics_is_cancelled()` returns true and `pb_status` shows REFUNDED, so
-  it is excluded from net and gross revenue like a cancellation. Un-marking clears
+  it is excluded from net and gross revenue like a cancellation. The **Bookings
+  dashboard** (first tab) treats a refunded booking the same way: `render_dashboard`
+  sets `$is_cancelled` true when `_user_channel_refunded` is set, the effective
+  status is REFUNDED, or the exact `refunded` status term is present — so it drops
+  out of "Closest bookings" and shows under "Cancelled bookings" (keyed on those
+  channel signals only, never the partner-side `refunded-by-partner` /
+  `refund-requested-from-partner` terms). Un-marking clears
   the flag and reverts the effective status to what Bokun last reported. The
   marker survives every future fetch. The term hook ignores import-driven term
   writes (guarded by `$GLOBALS['bokun_import_in_progress']`), and the import drops
