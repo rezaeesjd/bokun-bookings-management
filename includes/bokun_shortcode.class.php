@@ -2892,10 +2892,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             </script>
             <?php
             $dashboard_html = ob_get_clean();
+            // The Business Results view is embedded inside the Analytics panel
+            // (a toolbar toggle next to Export CSV), not a separate top-level tab.
             $analytics_html = $this->render_analytics_panel();
-            $business_html  = $this->render_business_panel();
 
-            return $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html, $business_html );
+            return $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html );
         }
 
         /**
@@ -2905,10 +2906,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
          *
          * @param string $bookings_html  Rendered bookings dashboard markup.
          * @param string $analytics_html Rendered analytics dashboard markup.
-         * @param string $business_html  Rendered business-results dashboard markup.
          * @return string
          */
-        private function wrap_dashboard_tabs( $bookings_html, $analytics_html, $business_html = '' ) {
+        private function wrap_dashboard_tabs( $bookings_html, $analytics_html ) {
             $tabs_id = 'bokun-dash-tabs-' . wp_rand( 1000, 9999 );
 
             ob_start();
@@ -2921,11 +2921,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     <button type="button" class="bokun-dash-tabs__tab" role="tab" aria-selected="false" data-tab-target="analytics">
                         <?php esc_html_e( 'Analytics', 'BOKUN_txt_domain' ); ?>
                     </button>
-                    <?php if ( '' !== $business_html ) : ?>
-                        <button type="button" class="bokun-dash-tabs__tab" role="tab" aria-selected="false" data-tab-target="business">
-                            <?php esc_html_e( 'Business Results', 'BOKUN_txt_domain' ); ?>
-                        </button>
-                    <?php endif; ?>
                 </div>
                 <div class="bokun-dash-tabs__panel is-active" data-tab-panel="bookings">
                     <?php echo $bookings_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
@@ -2933,11 +2928,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 <div class="bokun-dash-tabs__panel" data-tab-panel="analytics" hidden>
                     <?php echo $analytics_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                 </div>
-                <?php if ( '' !== $business_html ) : ?>
-                    <div class="bokun-dash-tabs__panel" data-tab-panel="business" hidden>
-                        <?php echo $business_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-                    </div>
-                <?php endif; ?>
             </div>
             <style>
                 .bokun-dash-tabs__nav { display:flex; gap:4px; border-bottom:2px solid #e2e4e7; margin-bottom:16px; flex-wrap:wrap; }
@@ -2968,9 +2958,6 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             } );
                             if ( 'analytics' === target && root.bokunAnalyticsInit ) {
                                 root.bokunAnalyticsInit();
-                            }
-                            if ( 'business' === target && root.bokunBusinessInit ) {
-                                root.bokunBusinessInit();
                             }
                         } );
                     } );
@@ -3078,6 +3065,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'week'         => __( 'Week of', 'BOKUN_txt_domain' ),
                 'mixedCur'     => __( 'mixed currencies', 'BOKUN_txt_domain' ),
                 'all'          => __( 'All', 'BOKUN_txt_domain' ),
+                'bizResults'   => __( 'Business Results', 'BOKUN_txt_domain' ),
+                'backToAna'    => __( '← Back to analytics', 'BOKUN_txt_domain' ),
             );
 
             ob_start();
@@ -3152,15 +3141,19 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                         <div class="bokun-andash__main">
                             <div class="bokun-andash__toolbar">
-                                <div class="bokun-andash__metric" role="group" aria-label="<?php esc_attr_e( 'Metric', 'BOKUN_txt_domain' ); ?>">
+                                <div class="bokun-andash__metric" role="group" data-metric-group aria-label="<?php esc_attr_e( 'Metric', 'BOKUN_txt_domain' ); ?>">
                                     <button type="button" class="bokun-andash__seg is-active" data-metric="bookings"><?php esc_html_e( 'Bookings', 'BOKUN_txt_domain' ); ?></button>
                                     <button type="button" class="bokun-andash__seg" data-metric="participants"><?php esc_html_e( 'Participants', 'BOKUN_txt_domain' ); ?></button>
                                     <button type="button" class="bokun-andash__seg" data-metric="revenue"><?php esc_html_e( 'Revenue', 'BOKUN_txt_domain' ); ?></button>
                                     <button type="button" class="bokun-andash__seg" data-metric="netrev"><?php esc_html_e( 'Net revenue', 'BOKUN_txt_domain' ); ?></button>
                                 </div>
-                                <button type="button" class="button" data-export><?php esc_html_e( 'Export CSV', 'BOKUN_txt_domain' ); ?></button>
+                                <div class="bokun-andash__toolbar-actions">
+                                    <button type="button" class="button" data-export><?php esc_html_e( 'Export CSV', 'BOKUN_txt_domain' ); ?></button>
+                                    <button type="button" class="button button-primary" data-biz-toggle aria-pressed="false"><?php esc_html_e( 'Business Results', 'BOKUN_txt_domain' ); ?></button>
+                                </div>
                             </div>
 
+                            <div data-analytics-view>
                             <div class="bokun-andash__insights" data-insights></div>
                             <div class="bokun-andash__kpis" data-kpis></div>
 
@@ -3209,6 +3202,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                     <summary><?php esc_html_e( 'Records', 'BOKUN_txt_domain' ); ?> <span data-detail-count></span></summary>
                                     <div class="bokun-andash__table-wrap" data-detail></div>
                                 </details>
+                            </div>
+                            </div><!-- /[data-analytics-view] -->
+
+                            <div data-biz-view hidden>
+                                <?php echo $this->render_business_panel(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                             </div>
                         </div>
                     </div>
@@ -3262,6 +3260,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash__more-field select { width:100%; }
                 .bokun-andash__toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-bottom:14px; }
                 .bokun-andash__metric { display:inline-flex; gap:4px; flex-wrap:wrap; }
+                .bokun-andash__toolbar-actions { display:inline-flex; gap:8px; flex-wrap:wrap; align-items:center; }
+                .bokun-andash__toolbar-actions [data-biz-toggle].is-active { background:var(--an-blue); border-color:var(--an-blue); color:#fff; }
+                .bokun-andash.is-biz .bokun-andash__side { display:none; }
+                .bokun-andash.is-biz .bokun-andash__layout { grid-template-columns:1fr; }
+                .bokun-andash.is-biz [data-metric-group], .bokun-andash.is-biz [data-export] { display:none; }
                 .bokun-andash__insights { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:14px; }
                 .bokun-andash__insight { background:var(--an-surface); border:1px solid var(--an-line); border-left:3px solid var(--an-blue); border-radius:10px; padding:12px 14px; }
                 .bokun-andash__insight-label { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--an-ink-2); }
@@ -3916,6 +3919,27 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var a = document.createElement( 'a' ); a.href = URL.createObjectURL( blob ); a.download = 'bokun-analytics.csv'; document.body.appendChild( a ); a.click(); document.body.removeChild( a );
                 } );
 
+                // Business Results toggle: swap the analytics view for the
+                // embedded business panel (and hide the booking-only sidebar +
+                // metric buttons, which don't apply to the overhead P&L). The
+                // business panel inits lazily the first time it is shown.
+                ( function () {
+                    var bizToggle = root.querySelector( '[data-biz-toggle]' );
+                    var bizView = root.querySelector( '[data-biz-view]' );
+                    var anaView = root.querySelector( '[data-analytics-view]' );
+                    if ( ! bizToggle || ! bizView || ! anaView ) { return; }
+                    bizToggle.addEventListener( 'click', function () {
+                        var showBiz = bizView.hidden;
+                        bizView.hidden = ! showBiz;
+                        anaView.hidden = showBiz;
+                        root.classList.toggle( 'is-biz', showBiz );
+                        bizToggle.classList.toggle( 'is-active', showBiz );
+                        bizToggle.setAttribute( 'aria-pressed', showBiz ? 'true' : 'false' );
+                        bizToggle.textContent = showBiz ? ( L.backToAna || '← Back to analytics' ) : ( L.bizResults || 'Business Results' );
+                        if ( showBiz ) { var br = bizView.querySelector( '.bokun-bizdash' ); if ( br && br.bokunBusinessInit ) { br.bokunBusinessInit(); } }
+                    } );
+                } )();
+
                 function init() { if ( started ) { return; } started = true; recompute(); }
                 root.closest( '[data-bokun-tabs]' ) && ( root.closest( '[data-bokun-tabs]' ).bokunAnalyticsInit = init );
                 var panel = root.closest( '[data-tab-panel]' );
@@ -4021,6 +4045,16 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'profitLine'     => __( 'After %1$s overhead you clear %2$s per month.', 'BOKUN_txt_domain' ),
                 'lossLine'       => __( 'Overhead (%1$s) is above your margin — a %2$s monthly loss.', 'BOKUN_txt_domain' ),
                 'partialNote'    => __( 'The first and last months in the window may be partial, so monthly figures are averages over the bookings on hand.', 'BOKUN_txt_domain' ),
+                'subRange'       => __( ' Covering %1$s–%2$s.', 'BOKUN_txt_domain' ),
+                'capMonth'       => __( 'Average per month across %1$s–%2$s (%3$d months).', 'BOKUN_txt_domain' ),
+                'capPeriod'      => __( 'Total for %1$s–%2$s (%3$d months).', 'BOKUN_txt_domain' ),
+                'capAnnual'      => __( 'Projected to a full year, based on %1$s–%2$s (%3$d-month run-rate).', 'BOKUN_txt_domain' ),
+                'overRange'      => __( 'across %1$s–%2$s', 'BOKUN_txt_domain' ),
+                'beNeedAvg'      => __( 'need %1$s/mo · averaging %2$s/mo', 'BOKUN_txt_domain' ),
+                'profitPerBk'    => __( 'Profit per booking', 'BOKUN_txt_domain' ),
+                'aboveBe'        => __( '%s/month above break-even — healthy.', 'BOKUN_txt_domain' ),
+                'belowBe'        => __( '%s more booking(s)/month would reach break-even.', 'BOKUN_txt_domain' ),
+                'atBe'           => __( 'Right around break-even.', 'BOKUN_txt_domain' ),
             );
 
             ob_start();
@@ -4037,6 +4071,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             esc_html( $currency )
                         );
                         ?>
+                        <span data-biz-subrange></span>
                     </p>
                 </div>
 
@@ -4058,6 +4093,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 <button type="button" class="bokun-andash__seg" data-biz-mode="annual"><?php esc_html_e( 'Annualized', 'BOKUN_txt_domain' ); ?></button>
                             </div>
                         </div>
+                        <p class="bokun-bizdash__periodcap" data-biz-period></p>
                         <div class="bokun-bizdash__pnl">
                             <div class="bokun-bizdash__waterfall" data-biz-waterfall></div>
                             <div class="bokun-bizdash__statement" data-biz-statement></div>
@@ -4094,8 +4130,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     .bokun-bizdash { --an-surface:#1f1f1e; --an-ink:#f2f2f0; --an-ink-2:#b5b5ad; --an-line:#3a3a38; --an-blue:#3987e5; --an-blue-soft:rgba(57,135,229,.20); --an-good:#2faa4a; --an-warn:#c98500; --an-crit:#e66767; --an-c1:#3987e5; --an-c2:#d95926; --an-c3:#199e70; --an-c4:#c98500; --an-c5:#d55181; --an-c6:#9085e9; }
                 }
                 .bokun-bizdash__notice { background:var(--an-blue-soft); border:1px solid var(--an-line); border-radius:10px; padding:12px 14px; margin-bottom:16px; font-size:13px; }
-                .bokun-bizdash__cardhead { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+                .bokun-bizdash__cardhead { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
                 .bokun-bizdash__cardhead h3 { margin:0; font-size:15px; }
+                .bokun-bizdash__periodcap { margin:0 0 12px; font-size:12px; color:var(--an-ink-2); }
                 .bokun-bizdash__pnl { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:18px; align-items:start; }
                 @media (max-width:720px) { .bokun-bizdash__pnl { grid-template-columns:1fr; } }
                 .bokun-bizdash__statement { display:flex; flex-direction:column; gap:2px; font-size:14px; }
@@ -4153,7 +4190,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 function dayStr( v ) { return esc( v ).slice( 0, 10 ); }
                 function hasNum( v ) { return v !== null && v !== undefined && v !== '' && ! isNaN( parseFloat( v ) ); }
                 function isEmpty( v ) { return v === null || v === undefined || v === ''; }
-                function fillTpl( s, a ) { var i = 0; return esc( s ).replace( /%(\d\$)?[ds]/g, function () { return a[ i++ ]; } ); }
+                // Honors positional %N$ specifiers (and falls back to sequential),
+                // so a translated string may reorder its placeholders.
+                function fillTpl( s, a ) { var i = 0; return esc( s ).replace( /%(?:(\d+)\$)?[ds]/g, function ( _m, n ) { return a[ n ? ( n - 1 ) : ( i++ ) ]; } ); }
 
                 // --- Join to partners catalog + precompute net revenue (identical to
                 // the Analytics tab, so the margin shown here matches it exactly). ---
@@ -4248,6 +4287,18 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 var avgMarginPerBooking = bookingsMatched ? ( netMargin / bookingsMatched ) : null;
                 var breakEvenBookings = ( avgMarginPerBooking && avgMarginPerBooking > 0 ) ? ( monthlyOverhead / avgMarginPerBooking ) : null;
                 var coverage = G_total > 0 ? ( G_matched / G_total * 100 ) : null;
+                var avgBookingsPerMonth = bookingsMatched / nMonths;
+                var profitPerBooking = bookingsMatched ? ( ( netMargin - periodOverhead ) / bookingsMatched ) : null;
+
+                // Human-readable month + the covered date range, so the period
+                // controls name the actual dates, not just "per month" / "period".
+                function fmtMonth( ym ) {
+                    var p = esc( ym ).split( '-' ); if ( p.length < 2 ) { return esc( ym ); }
+                    var d = new Date( Date.UTC( +p[ 0 ], ( +p[ 1 ] || 1 ) - 1, 1 ) );
+                    return isNaN( d ) ? esc( ym ) : d.toLocaleString( undefined, { month: 'short', year: 'numeric', timeZone: 'UTC' } );
+                }
+                var rangeFrom = months.length ? fmtMonth( months[ 0 ] ) : '';
+                var rangeTo = months.length ? fmtMonth( months[ months.length - 1 ] ) : '';
 
                 // mode-scaled P&L figures for the waterfall + statement.
                 function scaled() {
@@ -4269,9 +4320,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     function cls( n ) { return n < 0 ? 'bokun-bizdash__neg' : 'bokun-bizdash__pos'; }
                     var tiles = [
                         { label: L.monthlyOh, value: money( monthlyOverhead ) },
-                        { label: L.avgMargin, value: money( avgMonthlyMargin ), sub: fillTpl( L.overMonths, [ nMonths ] ) },
+                        { label: L.avgMargin, value: money( avgMonthlyMargin ), sub: rangeFrom ? fillTpl( L.overRange, [ rangeFrom, rangeTo ] ) : fillTpl( L.overMonths, [ nMonths ] ) },
                         { label: L.monthlyProfit, value: money( monthlyProfit ), vcls: cls( monthlyProfit ) },
-                        { label: L.breakEven, value: breakEvenBookings !== null ? fillTpl( L.perMonthBk, [ fmtInt( Math.ceil( breakEvenBookings ) ) ] ) : '—', sub: avgMarginPerBooking !== null ? fillTpl( L.perBooking, [ money( avgMarginPerBooking ) ] ) : '' },
+                        { label: L.profitPerBk, value: profitPerBooking !== null ? money( profitPerBooking ) : '—', vcls: profitPerBooking !== null ? cls( profitPerBooking ) : '', sub: avgMarginPerBooking !== null ? fillTpl( L.perBooking, [ money( avgMarginPerBooking ) ] ) : '' },
+                        { label: L.breakEven, value: breakEvenBookings !== null ? fillTpl( L.perMonthBk, [ fmtInt( Math.ceil( breakEvenBookings ) ) ] ) : '—', sub: breakEvenBookings !== null ? fillTpl( L.beNeedAvg, [ fmtInt( Math.ceil( breakEvenBookings ) ), fmtInt( Math.round( avgBookingsPerMonth ) ) ] ) : '' },
                         { label: L.coverage, value: coverage !== null ? ( Math.round( coverage ) + '%' ) : '—', sub: G_unmatched > 0 ? fillTpl( L.unmatchedGross, [ money( G_unmatched ) ] ) : '' },
                         { label: L.annualOh, value: money( annualOverhead ) }
                     ];
@@ -4280,13 +4332,32 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     } ).join( '' );
                 }
 
+                function renderSubRange() {
+                    var el = root.querySelector( '[data-biz-subrange]' );
+                    if ( el ) { el.textContent = rangeFrom ? fillTpl( L.subRange, [ rangeFrom, rangeTo ] ) : ''; }
+                }
+
+                function renderPeriodCaption() {
+                    var el = root.querySelector( '[data-biz-period]' );
+                    if ( ! el ) { return; }
+                    var key = mode === 'period' ? L.capPeriod : ( mode === 'annual' ? L.capAnnual : L.capMonth );
+                    el.textContent = rangeFrom ? fillTpl( key, [ rangeFrom, rangeTo, nMonths ] ) : '';
+                }
+
                 function renderInsights() {
                     var monthlyProfit = avgMonthlyMargin - monthlyOverhead;
                     var cards = [];
-                    if ( monthlyProfit >= 0 ) {
-                        cards.push( { label: L.monthlyProfit, value: money( monthlyProfit ), sub: fillTpl( L.profitLine, [ money( monthlyOverhead ), money( monthlyProfit ) ] ) } );
-                    } else {
-                        cards.push( { label: L.monthlyProfit, value: money( monthlyProfit ), sub: fillTpl( L.lossLine, [ money( monthlyOverhead ), money( Math.abs( monthlyProfit ) ) ] ) } );
+                    // Headline: profit/loss per month, with the covered dates.
+                    cards.push( monthlyProfit >= 0
+                        ? { label: L.monthlyProfit, value: money( monthlyProfit ), sub: fillTpl( L.profitLine, [ money( monthlyOverhead ), money( monthlyProfit ) ] ) }
+                        : { label: L.monthlyProfit, value: money( monthlyProfit ), sub: fillTpl( L.lossLine, [ money( monthlyOverhead ), money( Math.abs( monthlyProfit ) ) ] ) } );
+                    // Break-even gap: how many bookings/month vs what is needed.
+                    if ( breakEvenBookings !== null ) {
+                        var need = Math.ceil( breakEvenBookings ), have = avgBookingsPerMonth, gap = have - need;
+                        var sub = ( gap >= 1 ) ? fillTpl( L.aboveBe, [ fmtInt( Math.round( gap ) ) ] )
+                            : ( gap <= -1 ) ? fillTpl( L.belowBe, [ fmtInt( Math.ceil( -gap ) ) ] )
+                            : L.atBe;
+                        cards.push( { label: L.breakEven, value: fillTpl( L.perMonthBk, [ fmtInt( need ) ] ), sub: sub } );
                     }
                     root.querySelector( '[data-biz-insights]' ).innerHTML = cards.map( function ( c ) {
                         return '<div class="bokun-andash__insight"><div class="bokun-andash__insight-label">' + escHtml( c.label ) + '</div><div class="bokun-andash__insight-value">' + escHtml( c.value ) + '</div><div class="bokun-andash__insight-sub">' + escHtml( c.sub ) + '</div></div>';
@@ -4450,10 +4521,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     else { el.hidden = true; }
                 }
 
-                function renderPnl() { var s = scaled(); renderWaterfall( s ); renderStatement( s ); }
+                function renderPnl() { var s = scaled(); renderWaterfall( s ); renderStatement( s ); renderPeriodCaption(); }
 
                 function recompute() {
-                    renderNotice(); renderInsights(); renderKpis(); renderPnl(); renderCatBars(); renderItems(); renderTrend();
+                    renderSubRange(); renderNotice(); renderInsights(); renderKpis(); renderPnl(); renderCatBars(); renderItems(); renderTrend();
                 }
 
                 root.querySelectorAll( '[data-biz-mode]' ).forEach( function ( btn ) {
@@ -4465,9 +4536,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 } );
 
                 function init() { if ( started ) { return; } started = true; recompute(); }
-                root.closest( '[data-bokun-tabs]' ) && ( root.closest( '[data-bokun-tabs]' ).bokunBusinessInit = init );
-                var panel = root.closest( '[data-tab-panel]' );
-                if ( ! panel || ! panel.hidden ) { init(); }
+                // The panel is embedded inside the Analytics view, revealed by a
+                // toolbar toggle that calls this. Expose it on the root; auto-init
+                // only if already visible (defensive, e.g. standalone use).
+                root.bokunBusinessInit = init;
+                if ( root.offsetParent !== null ) { init(); }
             } )();
             </script>
             <?php
