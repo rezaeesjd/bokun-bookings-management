@@ -474,6 +474,21 @@
   }
 }
 
+/* Small screens: a single, full-width column (the 280px min would otherwise
+   overflow very narrow phones), tighter gaps and padding. */
+@media (max-width: 600px) {
+  .bokun-booking-dashboard__grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .bokun-booking-dashboard__card {
+    padding: 1rem;
+  }
+  .bokun-booking-dashboard__body {
+    grid-template-columns: 1fr;
+  }
+}
+
 .bokun-booking-dashboard__empty {
   padding: 1rem 1.25rem;
   border-radius: 0.75rem;
