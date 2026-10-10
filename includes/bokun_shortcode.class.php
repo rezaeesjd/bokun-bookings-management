@@ -3953,7 +3953,28 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             $months   = function_exists( 'bokun_analytics_get_window_months' ) ? (int) bokun_analytics_get_window_months() : 3;
             $uid      = 'bokun-bizdash-' . wp_rand( 1000, 9999 );
 
-            $cfg = array( 'currency' => $currency );
+            // The exact calendar months of the analytics window (last N months,
+            // by creation date), so the client builds the reporting period from
+            // the window itself — not only from months that happen to have
+            // bookings — and a month with no bookings still counts (and is
+            // charged its overhead) instead of inflating the monthly average.
+            $window_months = array();
+            try {
+                $now = new DateTime( 'now', new DateTimeZone( 'UTC' ) );
+                $anchor = ( clone $now )->modify( 'first day of this month' );
+                for ( $i = $months - 1; $i >= 0; $i-- ) {
+                    $window_months[] = ( clone $anchor )->modify( '-' . (int) $i . ' months' )->format( 'Y-m' );
+                }
+                $current_month = $now->format( 'Y-m' );
+            } catch ( Exception $e ) {
+                $current_month = gmdate( 'Y-m' );
+            }
+
+            $cfg = array(
+                'currency'      => $currency,
+                'window_months' => $window_months,
+                'current_month' => $current_month,
+            );
 
             $l10n = array(
                 'title'          => __( 'Business Results', 'BOKUN_txt_domain' ),
@@ -3990,6 +4011,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'overheadLeg'    => __( 'Overhead', 'BOKUN_txt_domain' ),
                 'profitLeg'      => __( 'Operating profit', 'BOKUN_txt_domain' ),
                 'oneTime'        => __( 'one-off', 'BOKUN_txt_domain' ),
+                'inactive'       => __( 'inactive', 'BOKUN_txt_domain' ),
+                'excludedCur'    => __( '%1$d expense(s) in another currency are not shown (only %2$s is combined with revenue).', 'BOKUN_txt_domain' ),
                 'yearly'         => __( '/ year', 'BOKUN_txt_domain' ),
                 'monthlyFreq'    => __( '/ month', 'BOKUN_txt_domain' ),
                 'noRev'          => __( 'No bookings in %s in this period, so revenue cannot be combined with expenses yet.', 'BOKUN_txt_domain' ),
@@ -4104,10 +4127,18 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 function readJson( sel, fb ) { var el = root.querySelector( sel ); if ( ! el ) { return fb; } try { return JSON.parse( el.textContent || '' ); } catch ( e ) { return fb; } }
                 var ROWS = readJson( '[data-biz-rows]', [] );
                 var PARTNERS = readJson( '[data-biz-partners]', {} );
-                var EXPENSES = readJson( '[data-biz-expenses]', [] );
+                var ALL_EXPENSES = readJson( '[data-biz-expenses]', [] );
                 var CFG = readJson( '[data-biz-config]', {} );
                 var L = readJson( '[data-biz-l10n]', {} );
                 var CUR = ( CFG.currency || 'EUR' );
+                var WINDOW_MONTHS = ( CFG.window_months && CFG.window_months.length ) ? CFG.window_months.slice() : [];
+                var CURMONTH = CFG.current_month || '';
+                // Only expenses in the reporting currency are combined with
+                // revenue; a different-currency item is never summed as if it
+                // were the same money. Any excluded items are surfaced in the
+                // notice so a currency typo in the config is visible.
+                var EXPENSES = ALL_EXPENSES.filter( function ( e ) { return ( e.currency || CUR ) === CUR; } );
+                var EXCLUDED_CUR = ALL_EXPENSES.length - EXPENSES.length;
 
                 var started = false;
                 var mode = 'month';
@@ -4161,22 +4192,33 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 var partnerCost = G_matched - netMargin;
 
                 function monthKey( r ) { return dayStr( r.created_datetime ).slice( 0, 7 ); }
-                var monthsSet = {}; rev.forEach( function ( r ) { var m = monthKey( r ); if ( m ) { monthsSet[ m ] = 1; } } );
+                // The reporting period is the analytics window (every calendar
+                // month in it, booked or not), unioned with any month a row
+                // falls in, so an empty month still counts and carries its
+                // overhead instead of being dropped and inflating the average.
+                var monthsSet = {};
+                WINDOW_MONTHS.forEach( function ( m ) { if ( m ) { monthsSet[ m ] = 1; } } );
+                rev.forEach( function ( r ) { var m = monthKey( r ); if ( m ) { monthsSet[ m ] = 1; } } );
                 var months = Object.keys( monthsSet ).sort();
                 var nMonths = months.length || 1;
 
-                // --- Expense aggregates. ---
-                var monthlyOverhead = 0, annualOverhead = 0, orphanOneTime = 0;
-                EXPENSES.forEach( function ( e ) {
-                    monthlyOverhead += num( e.monthly );
-                    annualOverhead += num( e.annual );
-                    if ( e.frequency === 'one_time' && ! e.start ) { orphanOneTime += num( e.total ); }
-                } );
+                // --- Expense helpers + aggregates. ---
                 function expenseActive( e, ym ) {
+                    if ( ! ym ) { return true; }
                     if ( e.start && e.start.slice( 0, 7 ) > ym ) { return false; }
                     if ( e.end && e.end.slice( 0, 7 ) < ym ) { return false; }
                     return true;
                 }
+                // A recurring expense counts toward the current run-rate only
+                // while it is active this month (a future start or past end —
+                // e.g. a cancelled subscription — drops out), matching how the
+                // monthly series charges it.
+                function isRunRate( e ) { return e.frequency !== 'one_time' && expenseActive( e, CURMONTH ); }
+                var monthlyOverhead = 0, annualOverhead = 0, orphanOneTime = 0;
+                EXPENSES.forEach( function ( e ) {
+                    if ( isRunRate( e ) ) { monthlyOverhead += num( e.monthly ); annualOverhead += num( e.annual ); }
+                    if ( e.frequency === 'one_time' && ! e.start ) { orphanOneTime += num( e.total ); }
+                } );
                 function overheadForMonth( ym ) {
                     var s = 0;
                     EXPENSES.forEach( function ( e ) {
@@ -4324,7 +4366,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var el = root.querySelector( '[data-biz-catbars]' );
                     if ( ! EXPENSES.length ) { el.innerHTML = '<p class="bokun-andash__insight-sub">' + escHtml( L.noExp ) + '</p>'; return; }
                     var cats = {};
-                    EXPENSES.forEach( function ( e ) { var k = e.category || L.other || 'Other'; cats[ k ] = ( cats[ k ] || 0 ) + num( e.monthly ); } );
+                    EXPENSES.forEach( function ( e ) { if ( ! isRunRate( e ) ) { return; } var k = e.category || L.other || 'Other'; cats[ k ] = ( cats[ k ] || 0 ) + num( e.monthly ); } );
                     var list = Object.keys( cats ).map( function ( k ) { return { label: k, metric: cats[ k ] }; } ).filter( function ( g ) { return g.metric > 0; } );
                     list.sort( function ( a, b ) { return b.metric - a.metric; } );
                     var cols = [ '--an-c1', '--an-c2', '--an-c3', '--an-c4', '--an-c5', '--an-c6' ];
@@ -4347,10 +4389,15 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         return ( e.frequency === 'yearly' ) ? L.yearly : L.monthlyFreq;
                     }
                     var body = items.map( function ( e ) {
-                        var costTxt = money( num( e.total ) ) + ' ' + freqLabel( e ) + ( e.quantity > 1 ? ' ×' + e.quantity : '' );
-                        var share = ( e.frequency === 'one_time' ) ? '—' : ( Math.round( num( e.monthly ) / totalMonthly * 100 ) + '%' );
-                        var mo = ( e.frequency === 'one_time' ) ? '—' : money( num( e.monthly ) );
-                        var yr = ( e.frequency === 'one_time' ) ? '—' : money( num( e.annual ) );
+                        // A recurring expense that is not active this month (future
+                        // start or past end) is not in the current run-rate, so its
+                        // monthly/annual/share read "—" and the total it feeds is 0.
+                        var inactive = ( e.frequency !== 'one_time' ) && ! isRunRate( e );
+                        var costTxt = money( num( e.total ) ) + ' ' + freqLabel( e ) + ( e.quantity > 1 ? ' ×' + e.quantity : '' ) + ( inactive ? ' · ' + ( L.inactive || 'inactive' ) : '' );
+                        var noRate = ( e.frequency === 'one_time' ) || inactive;
+                        var share = noRate ? '—' : ( Math.round( num( e.monthly ) / totalMonthly * 100 ) + '%' );
+                        var mo = noRate ? '—' : money( num( e.monthly ) );
+                        var yr = noRate ? '—' : money( num( e.annual ) );
                         return '<tr><td>' + escHtml( e.name ) + '</td><td><span class="bokun-bizdash__pill">' + escHtml( e.category ) + '</span></td><td>' + escHtml( costTxt ) + '</td><td class="num">' + escHtml( mo ) + '</td><td class="num">' + escHtml( yr ) + '</td><td class="num">' + escHtml( share ) + '</td><td>' + escHtml( e.notes || '' ) + '</td></tr>';
                     } ).join( '' );
                     var foot = '<tr><td><strong>' + escHtml( L.monthlyOh ) + '</strong></td><td></td><td></td><td class="num"><strong>' + escHtml( money( monthlyOverhead ) ) + '</strong></td><td class="num"><strong>' + escHtml( money( annualOverhead ) ) + '</strong></td><td class="num">100%</td><td></td></tr>';
@@ -4397,6 +4444,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var msgs = [];
                     if ( ! rev.length ) { msgs.push( fillTpl( L.noRev, [ CUR ] ) ); }
                     if ( ! EXPENSES.length ) { msgs.push( L.noExp ); }
+                    if ( EXCLUDED_CUR > 0 ) { msgs.push( fillTpl( L.excludedCur, [ EXCLUDED_CUR, CUR ] ) ); }
                     if ( rev.length ) { msgs.push( L.partialNote ); }
                     if ( msgs.length ) { el.hidden = false; el.innerHTML = msgs.map( escHtml ).join( '<br>' ); }
                     else { el.hidden = true; }
