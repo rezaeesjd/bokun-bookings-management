@@ -3263,6 +3263,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash__toolbar-actions { display:inline-flex; gap:8px; flex-wrap:wrap; align-items:center; }
                 .bokun-andash__toolbar-actions [data-biz-toggle].is-active { background:var(--an-blue); border-color:var(--an-blue); color:#fff; }
                 .bokun-andash.is-biz .bokun-andash__side { display:none; }
+                .bokun-andash.is-biz .bokun-andash__layout { grid-template-columns:1fr; }
                 .bokun-andash.is-biz [data-metric-group], .bokun-andash.is-biz [data-export] { display:none; }
                 .bokun-andash__insights { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:14px; }
                 .bokun-andash__insight { background:var(--an-surface); border:1px solid var(--an-line); border-left:3px solid var(--an-blue); border-radius:10px; padding:12px 14px; }
