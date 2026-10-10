@@ -2893,8 +2893,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             <?php
             $dashboard_html = ob_get_clean();
             $analytics_html = $this->render_analytics_panel();
+            $business_html  = $this->render_business_panel();
 
-            return $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html );
+            return $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html, $business_html );
         }
 
         /**
@@ -2904,9 +2905,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
          *
          * @param string $bookings_html  Rendered bookings dashboard markup.
          * @param string $analytics_html Rendered analytics dashboard markup.
+         * @param string $business_html  Rendered business-results dashboard markup.
          * @return string
          */
-        private function wrap_dashboard_tabs( $bookings_html, $analytics_html ) {
+        private function wrap_dashboard_tabs( $bookings_html, $analytics_html, $business_html = '' ) {
             $tabs_id = 'bokun-dash-tabs-' . wp_rand( 1000, 9999 );
 
             ob_start();
@@ -2919,6 +2921,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     <button type="button" class="bokun-dash-tabs__tab" role="tab" aria-selected="false" data-tab-target="analytics">
                         <?php esc_html_e( 'Analytics', 'BOKUN_txt_domain' ); ?>
                     </button>
+                    <?php if ( '' !== $business_html ) : ?>
+                        <button type="button" class="bokun-dash-tabs__tab" role="tab" aria-selected="false" data-tab-target="business">
+                            <?php esc_html_e( 'Business Results', 'BOKUN_txt_domain' ); ?>
+                        </button>
+                    <?php endif; ?>
                 </div>
                 <div class="bokun-dash-tabs__panel is-active" data-tab-panel="bookings">
                     <?php echo $bookings_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
@@ -2926,6 +2933,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 <div class="bokun-dash-tabs__panel" data-tab-panel="analytics" hidden>
                     <?php echo $analytics_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                 </div>
+                <?php if ( '' !== $business_html ) : ?>
+                    <div class="bokun-dash-tabs__panel" data-tab-panel="business" hidden>
+                        <?php echo $business_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+                    </div>
+                <?php endif; ?>
             </div>
             <style>
                 .bokun-dash-tabs__nav { display:flex; gap:4px; border-bottom:2px solid #e2e4e7; margin-bottom:16px; flex-wrap:wrap; }
@@ -2956,6 +2968,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             } );
                             if ( 'analytics' === target && root.bokunAnalyticsInit ) {
                                 root.bokunAnalyticsInit();
+                            }
+                            if ( 'business' === target && root.bokunBusinessInit ) {
+                                root.bokunBusinessInit();
                             }
                         } );
                     } );
@@ -3903,6 +3918,554 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                 function init() { if ( started ) { return; } started = true; recompute(); }
                 root.closest( '[data-bokun-tabs]' ) && ( root.closest( '[data-bokun-tabs]' ).bokunAnalyticsInit = init );
+                var panel = root.closest( '[data-tab-panel]' );
+                if ( ! panel || ! panel.hidden ) { init(); }
+            } )();
+            </script>
+            <?php
+            return ob_get_clean();
+        }
+
+        /**
+         * Render the Business Results panel: operating profit built from the
+         * booking net-revenue (margin) already computed by the analytics layer,
+         * minus the operator's overhead expenses (from the business config). It
+         * shows run-rate KPI tiles, a layered P&L (gross → partner cost → net
+         * revenue → overhead → operating profit) as a waterfall and a statement,
+         * a per-category expense breakdown, and a monthly trend of margin vs
+         * overhead vs profit. All amounts are in the reporting currency (EUR by
+         * default); revenue is scoped to that currency so money is never mixed.
+         * Everything is computed client-side from the same rows + partners map
+         * the analytics tab uses, so net revenue matches exactly. Lazy-rendered
+         * on first open of the tab.
+         *
+         * @return string
+         */
+        public function render_business_panel() {
+            if ( ! function_exists( 'bokun_analytics_get_rows' ) || ! function_exists( 'bokun_business_get_expenses' ) ) {
+                return '';
+            }
+
+            $rows     = bokun_analytics_get_rows();
+            $partners = function_exists( 'bokun_partners_products_get_map' ) ? bokun_partners_products_get_map() : array();
+            $expenses = bokun_business_get_expenses();
+            $currency = function_exists( 'bokun_business_reporting_currency' ) ? bokun_business_reporting_currency() : 'EUR';
+            $months   = function_exists( 'bokun_analytics_get_window_months' ) ? (int) bokun_analytics_get_window_months() : 3;
+            $uid      = 'bokun-bizdash-' . wp_rand( 1000, 9999 );
+
+            // The exact calendar months of the analytics window (last N months,
+            // by creation date), so the client builds the reporting period from
+            // the window itself — not only from months that happen to have
+            // bookings — and a month with no bookings still counts (and is
+            // charged its overhead) instead of inflating the monthly average.
+            $window_months = array();
+            try {
+                $now = new DateTime( 'now', new DateTimeZone( 'UTC' ) );
+                $anchor = ( clone $now )->modify( 'first day of this month' );
+                for ( $i = $months - 1; $i >= 0; $i-- ) {
+                    $window_months[] = ( clone $anchor )->modify( '-' . (int) $i . ' months' )->format( 'Y-m' );
+                }
+                $current_month = $now->format( 'Y-m' );
+            } catch ( Exception $e ) {
+                $current_month = gmdate( 'Y-m' );
+            }
+
+            $cfg = array(
+                'currency'      => $currency,
+                'window_months' => $window_months,
+                'current_month' => $current_month,
+            );
+
+            $l10n = array(
+                'title'          => __( 'Business Results', 'BOKUN_txt_domain' ),
+                'monthlyOh'      => __( 'Monthly overhead', 'BOKUN_txt_domain' ),
+                'annualOh'       => __( 'Annual overhead', 'BOKUN_txt_domain' ),
+                'avgMargin'      => __( 'Avg monthly margin', 'BOKUN_txt_domain' ),
+                'monthlyProfit'  => __( 'Monthly operating profit', 'BOKUN_txt_domain' ),
+                'breakEven'      => __( 'Break-even', 'BOKUN_txt_domain' ),
+                'coverage'       => __( 'Catalog coverage', 'BOKUN_txt_domain' ),
+                'overMonths'     => __( 'over %d month(s)', 'BOKUN_txt_domain' ),
+                'perMonthBk'     => __( '%s bookings / month', 'BOKUN_txt_domain' ),
+                'perBooking'     => __( '%s / booking margin', 'BOKUN_txt_domain' ),
+                'unmatchedGross' => __( '%s gross not in catalog', 'BOKUN_txt_domain' ),
+                'pnl'            => __( 'Profit & loss', 'BOKUN_txt_domain' ),
+                'grossMatched'   => __( 'Gross revenue (catalog-matched)', 'BOKUN_txt_domain' ),
+                'partnerCost'    => __( 'Partner cost', 'BOKUN_txt_domain' ),
+                'netMargin'      => __( 'Net revenue (margin)', 'BOKUN_txt_domain' ),
+                'overhead'       => __( 'Overhead expenses', 'BOKUN_txt_domain' ),
+                'opProfit'       => __( 'Operating profit', 'BOKUN_txt_domain' ),
+                'perMonth'       => __( 'Per month', 'BOKUN_txt_domain' ),
+                'period'         => __( 'This period', 'BOKUN_txt_domain' ),
+                'annual'         => __( 'Annualized', 'BOKUN_txt_domain' ),
+                'expenses'       => __( 'Expense breakdown', 'BOKUN_txt_domain' ),
+                'byCategory'     => __( 'By category (monthly)', 'BOKUN_txt_domain' ),
+                'item'           => __( 'Item', 'BOKUN_txt_domain' ),
+                'category'       => __( 'Category', 'BOKUN_txt_domain' ),
+                'cost'           => __( 'Cost', 'BOKUN_txt_domain' ),
+                'monthlyCol'     => __( 'Monthly', 'BOKUN_txt_domain' ),
+                'annualCol'      => __( 'Annual', 'BOKUN_txt_domain' ),
+                'share'          => __( 'Share', 'BOKUN_txt_domain' ),
+                'notes'          => __( 'Notes', 'BOKUN_txt_domain' ),
+                'trend'          => __( 'Monthly margin vs overhead', 'BOKUN_txt_domain' ),
+                'marginLeg'      => __( 'Net margin', 'BOKUN_txt_domain' ),
+                'overheadLeg'    => __( 'Overhead', 'BOKUN_txt_domain' ),
+                'profitLeg'      => __( 'Operating profit', 'BOKUN_txt_domain' ),
+                'oneTime'        => __( 'one-off', 'BOKUN_txt_domain' ),
+                'inactive'       => __( 'inactive', 'BOKUN_txt_domain' ),
+                'excludedCur'    => __( '%1$d expense(s) in another currency are not shown (only %2$s is combined with revenue).', 'BOKUN_txt_domain' ),
+                'yearly'         => __( '/ year', 'BOKUN_txt_domain' ),
+                'monthlyFreq'    => __( '/ month', 'BOKUN_txt_domain' ),
+                'noRev'          => __( 'No bookings in %s in this period, so revenue cannot be combined with expenses yet.', 'BOKUN_txt_domain' ),
+                'noExp'          => __( 'No expenses are configured. Edit includes/data/business-expenses.php to add them.', 'BOKUN_txt_domain' ),
+                'noData'         => __( 'No data for this period.', 'BOKUN_txt_domain' ),
+                'profitLine'     => __( 'After %1$s overhead you clear %2$s per month.', 'BOKUN_txt_domain' ),
+                'lossLine'       => __( 'Overhead (%1$s) is above your margin — a %2$s monthly loss.', 'BOKUN_txt_domain' ),
+                'partialNote'    => __( 'The first and last months in the window may be partial, so monthly figures are averages over the bookings on hand.', 'BOKUN_txt_domain' ),
+            );
+
+            ob_start();
+            ?>
+            <div class="bokun-andash bokun-bizdash" id="<?php echo esc_attr( $uid ); ?>" data-rows="<?php echo (int) count( $rows ); ?>">
+                <div class="bokun-andash__head">
+                    <h2 class="bokun-andash__title"><?php esc_html_e( 'Business Results', 'BOKUN_txt_domain' ); ?></h2>
+                    <p class="bokun-andash__sub">
+                        <?php
+                        printf(
+                            /* translators: 1: number of months, 2: currency code. */
+                            esc_html__( 'Operating profit over the last %1$d months (by booking creation date): your booking margin minus your overhead expenses, in %2$s.', 'BOKUN_txt_domain' ),
+                            (int) $months,
+                            esc_html( $currency )
+                        );
+                        ?>
+                    </p>
+                </div>
+
+                <?php if ( empty( $rows ) ) : ?>
+                    <div class="bokun-andash__empty">
+                        <?php esc_html_e( 'No analytics records yet. Open Bokun Bookings Management → Analytics Data and click “Rebuild now”, or run an import.', 'BOKUN_txt_domain' ); ?>
+                    </div>
+                <?php else : ?>
+                    <div class="bokun-bizdash__notice" data-biz-notice hidden></div>
+                    <div class="bokun-andash__insights" data-biz-insights></div>
+                    <div class="bokun-andash__kpis" data-biz-kpis></div>
+
+                    <div class="bokun-andash__card">
+                        <div class="bokun-bizdash__cardhead">
+                            <h3><?php esc_html_e( 'Profit &amp; loss', 'BOKUN_txt_domain' ); ?></h3>
+                            <div class="bokun-andash__metric bokun-bizdash__modes" role="group" aria-label="<?php esc_attr_e( 'P&L period', 'BOKUN_txt_domain' ); ?>">
+                                <button type="button" class="bokun-andash__seg is-active" data-biz-mode="month"><?php esc_html_e( 'Per month', 'BOKUN_txt_domain' ); ?></button>
+                                <button type="button" class="bokun-andash__seg" data-biz-mode="period"><?php esc_html_e( 'This period', 'BOKUN_txt_domain' ); ?></button>
+                                <button type="button" class="bokun-andash__seg" data-biz-mode="annual"><?php esc_html_e( 'Annualized', 'BOKUN_txt_domain' ); ?></button>
+                            </div>
+                        </div>
+                        <div class="bokun-bizdash__pnl">
+                            <div class="bokun-bizdash__waterfall" data-biz-waterfall></div>
+                            <div class="bokun-bizdash__statement" data-biz-statement></div>
+                        </div>
+                    </div>
+
+                    <div class="bokun-bizdash__grid">
+                        <div class="bokun-andash__card">
+                            <h3><?php esc_html_e( 'Expense breakdown (monthly)', 'BOKUN_txt_domain' ); ?></h3>
+                            <div data-biz-catbars></div>
+                        </div>
+                        <div class="bokun-andash__card bokun-andash__card--wide">
+                            <h3><?php esc_html_e( 'Monthly margin vs overhead', 'BOKUN_txt_domain' ); ?></h3>
+                            <div class="bokun-andash__trend" data-biz-trend></div>
+                        </div>
+                    </div>
+
+                    <div class="bokun-andash__card">
+                        <h3><?php esc_html_e( 'Expenses', 'BOKUN_txt_domain' ); ?></h3>
+                        <div class="bokun-bizdash__table-wrap" data-biz-items></div>
+                    </div>
+
+                    <script type="application/json" data-biz-rows><?php echo wp_json_encode( $rows ); ?></script>
+                    <script type="application/json" data-biz-partners><?php echo wp_json_encode( $partners ); ?></script>
+                    <script type="application/json" data-biz-expenses><?php echo wp_json_encode( $expenses ); ?></script>
+                    <script type="application/json" data-biz-config><?php echo wp_json_encode( $cfg ); ?></script>
+                    <script type="application/json" data-biz-l10n><?php echo wp_json_encode( $l10n ); ?></script>
+                <?php endif; ?>
+            </div>
+
+            <style>
+                .bokun-bizdash { --an-surface:#fff; --an-ink:#1d2327; --an-ink-2:#646970; --an-line:#e2e4e7; --an-blue:#2a78d6; --an-blue-soft:rgba(42,120,214,.14); --an-good:#008300; --an-warn:#eda100; --an-crit:#e34948; --an-c1:#2a78d6; --an-c2:#eb6834; --an-c3:#1baf7a; --an-c4:#eda100; --an-c5:#e87ba4; --an-c6:#4a3aa7; color:var(--an-ink); }
+                @media (prefers-color-scheme: dark) {
+                    .bokun-bizdash { --an-surface:#1f1f1e; --an-ink:#f2f2f0; --an-ink-2:#b5b5ad; --an-line:#3a3a38; --an-blue:#3987e5; --an-blue-soft:rgba(57,135,229,.20); --an-good:#2faa4a; --an-warn:#c98500; --an-crit:#e66767; --an-c1:#3987e5; --an-c2:#d95926; --an-c3:#199e70; --an-c4:#c98500; --an-c5:#d55181; --an-c6:#9085e9; }
+                }
+                .bokun-bizdash__notice { background:var(--an-blue-soft); border:1px solid var(--an-line); border-radius:10px; padding:12px 14px; margin-bottom:16px; font-size:13px; }
+                .bokun-bizdash__cardhead { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:10px; }
+                .bokun-bizdash__cardhead h3 { margin:0; font-size:15px; }
+                .bokun-bizdash__pnl { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); gap:18px; align-items:start; }
+                @media (max-width:720px) { .bokun-bizdash__pnl { grid-template-columns:1fr; } }
+                .bokun-bizdash__statement { display:flex; flex-direction:column; gap:2px; font-size:14px; }
+                .bokun-bizdash__line { display:flex; justify-content:space-between; gap:12px; padding:7px 2px; border-bottom:1px solid var(--an-line); }
+                .bokun-bizdash__line .amt { font-variant-numeric:tabular-nums; white-space:nowrap; }
+                .bokun-bizdash__line--sub { font-weight:600; border-bottom:2px solid var(--an-line); }
+                .bokun-bizdash__line--total { font-weight:700; font-size:16px; border-bottom:0; margin-top:4px; }
+                .bokun-bizdash__pos { color:var(--an-good); }
+                .bokun-bizdash__neg { color:var(--an-crit); }
+                .bokun-bizdash__grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr); gap:16px; }
+                @media (max-width:860px) { .bokun-bizdash__grid { grid-template-columns:1fr; } }
+                .bokun-bizdash__grid .bokun-andash__card { margin-bottom:0; }
+                .bokun-bizdash__table-wrap { overflow-x:auto; }
+                .bokun-bizdash__table { width:100%; border-collapse:collapse; font-size:13px; }
+                .bokun-bizdash__table th, .bokun-bizdash__table td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--an-line); white-space:nowrap; }
+                .bokun-bizdash__table th { color:var(--an-ink-2); font-weight:600; text-transform:uppercase; font-size:11px; letter-spacing:.03em; }
+                .bokun-bizdash__table td.num, .bokun-bizdash__table th.num { text-align:right; font-variant-numeric:tabular-nums; }
+                .bokun-bizdash__pill { display:inline-block; padding:1px 8px; border-radius:999px; background:var(--an-blue-soft); font-size:11px; }
+                .bokun-bizdash__tip { position:absolute; transform:translate(-50%,-115%); background:var(--an-ink); color:var(--an-surface); padding:4px 8px; border-radius:6px; font-size:12px; white-space:nowrap; pointer-events:none; opacity:0; transition:opacity .1s; }
+            </style>
+
+            <script>
+            ( function () {
+                var root = document.getElementById( '<?php echo esc_js( $uid ); ?>' );
+                if ( ! root ) { return; }
+                var rowsEl = root.querySelector( '[data-biz-rows]' );
+                if ( ! rowsEl ) { return; }
+
+                function readJson( sel, fb ) { var el = root.querySelector( sel ); if ( ! el ) { return fb; } try { return JSON.parse( el.textContent || '' ); } catch ( e ) { return fb; } }
+                var ROWS = readJson( '[data-biz-rows]', [] );
+                var PARTNERS = readJson( '[data-biz-partners]', {} );
+                var ALL_EXPENSES = readJson( '[data-biz-expenses]', [] );
+                var CFG = readJson( '[data-biz-config]', {} );
+                var L = readJson( '[data-biz-l10n]', {} );
+                var CUR = ( CFG.currency || 'EUR' );
+                var WINDOW_MONTHS = ( CFG.window_months && CFG.window_months.length ) ? CFG.window_months.slice() : [];
+                var CURMONTH = CFG.current_month || '';
+                // Only expenses in the reporting currency are combined with
+                // revenue; a different-currency item is never summed as if it
+                // were the same money. Any excluded items are surfaced in the
+                // notice so a currency typo in the config is visible.
+                var EXPENSES = ALL_EXPENSES.filter( function ( e ) { return ( e.currency || CUR ) === CUR; } );
+                var EXCLUDED_CUR = ALL_EXPENSES.length - EXPENSES.length;
+
+                var started = false;
+                var mode = 'month';
+
+                function num( v ) { var n = parseFloat( v ); return isNaN( n ) ? 0 : n; }
+                function parts( r ) { return num( r.adult_participants ) + num( r.child_participants ) + num( r.infant_participants ); }
+                function esc( v ) { return ( v === null || v === undefined ) ? '' : String( v ); }
+                function escHtml( v ) { return esc( v ).replace( /&/g, '&amp;' ).replace( /</g, '&lt;' ).replace( />/g, '&gt;' ).replace( /"/g, '&quot;' ).replace( /'/g, '&#39;' ); }
+                function fmtInt( n ) { return Number( Math.round( n ) ).toLocaleString(); }
+                function fmtMoney( n ) { return Number( n ).toLocaleString( undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 } ); }
+                function money( n ) { return fmtMoney( n ) + ' ' + CUR; }
+                function dayStr( v ) { return esc( v ).slice( 0, 10 ); }
+                function hasNum( v ) { return v !== null && v !== undefined && v !== '' && ! isNaN( parseFloat( v ) ); }
+                function isEmpty( v ) { return v === null || v === undefined || v === ''; }
+                function fillTpl( s, a ) { var i = 0; return esc( s ).replace( /%(\d\$)?[ds]/g, function () { return a[ i++ ]; } ); }
+
+                // --- Join to partners catalog + precompute net revenue (identical to
+                // the Analytics tab, so the margin shown here matches it exactly). ---
+                function partnerFor( r ) {
+                    return ( ! isEmpty( r.partner_page_id ) ? PARTNERS[ String( r.partner_page_id ) ] : null ) || {};
+                }
+                ROWS.forEach( function ( r ) {
+                    var p = partnerFor( r );
+                    r.net_price = ( p.net_price === undefined ) ? null : p.net_price;
+                    var pax = parts( r );
+                    var partnerRefunded = ( r.partner_refunded === 1 || r.partner_refunded === '1' || r.partner_refunded === true );
+                    var isCancelled = ( r.is_cancelled === 1 || r.is_cancelled === '1' || r.is_cancelled === true );
+                    var wasMade = ( esc( r.result ) === 'full' || esc( r.result ) === 'partial' );
+                    var netCostFull = ( r.net_price !== null ) ? ( r.net_price * pax ) : null;
+                    if ( partnerRefunded ) {
+                        r._net_cost = 0; r._net_revenue = null; r._grossEarned = 0;
+                    } else if ( isCancelled ) {
+                        r._grossEarned = 0;
+                        if ( wasMade && netCostFull !== null ) { r._net_cost = netCostFull; r._net_revenue = 0 - netCostFull; }
+                        else { r._net_cost = null; r._net_revenue = null; }
+                    } else {
+                        r._net_cost = netCostFull;
+                        r._net_revenue = ( hasNum( r.price_amount ) && r.net_price !== null ) ? ( num( r.price_amount ) - netCostFull ) : null;
+                        r._grossEarned = hasNum( r.price_amount ) ? num( r.price_amount ) : 0;
+                    }
+                } );
+
+                // --- Revenue aggregates (scoped to the reporting currency). ---
+                var rev = ROWS.filter( function ( r ) { return esc( r.currency ) === CUR; } );
+                var G_total = 0, G_matched = 0, G_unmatched = 0, netMargin = 0, bookingsMatched = 0;
+                rev.forEach( function ( r ) {
+                    var ge = r._grossEarned || 0; G_total += ge;
+                    if ( r._net_revenue !== null ) { G_matched += ge; netMargin += r._net_revenue; bookingsMatched++; }
+                    else { G_unmatched += ge; }
+                } );
+                var partnerCost = G_matched - netMargin;
+
+                function monthKey( r ) { return dayStr( r.created_datetime ).slice( 0, 7 ); }
+                // The reporting period is the analytics window (every calendar
+                // month in it, booked or not), unioned with any month a row
+                // falls in, so an empty month still counts and carries its
+                // overhead instead of being dropped and inflating the average.
+                var monthsSet = {};
+                WINDOW_MONTHS.forEach( function ( m ) { if ( m ) { monthsSet[ m ] = 1; } } );
+                rev.forEach( function ( r ) { var m = monthKey( r ); if ( m ) { monthsSet[ m ] = 1; } } );
+                var months = Object.keys( monthsSet ).sort();
+                var nMonths = months.length || 1;
+
+                // --- Expense helpers + aggregates. ---
+                function expenseActive( e, ym ) {
+                    if ( ! ym ) { return true; }
+                    if ( e.start && e.start.slice( 0, 7 ) > ym ) { return false; }
+                    if ( e.end && e.end.slice( 0, 7 ) < ym ) { return false; }
+                    return true;
+                }
+                // A recurring expense counts toward the current run-rate only
+                // while it is active this month (a future start or past end —
+                // e.g. a cancelled subscription — drops out), matching how the
+                // monthly series charges it.
+                function isRunRate( e ) { return e.frequency !== 'one_time' && expenseActive( e, CURMONTH ); }
+                var monthlyOverhead = 0, annualOverhead = 0, orphanOneTime = 0;
+                EXPENSES.forEach( function ( e ) {
+                    if ( isRunRate( e ) ) { monthlyOverhead += num( e.monthly ); annualOverhead += num( e.annual ); }
+                    if ( e.frequency === 'one_time' && ! e.start ) { orphanOneTime += num( e.total ); }
+                } );
+                function overheadForMonth( ym ) {
+                    var s = 0;
+                    EXPENSES.forEach( function ( e ) {
+                        if ( e.frequency === 'one_time' ) { if ( e.start && e.start.slice( 0, 7 ) === ym ) { s += num( e.total ); } return; }
+                        if ( ! expenseActive( e, ym ) ) { return; }
+                        if ( e.frequency === 'monthly' ) { s += num( e.total ); }
+                        else if ( e.frequency === 'yearly' ) { s += num( e.total ) / 12; }
+                    } );
+                    return s;
+                }
+
+                var series = months.map( function ( m ) {
+                    var mnet = 0, mg = 0, hasM = false, bk = 0;
+                    rev.forEach( function ( r ) {
+                        if ( monthKey( r ) !== m ) { return; }
+                        bk++; mg += r._grossEarned || 0;
+                        if ( r._net_revenue !== null ) { mnet += r._net_revenue; hasM = true; }
+                    } );
+                    var ov = overheadForMonth( m );
+                    return { ym: m, margin: mnet, gross: mg, hasMargin: hasM, overhead: ov, profit: mnet - ov, bookings: bk };
+                } );
+                if ( series.length && orphanOneTime ) { series[ 0 ].overhead += orphanOneTime; series[ 0 ].profit = series[ 0 ].margin - series[ 0 ].overhead; }
+
+                var periodOverhead = series.reduce( function ( s, m ) { return s + m.overhead; }, 0 );
+                var periodProfit = netMargin - periodOverhead;
+                var avgMonthlyMargin = netMargin / nMonths;
+                var avgMarginPerBooking = bookingsMatched ? ( netMargin / bookingsMatched ) : null;
+                var breakEvenBookings = ( avgMarginPerBooking && avgMarginPerBooking > 0 ) ? ( monthlyOverhead / avgMarginPerBooking ) : null;
+                var coverage = G_total > 0 ? ( G_matched / G_total * 100 ) : null;
+
+                // mode-scaled P&L figures for the waterfall + statement.
+                function scaled() {
+                    if ( mode === 'period' ) {
+                        return { gross: G_matched, partner: partnerCost, margin: netMargin, overhead: periodOverhead, profit: periodProfit };
+                    }
+                    if ( mode === 'annual' ) {
+                        var f = 12 / nMonths;
+                        return { gross: G_matched * f, partner: partnerCost * f, margin: netMargin * f, overhead: annualOverhead, profit: ( avgMonthlyMargin * 12 ) - annualOverhead };
+                    }
+                    return { gross: G_matched / nMonths, partner: partnerCost / nMonths, margin: avgMonthlyMargin, overhead: monthlyOverhead, profit: avgMonthlyMargin - monthlyOverhead };
+                }
+
+                function colVar( name, fb ) { var v = getComputedStyle( root ).getPropertyValue( name ).trim(); return v || fb; }
+
+                // ---------- renderers ----------
+                function renderKpis() {
+                    var monthlyProfit = avgMonthlyMargin - monthlyOverhead;
+                    function cls( n ) { return n < 0 ? 'bokun-bizdash__neg' : 'bokun-bizdash__pos'; }
+                    var tiles = [
+                        { label: L.monthlyOh, value: money( monthlyOverhead ) },
+                        { label: L.avgMargin, value: money( avgMonthlyMargin ), sub: fillTpl( L.overMonths, [ nMonths ] ) },
+                        { label: L.monthlyProfit, value: money( monthlyProfit ), vcls: cls( monthlyProfit ) },
+                        { label: L.breakEven, value: breakEvenBookings !== null ? fillTpl( L.perMonthBk, [ fmtInt( Math.ceil( breakEvenBookings ) ) ] ) : '—', sub: avgMarginPerBooking !== null ? fillTpl( L.perBooking, [ money( avgMarginPerBooking ) ] ) : '' },
+                        { label: L.coverage, value: coverage !== null ? ( Math.round( coverage ) + '%' ) : '—', sub: G_unmatched > 0 ? fillTpl( L.unmatchedGross, [ money( G_unmatched ) ] ) : '' },
+                        { label: L.annualOh, value: money( annualOverhead ) }
+                    ];
+                    root.querySelector( '[data-biz-kpis]' ).innerHTML = tiles.map( function ( t ) {
+                        return '<div class="bokun-andash__kpi"><div class="bokun-andash__kpi-label">' + escHtml( t.label ) + '</div><div class="bokun-andash__kpi-value ' + ( t.vcls || '' ) + '">' + escHtml( t.value ) + '</div>' + ( t.sub ? '<div class="bokun-andash__kpi-sub">' + escHtml( t.sub ) + '</div>' : '' ) + '</div>';
+                    } ).join( '' );
+                }
+
+                function renderInsights() {
+                    var monthlyProfit = avgMonthlyMargin - monthlyOverhead;
+                    var cards = [];
+                    if ( monthlyProfit >= 0 ) {
+                        cards.push( { label: L.monthlyProfit, value: money( monthlyProfit ), sub: fillTpl( L.profitLine, [ money( monthlyOverhead ), money( monthlyProfit ) ] ) } );
+                    } else {
+                        cards.push( { label: L.monthlyProfit, value: money( monthlyProfit ), sub: fillTpl( L.lossLine, [ money( monthlyOverhead ), money( Math.abs( monthlyProfit ) ) ] ) } );
+                    }
+                    root.querySelector( '[data-biz-insights]' ).innerHTML = cards.map( function ( c ) {
+                        return '<div class="bokun-andash__insight"><div class="bokun-andash__insight-label">' + escHtml( c.label ) + '</div><div class="bokun-andash__insight-value">' + escHtml( c.value ) + '</div><div class="bokun-andash__insight-sub">' + escHtml( c.sub ) + '</div></div>';
+                    } ).join( '' );
+                }
+
+                function renderStatement( s ) {
+                    function amt( v, sign ) {
+                        var cls = v < 0 ? 'bokun-bizdash__neg' : '';
+                        var pre = ( sign && v > 0 ) ? '+' : ( sign && v < 0 ? '−' : '' );
+                        var disp = sign ? ( pre + money( Math.abs( v ) ) ) : money( v );
+                        return '<span class="amt ' + cls + '">' + escHtml( disp ) + '</span>';
+                    }
+                    var rows = [
+                        [ L.grossMatched, amt( s.gross, false ), '' ],
+                        [ L.partnerCost, amt( -s.partner, true ), '' ],
+                        [ L.netMargin, amt( s.margin, false ), 'sub' ],
+                        [ L.overhead, amt( -s.overhead, true ), '' ],
+                        [ L.opProfit, '<span class="amt ' + ( s.profit < 0 ? 'bokun-bizdash__neg' : 'bokun-bizdash__pos' ) + '">' + escHtml( money( s.profit ) ) + '</span>', 'total' ]
+                    ];
+                    root.querySelector( '[data-biz-statement]' ).innerHTML = rows.map( function ( r ) {
+                        var m = r[ 2 ] ? ( ' bokun-bizdash__line--' + r[ 2 ] ) : '';
+                        return '<div class="bokun-bizdash__line' + m + '"><span>' + escHtml( r[ 0 ] ) + '</span>' + r[ 1 ] + '</div>';
+                    } ).join( '' );
+                }
+
+                function renderWaterfall( s ) {
+                    var el = root.querySelector( '[data-biz-waterfall]' );
+                    var cBlue = colVar( '--an-blue', '#2a78d6' ), cCrit = colVar( '--an-crit', '#e34948' ), cGood = colVar( '--an-good', '#008300' ), cTeal = colVar( '--an-c3', '#1baf7a' ), cLine = colVar( '--an-line', '#e2e4e7' ), cInk2 = colVar( '--an-ink-2', '#646970' );
+                    // steps: base gross, -partner, =margin(subtotal), -overhead, =profit(total)
+                    var steps = [
+                        { label: L.grossMatched, delta: s.gross, kind: 'base' },
+                        { label: L.partnerCost, delta: -s.partner, kind: 'flow' },
+                        { label: L.netMargin, kind: 'sub', total: s.margin },
+                        { label: L.overhead, delta: -s.overhead, kind: 'flow' },
+                        { label: L.opProfit, kind: 'total', total: s.profit }
+                    ];
+                    // compute running + bar extents
+                    var run = 0, bars = [];
+                    steps.forEach( function ( st ) {
+                        if ( st.kind === 'base' ) { bars.push( { lo: 0, hi: st.delta, v: st.delta, c: cBlue, label: st.label } ); run = st.delta; }
+                        else if ( st.kind === 'flow' ) { var lo = run + st.delta, hi = run; bars.push( { lo: Math.min( lo, hi ), hi: Math.max( lo, hi ), v: st.delta, c: cCrit, label: st.label } ); run += st.delta; }
+                        else if ( st.kind === 'sub' ) { bars.push( { lo: Math.min( 0, st.total ), hi: Math.max( 0, st.total ), v: st.total, c: cTeal, label: st.label } ); run = st.total; }
+                        else { bars.push( { lo: Math.min( 0, st.total ), hi: Math.max( 0, st.total ), v: st.total, c: st.total < 0 ? cCrit : cGood, label: st.label } ); run = st.total; }
+                    } );
+                    var lo = 0, hi = 0;
+                    bars.forEach( function ( b ) { lo = Math.min( lo, b.lo ); hi = Math.max( hi, b.hi ); } );
+                    if ( hi === lo ) { hi = lo + 1; }
+                    var W = 420, H = 230, padT = 10, padB = 46, padL = 8, padR = 8;
+                    var innerH = H - padT - padB, innerW = W - padL - padR;
+                    var n = bars.length, gap = 10, bw = ( innerW - gap * ( n - 1 ) ) / n;
+                    var span = hi - lo;
+                    function y( v ) { return padT + innerH - ( ( v - lo ) / span ) * innerH; }
+                    var y0 = y( 0 );
+                    var svg = '';
+                    svg += '<line x1="' + padL + '" y1="' + y0.toFixed( 1 ) + '" x2="' + ( W - padR ) + '" y2="' + y0.toFixed( 1 ) + '" stroke="' + cInk2 + '" stroke-width="1"/>';
+                    bars.forEach( function ( b, i ) {
+                        var x = padL + i * ( bw + gap );
+                        var yt = y( b.hi ), yb = y( b.lo ), h = Math.max( 1, yb - yt );
+                        svg += '<rect x="' + x.toFixed( 1 ) + '" y="' + yt.toFixed( 1 ) + '" width="' + bw.toFixed( 1 ) + '" height="' + h.toFixed( 1 ) + '" rx="3" fill="' + b.c + '" data-bi="' + i + '"/>';
+                        var vlabel = ( steps[ i ].kind === 'flow' ) ? ( ( b.v < 0 ? '−' : '+' ) + fmtInt( Math.abs( b.v ) ) ) : fmtInt( b.v );
+                        svg += '<text x="' + ( x + bw / 2 ).toFixed( 1 ) + '" y="' + ( yt - 4 ).toFixed( 1 ) + '" text-anchor="middle" font-size="10" fill="' + cInk2 + '">' + escHtml( vlabel ) + '</text>';
+                        // wrapped short label under axis
+                        var short = b.label.length > 16 ? b.label.slice( 0, 15 ) + '…' : b.label;
+                        svg += '<text x="' + ( x + bw / 2 ).toFixed( 1 ) + '" y="' + ( H - padB + 16 ).toFixed( 1 ) + '" text-anchor="middle" font-size="9.5" fill="' + cInk2 + '">' + escHtml( short ) + '</text>';
+                    } );
+                    el.style.position = 'relative';
+                    el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + escHtml( L.pnl ) + '" style="width:100%;height:auto">' + svg + '</svg><div class="bokun-bizdash__tip" data-biz-wtip></div>';
+                    var tip = el.querySelector( '[data-biz-wtip]' );
+                    el.querySelectorAll( '[data-bi]' ).forEach( function ( rc ) {
+                        rc.addEventListener( 'mousemove', function ( ev ) { var b = bars[ +rc.getAttribute( 'data-bi' ) ]; var rect = el.getBoundingClientRect(); tip.style.left = ( ev.clientX - rect.left ) + 'px'; tip.style.top = ( ev.clientY - rect.top ) + 'px'; tip.style.opacity = '1'; tip.textContent = b.label + ': ' + money( b.v ); } );
+                        rc.addEventListener( 'mouseleave', function () { tip.style.opacity = '0'; } );
+                    } );
+                }
+
+                function renderCatBars() {
+                    var el = root.querySelector( '[data-biz-catbars]' );
+                    if ( ! EXPENSES.length ) { el.innerHTML = '<p class="bokun-andash__insight-sub">' + escHtml( L.noExp ) + '</p>'; return; }
+                    var cats = {};
+                    EXPENSES.forEach( function ( e ) { if ( ! isRunRate( e ) ) { return; } var k = e.category || L.other || 'Other'; cats[ k ] = ( cats[ k ] || 0 ) + num( e.monthly ); } );
+                    var list = Object.keys( cats ).map( function ( k ) { return { label: k, metric: cats[ k ] }; } ).filter( function ( g ) { return g.metric > 0; } );
+                    list.sort( function ( a, b ) { return b.metric - a.metric; } );
+                    var cols = [ '--an-c1', '--an-c2', '--an-c3', '--an-c4', '--an-c5', '--an-c6' ];
+                    var max = list.reduce( function ( m, g ) { return Math.max( m, g.metric ); }, 0 );
+                    if ( ! list.length ) { el.innerHTML = '<p class="bokun-andash__insight-sub">' + escHtml( L.noData ) + '</p>'; return; }
+                    el.innerHTML = '<div class="bokun-andash__barlist">' + list.map( function ( g, i ) {
+                        var w = max ? Math.max( 2, Math.round( ( g.metric / max ) * 100 ) ) : 2;
+                        var c = colVar( cols[ i % cols.length ], '#2a78d6' );
+                        return '<div class="bokun-andash__barrow"><span class="lab" title="' + escHtml( g.label ) + '">' + escHtml( g.label ) + '</span><span class="val">' + escHtml( money( g.metric ) ) + '</span><span class="bokun-andash__track"><span class="bokun-andash__fill" style="width:' + w + '%;background:' + c + '"></span></span></div>';
+                    } ).join( '' ) + '</div>';
+                }
+
+                function renderItems() {
+                    var el = root.querySelector( '[data-biz-items]' );
+                    if ( ! EXPENSES.length ) { el.innerHTML = '<p class="bokun-andash__insight-sub">' + escHtml( L.noExp ) + '</p>'; return; }
+                    var totalMonthly = monthlyOverhead || 1;
+                    var items = EXPENSES.slice().sort( function ( a, b ) { return num( b.monthly ) - num( a.monthly ); } );
+                    function freqLabel( e ) {
+                        if ( e.frequency === 'one_time' ) { return L.oneTime; }
+                        return ( e.frequency === 'yearly' ) ? L.yearly : L.monthlyFreq;
+                    }
+                    var body = items.map( function ( e ) {
+                        // A recurring expense that is not active this month (future
+                        // start or past end) is not in the current run-rate, so its
+                        // monthly/annual/share read "—" and the total it feeds is 0.
+                        var inactive = ( e.frequency !== 'one_time' ) && ! isRunRate( e );
+                        var costTxt = money( num( e.total ) ) + ' ' + freqLabel( e ) + ( e.quantity > 1 ? ' ×' + e.quantity : '' ) + ( inactive ? ' · ' + ( L.inactive || 'inactive' ) : '' );
+                        var noRate = ( e.frequency === 'one_time' ) || inactive;
+                        var share = noRate ? '—' : ( Math.round( num( e.monthly ) / totalMonthly * 100 ) + '%' );
+                        var mo = noRate ? '—' : money( num( e.monthly ) );
+                        var yr = noRate ? '—' : money( num( e.annual ) );
+                        return '<tr><td>' + escHtml( e.name ) + '</td><td><span class="bokun-bizdash__pill">' + escHtml( e.category ) + '</span></td><td>' + escHtml( costTxt ) + '</td><td class="num">' + escHtml( mo ) + '</td><td class="num">' + escHtml( yr ) + '</td><td class="num">' + escHtml( share ) + '</td><td>' + escHtml( e.notes || '' ) + '</td></tr>';
+                    } ).join( '' );
+                    var foot = '<tr><td><strong>' + escHtml( L.monthlyOh ) + '</strong></td><td></td><td></td><td class="num"><strong>' + escHtml( money( monthlyOverhead ) ) + '</strong></td><td class="num"><strong>' + escHtml( money( annualOverhead ) ) + '</strong></td><td class="num">100%</td><td></td></tr>';
+                    el.innerHTML = '<table class="bokun-bizdash__table"><thead><tr><th>' + escHtml( L.item ) + '</th><th>' + escHtml( L.category ) + '</th><th>' + escHtml( L.cost ) + '</th><th class="num">' + escHtml( L.monthlyCol ) + '</th><th class="num">' + escHtml( L.annualCol ) + '</th><th class="num">' + escHtml( L.share ) + '</th><th>' + escHtml( L.notes ) + '</th></tr></thead><tbody>' + body + '</tbody><tfoot>' + foot + '</tfoot></table>';
+                }
+
+                function renderTrend() {
+                    var el = root.querySelector( '[data-biz-trend]' );
+                    if ( ! series.length ) { el.innerHTML = '<p class="bokun-andash__insight-sub">' + escHtml( L.noData ) + '</p>'; return; }
+                    var cBlue = colVar( '--an-blue', '#2a78d6' ), cWarn = colVar( '--an-warn', '#eda100' ), cGood = colVar( '--an-good', '#008300' ), cCrit = colVar( '--an-crit', '#e34948' ), cLine = colVar( '--an-line', '#e2e4e7' ), cInk2 = colVar( '--an-ink-2', '#646970' );
+                    var W = 820, H = 260, padL = 50, padB = 40, padT = 12, padR = 12;
+                    var innerW = W - padL - padR, innerH = H - padT - padB;
+                    var vals = [];
+                    series.forEach( function ( m ) { vals.push( m.margin, m.overhead, m.profit ); } );
+                    var hi = Math.max.apply( null, vals.concat( [ 0 ] ) );
+                    var lo = Math.min.apply( null, vals.concat( [ 0 ] ) );
+                    if ( hi === lo ) { hi = lo + 1; }
+                    var span = hi - lo;
+                    function y( v ) { return padT + innerH - ( ( v - lo ) / span ) * innerH; }
+                    var y0 = y( 0 );
+                    var n = series.length, slot = innerW / n, bw = Math.min( 26, slot / 3.2 );
+                    var svg = '';
+                    for ( var g = 0; g <= 4; g++ ) { var gv = lo + ( span / 4 ) * g, gy = y( gv ); svg += '<line x1="' + padL + '" y1="' + gy.toFixed( 1 ) + '" x2="' + ( W - padR ) + '" y2="' + gy.toFixed( 1 ) + '" stroke="' + cLine + '"/>'; svg += '<text x="' + ( padL - 6 ) + '" y="' + ( gy + 3 ).toFixed( 1 ) + '" text-anchor="end" font-size="10" fill="' + cInk2 + '">' + fmtInt( gv ) + '</text>'; }
+                    svg += '<line x1="' + padL + '" y1="' + y0.toFixed( 1 ) + '" x2="' + ( W - padR ) + '" y2="' + y0.toFixed( 1 ) + '" stroke="' + cInk2 + '"/>';
+                    var profPts = [];
+                    series.forEach( function ( m, i ) {
+                        var cx = padL + slot * i + slot / 2;
+                        var xM = cx - bw - 1, xO = cx + 1;
+                        function bar( x, v, c ) { var yt = y( Math.max( 0, v ) ), yb = y( Math.min( 0, v ) ); return '<rect x="' + x.toFixed( 1 ) + '" y="' + yt.toFixed( 1 ) + '" width="' + bw.toFixed( 1 ) + '" height="' + Math.max( 1, yb - yt ).toFixed( 1 ) + '" rx="2" fill="' + c + '"/>'; }
+                        svg += bar( xM, m.margin, cBlue );
+                        svg += bar( xO, m.overhead, cWarn );
+                        profPts.push( [ cx, y( m.profit ) ] );
+                        svg += '<text x="' + cx.toFixed( 1 ) + '" y="' + ( H - padB + 15 ).toFixed( 1 ) + '" text-anchor="middle" font-size="10" fill="' + cInk2 + '">' + escHtml( m.ym.slice( 2 ) ) + '</text>';
+                    } );
+                    var pline = profPts.map( function ( p, i ) { return ( i ? 'L' : 'M' ) + p[ 0 ].toFixed( 1 ) + ' ' + p[ 1 ].toFixed( 1 ); } ).join( ' ' );
+                    svg += '<path d="' + pline + '" fill="none" stroke="' + cGood + '" stroke-width="2"/>';
+                    profPts.forEach( function ( p, i ) { svg += '<circle cx="' + p[ 0 ].toFixed( 1 ) + '" cy="' + p[ 1 ].toFixed( 1 ) + '" r="3" fill="' + ( series[ i ].profit < 0 ? cCrit : cGood ) + '"/>'; } );
+                    var legend = '<div class="bokun-andash__legend"><span><i style="background:' + cBlue + '"></i>' + escHtml( L.marginLeg ) + '</span><span><i style="background:' + cWarn + '"></i>' + escHtml( L.overheadLeg ) + '</span><span><i style="background:' + cGood + '"></i>' + escHtml( L.profitLeg ) + '</span></div>';
+                    el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + escHtml( L.trend ) + '" style="width:100%;height:auto">' + svg + '</svg>' + legend;
+                }
+
+                function renderNotice() {
+                    var el = root.querySelector( '[data-biz-notice]' );
+                    var msgs = [];
+                    if ( ! rev.length ) { msgs.push( fillTpl( L.noRev, [ CUR ] ) ); }
+                    if ( ! EXPENSES.length ) { msgs.push( L.noExp ); }
+                    if ( EXCLUDED_CUR > 0 ) { msgs.push( fillTpl( L.excludedCur, [ EXCLUDED_CUR, CUR ] ) ); }
+                    if ( rev.length ) { msgs.push( L.partialNote ); }
+                    if ( msgs.length ) { el.hidden = false; el.innerHTML = msgs.map( escHtml ).join( '<br>' ); }
+                    else { el.hidden = true; }
+                }
+
+                function renderPnl() { var s = scaled(); renderWaterfall( s ); renderStatement( s ); }
+
+                function recompute() {
+                    renderNotice(); renderInsights(); renderKpis(); renderPnl(); renderCatBars(); renderItems(); renderTrend();
+                }
+
+                root.querySelectorAll( '[data-biz-mode]' ).forEach( function ( btn ) {
+                    btn.addEventListener( 'click', function () {
+                        mode = btn.getAttribute( 'data-biz-mode' );
+                        root.querySelectorAll( '[data-biz-mode]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } );
+                        renderPnl();
+                    } );
+                } );
+
+                function init() { if ( started ) { return; } started = true; recompute(); }
+                root.closest( '[data-bokun-tabs]' ) && ( root.closest( '[data-bokun-tabs]' ).bokunBusinessInit = init );
                 var panel = root.closest( '[data-tab-panel]' );
                 if ( ! panel || ! panel.hidden ) { init(); }
             } )();

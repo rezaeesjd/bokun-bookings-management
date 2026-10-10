@@ -49,12 +49,63 @@ Three layers, each in its own file under `includes/`:
 3. **Dashboard UI** — `BOKUN_Shortcode::render_analytics_panel()` in
    `includes/bokun_shortcode.class.php`. It is the **Analytics** tab;
    `wrap_dashboard_tabs()` puts the existing bookings dashboard in the first
-   tab and this panel in the second. The panel ships the source rows + the
-   partners map as inline JSON and does all filtering, joining, aggregation and
-   charting **client-side**.
+   tab, this panel in the second, and the **Business Results** panel
+   (`render_business_panel()`) in the third. The panel ships the source rows +
+   the partners map as inline JSON and does all filtering, joining, aggregation
+   and charting **client-side**.
+4. **Business overhead** — `bokun-business.php` loads the operator's expenses
+   from the config file `includes/data/business-expenses.php` (no table, no
+   admin CRUD — hand-edited, overridable via the `bokun_business_expenses`
+   filter) and the **Business Results** tab combines them with the booking
+   margin to show operating profit. See "Business Results tab" below.
 
 `references/data-model.md` has the full column list and the booking-meta
 mappings. Read it before adding or renaming a source field.
+
+## Business Results tab (overhead + operating profit)
+
+The third dashboard tab answers "am I actually making money?" It reuses the
+**exact** net-revenue (margin) computation the Analytics tab does — the same
+rows + partners map, the same per-row enrichment block copied verbatim into
+`render_business_panel()`'s JS — then subtracts the operator's overhead so the
+margin shown here always matches the Analytics tab.
+
+- **Expenses are config, not data.** `includes/data/business-expenses.php`
+  returns `{ currency, items[] }`. Each item is `name`, `category`, `amount`
+  (per period), `quantity`, `frequency` (`monthly`|`yearly`|`one_time`),
+  optional `start`/`end` (`YYYY-MM-DD`) and `notes`. `bokun_business.php`
+  normalizes them (adds `total = amount × quantity`, a `monthly` and `annual`
+  equivalent — both 0 for `one_time`, which lands in its own month instead) and
+  exposes `bokun_business_get_expenses()`, `bokun_business_reporting_currency()`
+  (default EUR) and `bokun_business_monthly_overhead()`. There is no database
+  and no rebuild — editing the file is live on next page load.
+- **Single currency, by design.** Everything is the reporting currency (EUR).
+  Revenue is scoped to bookings in that currency (`rev = rows where
+  currency === CUR`); other-currency bookings are excluded from the P&L (never
+  converted, never mixed), consistent with the net-revenue currency rule.
+- **The P&L chain is built on catalog-matched bookings** so it is
+  arithmetically exact: `G_matched − partnerCost = netMargin` holds because
+  `netMargin = Σ _net_revenue` over matched rows and `partnerCost` is defined
+  as `G_matched − netMargin`. Unmatched bookings (gross but no catalog net
+  price) have `_net_revenue === null`, so they contribute gross but **no**
+  margin; they are surfaced separately as "catalog coverage %" and "€X gross
+  not in catalog" rather than being silently costed at zero. Operating profit =
+  `netMargin − overhead`.
+- **Run-rate vs period vs annual.** KPI tiles are the monthly run-rate (fixed
+  monthly overhead, avg monthly margin over the window, monthly operating
+  profit, break-even bookings/month, annual overhead, coverage). The P&L
+  waterfall + statement have a `[Per month | This period | Annualized]` toggle
+  (`scaled()`); all three modes preserve the gross→partner→margin→overhead→
+  profit identity. One-off (`one_time`) costs are excluded from the run-rate and
+  prorated to their own month in the monthly trend only.
+- **Charts** follow the same conventions as Analytics: inline SVG + CSS bars,
+  no library, palette from the shared `--an-*` CSS vars (the business root
+  carries `class="bokun-andash bokun-bizdash"` so it inherits the Analytics
+  card/KPI/barlist styling; `.bokun-bizdash` adds only the P&L/waterfall/table
+  styles). The waterfall is a floating-bar SVG; the monthly trend is grouped
+  margin-vs-overhead bars with an operating-profit line.
+- **Lazy init** like Analytics: `bokunBusinessInit` is attached to the tabs
+  root and fired on first open of the Business tab.
 
 ## The core business metric: net revenue
 

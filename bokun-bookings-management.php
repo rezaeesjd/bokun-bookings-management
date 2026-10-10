@@ -629,6 +629,16 @@ if ( file_exists( BOKUN_INCLUDES_DIR . "bokun-partners-products.php" ) ) {
 }
 
 /**
+ * Business results data layer (overhead expenses + operating profit).
+ *
+ * Loaded unconditionally so its config/filter helpers are available to the
+ * dashboard shortcode. It has no table — expenses come from a config file.
+ */
+if ( file_exists( BOKUN_INCLUDES_DIR . "bokun-business.php" ) ) {
+    include_once( BOKUN_INCLUDES_DIR . "bokun-business.php" );
+}
+
+/**
  * GitHub auto-sync.
  *
  * Merges the former "Github Plugin Installer and Updater" helper directly into
