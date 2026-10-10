@@ -194,6 +194,16 @@ the headline Revenue.
 - **Escape for HTML built via innerHTML.** `escHtml()` escapes `& < > " '` so a
   product/channel label can't break out of a `title="…"` attribute. Use it for
   every interpolated value, including attribute values.
+- **Responsive.** The dashboard must stay usable at phone width. The analytics
+  `<style>` carries the breakpoints: the filter sidebar + charts collapse to one
+  column at `max-width:900px`, and a `max-width:600px` block stacks the toolbar
+  (metric picker over full-width action buttons), densifies the KPI tiles
+  (`minmax(130px,1fr)`), makes tables scroll horizontally (`overflow:auto` wrap
+  + momentum) with tighter cells, and stacks the Business P&L mode toggle. The
+  tab nav scrolls horizontally rather than wrapping. The bookings dashboard
+  grid/cards collapse to one column at `600px` in `assets/css/bokun_front.css`.
+  Keep new controls inside these patterns (flex-wrap, full-width on mobile) so
+  nothing forces horizontal page overflow.
 - **i18n**: user-facing strings go through `__()` in PHP (text domain
   `BOKUN_txt_domain`) and are passed to the JS in the `L` object — keep JS free
   of hardcoded English.

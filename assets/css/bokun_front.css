@@ -1923,3 +1923,22 @@ body.bokun-dashboard-modal-open {
     width: 100%;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Small-screen (phone) overrides. Placed at the end of the stylesheet so these
+   equal-specificity rules win over the base .card / .body / .grid declarations
+   that appear earlier. A single full-width column (the 280/240px min tracks
+   would otherwise overflow narrow phones), tighter gaps and padding.
+--------------------------------------------------------------------------- */
+@media (max-width: 600px) {
+  .bokun-booking-dashboard__grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .bokun-booking-dashboard__card {
+    padding: 1rem;
+  }
+  .bokun-booking-dashboard__body {
+    grid-template-columns: 1fr;
+  }
+}

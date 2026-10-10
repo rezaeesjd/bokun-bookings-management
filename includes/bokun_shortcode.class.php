@@ -2935,6 +2935,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-dash-tabs__tab:hover { color:#1d2327; }
                 .bokun-dash-tabs__tab.is-active { color:#2271b1; border-bottom-color:#2271b1; }
                 .bokun-dash-tabs__panel[hidden] { display:none; }
+                @media (max-width:600px){
+                    .bokun-dash-tabs__nav { gap:0; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+                    .bokun-dash-tabs__tab { padding:10px 14px; font-size:14px; white-space:nowrap; flex:0 0 auto; }
+                }
             </style>
             <script>
                 ( function () {
@@ -3304,6 +3308,34 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash__trend svg { width:100%; height:auto; display:block; }
                 .bokun-andash__tip { position:absolute; pointer-events:none; background:var(--an-ink); color:var(--an-surface); font-size:12px; padding:5px 8px; border-radius:6px; white-space:nowrap; transform:translate(-50%,-120%); opacity:0; transition:opacity .08s; z-index:5; }
                 @media (max-width:900px){ .bokun-andash__layout { grid-template-columns:1fr; } .bokun-andash__side { position:static; max-height:none; } .bokun-andash__charts { grid-template-columns:1fr; } }
+                @media (max-width:600px){
+                    .bokun-andash__title { font-size:18px; }
+                    .bokun-andash__sub { font-size:12px; }
+                    /* Toolbar: stack the metric picker and the action buttons, each full-width and easy to tap. */
+                    .bokun-andash__toolbar { flex-direction:column; align-items:stretch; gap:8px; }
+                    .bokun-andash__metric { width:100%; }
+                    .bokun-andash__metric .bokun-andash__seg { flex:1 1 auto; text-align:center; }
+                    .bokun-andash__toolbar-actions { width:100%; }
+                    .bokun-andash__toolbar-actions .button { flex:1 1 auto; }
+                    .bokun-andash__seg, .bokun-andash__chip { padding:8px 12px; }
+                    /* Denser tiles so two fit per row instead of one huge column. */
+                    .bokun-andash__kpis { grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; }
+                    .bokun-andash__kpi { padding:10px 12px; }
+                    .bokun-andash__kpi-value { font-size:18px; }
+                    .bokun-andash__insights { grid-template-columns:1fr; }
+                    .bokun-andash__card { padding:12px; }
+                    /* Tables scroll horizontally with momentum; tighter cells. */
+                    .bokun-andash__table-wrap { -webkit-overflow-scrolling:touch; }
+                    .bokun-andash table { font-size:12px; }
+                    .bokun-andash th, .bokun-andash td { padding:6px; }
+                    .bokun-andash__breakdown-head { flex-direction:column; align-items:stretch; gap:8px; }
+                    .bokun-andash__breakdown-head select, .bokun-andash__more-field select { width:100%; }
+                    /* Business Results view on small screens. */
+                    .bokun-bizdash__cardhead { align-items:stretch; }
+                    .bokun-bizdash__modes { width:100%; }
+                    .bokun-bizdash__modes .bokun-andash__seg { flex:1 1 auto; text-align:center; }
+                    .bokun-bizdash__table th, .bokun-bizdash__table td { padding:6px 8px; font-size:12px; }
+                }
             </style>
             <script>
             ( function () {
