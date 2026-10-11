@@ -585,7 +585,7 @@ function bokun_record_import_run($context, $status, $trigger, $message = '', $su
     $context = bokun_normalize_import_context($context);
 
     $status  = ('error' === $status) ? 'error' : 'success';
-    $trigger = in_array($trigger, array('manual', 'scheduled'), true) ? $trigger : 'manual';
+    $trigger = in_array($trigger, array('manual', 'scheduled', 'webhook'), true) ? $trigger : 'manual';
     $now     = time();
 
     $runs  = bokun_get_import_last_runs();
@@ -628,6 +628,10 @@ function bokun_record_import_run($context, $status, $trigger, $message = '', $su
 function bokun_get_import_trigger_label($trigger) {
     if ('scheduled' === $trigger) {
         return __('Scheduled daily auto-import', 'bokun-bookings-manager');
+    }
+
+    if ('webhook' === $trigger) {
+        return __('Bokun webhook (live change)', 'bokun-bookings-manager');
     }
 
     return __('Manual (Fetch bookings button)', 'bokun-bookings-manager');
@@ -726,7 +730,19 @@ function bokun_render_fetch_status_note() {
     return ob_get_clean();
 }
 
-function bokun_run_daily_import() {
+/**
+ * Run the full windowed import for every configured API context.
+ *
+ * This is the same fetch-and-save the daily cron and the manual "Fetch" button
+ * run; the Bokun webhook reuses it so a live change triggers exactly the
+ * existing sync. $trigger only labels the recorded run.
+ *
+ * @param string $trigger 'scheduled' (cron), 'manual' (button) or 'webhook'.
+ * @return void
+ */
+function bokun_run_import_for_all_contexts($trigger = 'scheduled') {
+    $trigger = in_array($trigger, array('manual', 'scheduled', 'webhook'), true) ? $trigger : 'scheduled';
+
     $configured_credentials = bokun_get_configured_api_credentials();
 
     if (empty($configured_credentials)) {
@@ -766,7 +782,7 @@ function bokun_run_daily_import() {
             bokun_record_import_run(
                 $progress_context,
                 $is_error_message ? 'error' : 'success',
-                'scheduled',
+                $trigger,
                 $is_error_message ? $normalized_message : __('No bookings found.', 'bokun-bookings-manager'),
                 array()
             );
@@ -781,11 +797,20 @@ function bokun_run_daily_import() {
         bokun_record_import_run(
             $progress_context,
             $save_status,
-            'scheduled',
+            $trigger,
             $save_message,
             is_array($import_summary) ? $import_summary : array()
         );
     }
+}
+
+/**
+ * Daily auto-import cron callback — runs the full sync for every context.
+ *
+ * @return void
+ */
+function bokun_run_daily_import() {
+    bokun_run_import_for_all_contexts('scheduled');
 }
 
 add_action(BOKUN_DAILY_IMPORT_HOOK, 'bokun_run_daily_import');
