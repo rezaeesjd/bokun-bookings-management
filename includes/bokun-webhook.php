@@ -35,8 +35,15 @@ if ( ! defined( 'BOKUN_WEBHOOK_SECRET_OPTION' ) ) {
 if ( ! defined( 'BOKUN_WEBHOOK_LAST_OPTION' ) ) {
 	define( 'BOKUN_WEBHOOK_LAST_OPTION', 'bokun_webhook_last_received' );
 }
-if ( ! defined( 'BOKUN_WEBHOOK_COOLDOWN_TRANSIENT' ) ) {
-	define( 'BOKUN_WEBHOOK_COOLDOWN_TRANSIENT', 'bokun_webhook_cooldown' );
+if ( ! defined( 'BOKUN_WEBHOOK_PENDING_OPTION' ) ) {
+	// Set while at least one received change is not yet covered by a completed
+	// sync. Ensures no event is dropped: bursts coalesce into the next run, and a
+	// change arriving mid-import queues a guaranteed trailing run.
+	define( 'BOKUN_WEBHOOK_PENDING_OPTION', 'bokun_webhook_pending' );
+}
+if ( ! defined( 'BOKUN_WEBHOOK_LAST_RUN_OPTION' ) ) {
+	// Timestamp a sync last started — used to throttle runs to the cooldown.
+	define( 'BOKUN_WEBHOOK_LAST_RUN_OPTION', 'bokun_webhook_last_run_start' );
 }
 
 /**
@@ -112,36 +119,55 @@ function bokun_webhook_handle_request( $request ) {
 	}
 
 	// Record what arrived, for the settings screen.
-	$topic = $request->get_header( 'x-bokun-topic' );
+	$topic      = $request->get_header( 'x-bokun-topic' );
+	$booking_id = $request->get_header( 'x-bokun-booking-id' );
 	update_option(
 		BOKUN_WEBHOOK_LAST_OPTION,
 		array(
-			'time'  => time(),
-			'topic' => is_string( $topic ) ? sanitize_text_field( $topic ) : '',
+			'time'       => time(),
+			'topic'      => is_string( $topic ) ? sanitize_text_field( $topic ) : '',
+			'booking_id' => is_string( $booking_id ) ? sanitize_text_field( $booking_id ) : '',
 		),
 		false
 	);
 
-	// Debounce bursts: a full windowed sync covers every change in the window,
-	// so one run per cooldown window is enough and protects the Bokun API.
-	$cooldown = (int) apply_filters( 'bokun_webhook_sync_cooldown', 60 );
-	if ( $cooldown > 0 && get_transient( BOKUN_WEBHOOK_COOLDOWN_TRANSIENT ) ) {
-		return new WP_REST_Response( array( 'ok' => true, 'queued' => false, 'reason' => 'debounced' ), 200 );
-	}
-	if ( $cooldown > 0 ) {
-		set_transient( BOKUN_WEBHOOK_COOLDOWN_TRANSIENT, 1, $cooldown );
-	}
-
-	// Run the import on a background cron event — never inline (Bokun's ~5s limit).
-	if ( ! wp_next_scheduled( BOKUN_WEBHOOK_SYNC_HOOK ) ) {
-		$delay = (int) apply_filters( 'bokun_webhook_sync_delay', 0 );
-		wp_schedule_single_event( time() + max( 0, $delay ), BOKUN_WEBHOOK_SYNC_HOOK );
-	}
-
-	// Nudge wp-cron to run the due event promptly, without blocking this reply.
-	bokun_webhook_spawn_cron();
+	// Mark work pending and schedule a throttled, coalesced sync. No event is
+	// dropped: bursts collapse into the next run, and a change arriving while an
+	// import is already running queues a guaranteed trailing run (see
+	// bokun_webhook_run_sync). The import runs on a background cron event, never
+	// inline, because Bokun allows only ~5s per delivery.
+	update_option( BOKUN_WEBHOOK_PENDING_OPTION, 1, false );
+	bokun_webhook_schedule_sync();
 
 	return new WP_REST_Response( array( 'ok' => true, 'queued' => true ), 200 );
+}
+
+/**
+ * Schedule the background sync, throttled to one run per cooldown window and
+ * coalesced (never double-booked). Safe to call on every webhook.
+ *
+ * @return void
+ */
+function bokun_webhook_schedule_sync() {
+	if ( wp_next_scheduled( BOKUN_WEBHOOK_SYNC_HOOK ) ) {
+		return; // A run is already queued; it will consume the pending flag.
+	}
+
+	$cooldown = (int) apply_filters( 'bokun_webhook_sync_cooldown', 60 );
+	if ( $cooldown < 0 ) {
+		$cooldown = 0;
+	}
+	$delay = (int) apply_filters( 'bokun_webhook_sync_delay', 0 );
+	if ( $delay < 0 ) {
+		$delay = 0;
+	}
+	$last_start = (int) get_option( BOKUN_WEBHOOK_LAST_RUN_OPTION, 0 );
+	$when       = max( time() + $delay, $last_start + $cooldown );
+
+	wp_schedule_single_event( $when, BOKUN_WEBHOOK_SYNC_HOOK );
+
+	// Nudge wp-cron to run a due event promptly, without blocking the reply.
+	bokun_webhook_spawn_cron();
 }
 
 /**
@@ -240,16 +266,50 @@ function bokun_webhook_spawn_cron() {
 }
 
 /**
- * Background job: run the same full windowed import the daily cron runs.
+ * Background job: run the import for a webhook trigger.
+ *
+ * Reuses the same fetch+save pipeline, but widens the start-date search window
+ * so bookings the normal window skips — long-lead bookings (tour more than a
+ * month out) and older cancellations (tour well in the past) — are still
+ * refreshed. If a change arrives while this import is running, a trailing run
+ * is queued so no acknowledged event is lost.
+ *
+ * @return void
  */
-add_action( BOKUN_WEBHOOK_SYNC_HOOK, 'bokun_webhook_run_sync' );
 function bokun_webhook_run_sync() {
+	update_option( BOKUN_WEBHOOK_LAST_RUN_OPTION, time(), false );
+
+	// Snapshot: clear the pending flag now, so any change arriving during the
+	// import re-sets it and triggers the trailing run below.
+	delete_option( BOKUN_WEBHOOK_PENDING_OPTION );
+
+	// Widen the start-date window for this run (same verified search path).
+	$window = (int) apply_filters( 'bokun_webhook_sync_window_days', 730 );
+	if ( $window < 0 ) {
+		$window = 0;
+	}
+	$widen = function () use ( $window ) {
+		return $window;
+	};
+	add_filter( 'bokun_booking_start_date_lookback_days', $widen, 99 );
+	add_filter( 'bokun_booking_start_date_lookahead_days', $widen, 99 );
+
 	if ( function_exists( 'bokun_run_import_for_all_contexts' ) ) {
 		bokun_run_import_for_all_contexts( 'webhook' );
 	} elseif ( function_exists( 'bokun_run_daily_import' ) ) {
 		bokun_run_daily_import();
 	}
+
+	remove_filter( 'bokun_booking_start_date_lookback_days', $widen, 99 );
+	remove_filter( 'bokun_booking_start_date_lookahead_days', $widen, 99 );
+
+	// A change arrived while importing → its data may post-date what this run
+	// fetched, so queue a guaranteed trailing sync (throttled to the cooldown).
+	if ( get_option( BOKUN_WEBHOOK_PENDING_OPTION ) ) {
+		bokun_webhook_schedule_sync();
+	}
 }
+add_action( BOKUN_WEBHOOK_SYNC_HOOK, 'bokun_webhook_run_sync' );
 
 /**
  * Admin action: regenerate the secret token (invalidates the old URL).

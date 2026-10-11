@@ -170,7 +170,16 @@ function bokun_fetch_bookings($context = 'default') {
     // Prepare payload (adjust date range and other parameters as needed)
     $today = new DateTime('today', new DateTimeZone('GMT')); // Midnight today in GMT
     $yesterday = (clone $today)->modify('-1 day');
-    $oneMonthLater = (clone $today)->modify('+1 month');
+
+    // Forward bound of the start-date search window. Defaults to one month out
+    // (unchanged behaviour); a numeric `bokun_booking_start_date_lookahead_days`
+    // filter overrides it so a caller — e.g. a webhook-triggered sync — can widen
+    // the window to include long-lead bookings whose tour is further out.
+    $oneMonthLater  = (clone $today)->modify('+1 month');
+    $lookahead_days = apply_filters('bokun_booking_start_date_lookahead_days', null);
+    if (is_numeric($lookahead_days) && (int) $lookahead_days >= 0) {
+        $oneMonthLater = (clone $today)->modify('+' . (int) $lookahead_days . ' days');
+    }
 
     // Look back as well as forward. The search is keyed on each booking's start
     // (travel) date, so a forward-only range never re-fetches a booking whose
