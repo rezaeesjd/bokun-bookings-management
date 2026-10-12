@@ -166,8 +166,14 @@ function bokun_webhook_schedule_sync() {
 
 	wp_schedule_single_event( $when, BOKUN_WEBHOOK_SYNC_HOOK );
 
-	// Nudge wp-cron to run a due event promptly, without blocking the reply.
-	bokun_webhook_spawn_cron();
+	// Nudge wp-cron to run the event now only when it is already due — a loopback
+	// cannot wake a future event, so for one deferred by the cooldown we leave it
+	// to wp-cron on the next request (or a server cron), with the nightly import
+	// as the guaranteed backstop. The common "first change after idle" case is
+	// due immediately and fires here.
+	if ( $when <= time() ) {
+		bokun_webhook_spawn_cron();
+	}
 }
 
 /**
