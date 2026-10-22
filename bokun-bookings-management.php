@@ -668,3 +668,26 @@ if ( file_exists( BOKUN_INCLUDES_DIR . 'class-bokun-github-sync.php' ) ) {
         register_deactivation_hook( __FILE__, array( $bokun_github_sync, 'deactivate' ) );
     }
 }
+
+/**
+ * AI Inbox — AI-assisted customer reply engine.
+ *
+ * Ingests inbound customer messages (Viator/TripAdvisor email channel to start),
+ * matches each to its Bokun booking, drafts a reply with Claude using the full
+ * booking context, and surfaces it for human approval in an admin "AI Inbox".
+ *
+ * Loaded unconditionally so its table can be created on activation and its cron
+ * / admin / AJAX hooks register on every request. The feature stays inert until
+ * it is enabled AND a Claude API key is supplied in its settings screen.
+ */
+if ( file_exists( BOKUN_INCLUDES_DIR . 'class-bokun-messaging.php' ) ) {
+    include_once( BOKUN_INCLUDES_DIR . 'class-bokun-messaging.php' );
+
+    if ( class_exists( 'Bokun_Messaging' ) ) {
+        global $bokun_messaging;
+        $bokun_messaging = new Bokun_Messaging();
+
+        register_activation_hook( __FILE__, array( $bokun_messaging, 'activate' ) );
+        register_deactivation_hook( __FILE__, array( $bokun_messaging, 'deactivate' ) );
+    }
+}

@@ -9,6 +9,34 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             add_shortcode('bokun_booking_history', array($this, 'render_booking_history_table'));
             add_shortcode('bokun_booking_dashboard', array($this, 'render_booking_dashboard'));
 
+            // Keep booking data out of search engines. The Bookings dashboard is
+            // intentionally public, but it (and every single booking page) holds
+            // customer detail that must never be indexed or crawled.
+            add_action('wp_head', array($this, 'bokun_output_noindex_meta'), 1);
+
+        }
+
+        /**
+         * Emit a noindex/nofollow robots meta tag on pages that expose booking
+         * data: any single bokun_booking post, and any page that embeds the
+         * [bokun_booking_dashboard] shortcode. Does not restrict access — it only
+         * keeps these pages out of search indexes.
+         */
+        public function bokun_output_noindex_meta() {
+            $noindex = false;
+
+            if ( is_singular('bokun_booking') ) {
+                $noindex = true;
+            } elseif ( is_singular() ) {
+                $post = get_post();
+                if ( $post instanceof WP_Post && has_shortcode( (string) $post->post_content, 'bokun_booking_dashboard' ) ) {
+                    $noindex = true;
+                }
+            }
+
+            if ( $noindex ) {
+                echo '<meta name="robots" content="noindex,nofollow" />' . "\n";
+            }
         }
 
         
@@ -2915,7 +2943,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             $dashboard_html = ob_get_clean();
             // The Business Results view is embedded inside the Analytics panel
             // (a toolbar toggle next to Export CSV), not a separate top-level tab.
-            $analytics_html = $this->render_analytics_panel();
+            //
+            // Analytics/revenue is staff-only: it exposes net revenue, commission
+            // and business performance, so it is gated behind login. Logged-out
+            // visitors never trigger the (heavier) analytics query and see only
+            // the Bookings view.
+            $analytics_html = is_user_logged_in() ? $this->render_analytics_panel() : '';
 
             return $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html );
         }
@@ -2930,6 +2963,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
          * @return string
          */
         private function wrap_dashboard_tabs( $bookings_html, $analytics_html ) {
+            // Analytics is staff-only. With no analytics markup (logged-out
+            // visitor), skip the tab chrome entirely and return the Bookings
+            // view on its own — there is no second tab to switch to.
+            if ( '' === trim( (string) $analytics_html ) ) {
+                return $bookings_html;
+            }
+
             $tabs_id = 'bokun-dash-tabs-' . wp_rand( 1000, 9999 );
 
             ob_start();
