@@ -3846,17 +3846,17 @@ add_action('wp_ajax_nopriv_bokun_send_booking_message', 'bokun_send_booking_mess
 /**
  * Whether the current requester may send a client message from the dashboard.
  *
- * Anonymous dashboard visitors are allowed to send messages because the
- * booking dashboard is designed to be operated without a WordPress account.
- * Logged-in users still require a trusted-staff capability.
+ * Messaging a customer requires a logged-in WordPress account. The booking
+ * dashboard itself stays publicly viewable, but the messaging feature — which
+ * can email customers using their stored contact details — is gated behind
+ * login so anonymous visitors cannot send messages. Any logged-in user
+ * qualifies; tighten this to a staff capability if that is ever required.
  *
- * The boundary is `edit_others_posts` (Editors and Administrators), not the
- * broader `edit_posts`: the latter is also granted to Contributors and Authors,
- * who are not the intended operators of the booking dashboard and must not be
- * able to email a customer for any booking whose confirmation code they obtain.
+ * This single predicate guards both the dashboard composer UI and the
+ * send-message AJAX handler, so the boundary cannot be bypassed from either.
  */
 function bokun_can_send_booking_message() {
-    return !is_user_logged_in() || current_user_can('manage_options') || current_user_can('edit_others_posts');
+    return is_user_logged_in();
 }
 
 // Handle AJAX request to send a message to the booking's stored contact email.
