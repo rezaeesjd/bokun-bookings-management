@@ -32,7 +32,7 @@ if ( ! class_exists( 'Bokun_Messaging' ) ) {
 	class Bokun_Messaging {
 
 		/** Schema version for the messages table (bump to trigger dbDelta). */
-		const DB_VERSION = '1.0.0';
+		const DB_VERSION = '1.1.0';
 
 		/** Option that stores the installed DB version. */
 		const DB_VERSION_OPTION = 'bokun_msg_db_version';
@@ -155,7 +155,7 @@ if ( ! class_exists( 'Bokun_Messaging' ) ) {
 				KEY booking_post_id (booking_post_id),
 				KEY thread_key (thread_key),
 				KEY status (status),
-				KEY message_uid (message_uid)
+				UNIQUE KEY message_uid (message_uid)
 			) {$charset_collate};";
 
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -319,7 +319,14 @@ if ( ! class_exists( 'Bokun_Messaging' ) ) {
 			$from_email = isset( $overview->from ) ? $this->extract_email( $overview->from ) : '';
 			$to_email   = isset( $overview->to ) ? $this->extract_email( $overview->to ) : '';
 			$subject    = isset( $overview->subject ) ? $this->decode_mime( $overview->subject ) : '';
-			$uid        = isset( $overview->message_id ) ? $overview->message_id : ( 'imap-' . $msg_number );
+
+			// Prefer the RFC Message-ID; when absent, derive a stable fingerprint
+			// from the header fields. IMAP sequence numbers are NOT stable (they
+			// renumber as messages are expunged), so "imap-<n>" could both collide
+			// across polls and wrongly dedupe unrelated messages — hash instead.
+			$uid = isset( $overview->message_id ) && '' !== (string) $overview->message_id
+				? (string) $overview->message_id
+				: 'fp-' . md5( $from_email . '|' . $to_email . '|' . $subject . '|' . ( $overview->date ?? '' ) . '|' . ( $overview->udate ?? '' ) );
 
 			// Optional sender filter (e.g. only ingest Viator/TripAdvisor relay).
 			if ( ! empty( $settings['sender_filter'] ) ) {
@@ -331,12 +338,15 @@ if ( ! class_exists( 'Bokun_Messaging' ) ) {
 				}
 			}
 
-			// Dedupe on Message-ID.
+			// Dedupe on Message-ID. Already ingested → mark Seen so it is skipped.
 			if ( $this->message_uid_exists( $uid ) ) {
 				imap_setflag_full( $inbox, (string) $msg_number, '\\Seen' );
 				return $out;
 			}
 
+			// Read the body WITHOUT marking the message Seen (FT_PEEK). We only
+			// flag it Seen after it is safely persisted, so a transient DB failure
+			// leaves it unread for the next poll to retry instead of losing it.
 			$body = $this->get_imap_plain_body( $inbox, $msg_number );
 
 			// The per-thread reply address is the anchor. On the Viator channel
@@ -362,11 +372,18 @@ if ( ! class_exists( 'Bokun_Messaging' ) ) {
 				'updated_at'      => $now,
 			) );
 
-			imap_setflag_full( $inbox, (string) $msg_number, '\\Seen' );
-
 			if ( ! $message_id ) {
+				// Insert failed. If it was a duplicate-key race (a concurrent
+				// poll/fetch beat us to the same Message-ID), it is safely stored
+				// already — mark Seen. Otherwise leave it unread to retry later.
+				if ( $this->message_uid_exists( $uid ) ) {
+					imap_setflag_full( $inbox, (string) $msg_number, '\\Seen' );
+				}
 				return $out;
 			}
+
+			// Persisted successfully — now it is safe to mark the source Seen.
+			imap_setflag_full( $inbox, (string) $msg_number, '\\Seen' );
 
 			$out['stored']     = true;
 			$out['matched']    = (bool) $booking_id;
@@ -399,36 +416,66 @@ if ( ! class_exists( 'Bokun_Messaging' ) ) {
 
 		private function get_imap_plain_body( $inbox, $msg_number ) {
 			$structure = imap_fetchstructure( $inbox, $msg_number );
-			$body      = '';
 
 			if ( ! $structure ) {
-				$body = imap_body( $inbox, $msg_number );
+				// FT_PEEK: read without setting the \Seen flag.
+				$body = imap_body( $inbox, $msg_number, FT_PEEK );
 				return $this->clean_body( $body );
 			}
 
 			if ( empty( $structure->parts ) ) {
 				// Single-part message.
-				$raw  = imap_body( $inbox, $msg_number );
+				$raw  = imap_body( $inbox, $msg_number, FT_PEEK );
 				$body = $this->decode_part( $raw, isset( $structure->encoding ) ? $structure->encoding : 0 );
-			} else {
-				// Multipart: prefer text/plain, fall back to text/html.
-				$plain = '';
-				$html  = '';
-				foreach ( $structure->parts as $idx => $part ) {
-					$part_number = (string) ( $idx + 1 );
-					$raw         = imap_fetchbody( $inbox, $msg_number, $part_number );
-					$decoded     = $this->decode_part( $raw, isset( $part->encoding ) ? $part->encoding : 0 );
-					$subtype     = isset( $part->subtype ) ? strtoupper( $part->subtype ) : '';
-					if ( 'PLAIN' === $subtype && '' === $plain ) {
-						$plain = $decoded;
-					} elseif ( 'HTML' === $subtype && '' === $html ) {
-						$html = $decoded;
-					}
-				}
-				$body = $plain !== '' ? $plain : wp_strip_all_tags( $html );
+				return $this->clean_body( $body );
 			}
 
+			// Multipart: walk the tree (parts may nest, e.g. multipart/mixed
+			// wrapping a multipart/alternative when an attachment is present) and
+			// collect the first text/plain and first text/html. Prefer plain.
+			$found = array( 'plain' => '', 'html' => '' );
+			$this->collect_text_parts( $inbox, $msg_number, $structure->parts, '', $found );
+
+			$body = '' !== $found['plain'] ? $found['plain'] : wp_strip_all_tags( $found['html'] );
 			return $this->clean_body( $body );
+		}
+
+		/**
+		 * Recursively collect the first text/plain and text/html parts from a MIME
+		 * tree, tracking the dotted IMAP section number (e.g. "1", "1.2") each part
+		 * is addressed by. Populates $found['plain'] / $found['html'] in place.
+		 */
+		private function collect_text_parts( $inbox, $msg_number, $parts, $prefix, &$found ) {
+			foreach ( $parts as $idx => $part ) {
+				$section = '' === $prefix ? (string) ( $idx + 1 ) : $prefix . '.' . ( $idx + 1 );
+
+				if ( ! empty( $part->parts ) ) {
+					// A nested multipart container — descend into it.
+					$this->collect_text_parts( $inbox, $msg_number, $part->parts, $section, $found );
+					continue;
+				}
+
+				// type 0 == text (per the IMAP structure). subtype PLAIN / HTML.
+				$is_text = ! isset( $part->type ) || 0 === (int) $part->type;
+				$subtype = isset( $part->subtype ) ? strtoupper( $part->subtype ) : '';
+
+				if ( ! $is_text || ( 'PLAIN' !== $subtype && 'HTML' !== $subtype ) ) {
+					continue; // Skip attachments and other non-text parts.
+				}
+
+				if ( ( 'PLAIN' === $subtype && '' !== $found['plain'] ) || ( 'HTML' === $subtype && '' !== $found['html'] ) ) {
+					continue; // Already have one of this kind.
+				}
+
+				$raw     = imap_fetchbody( $inbox, $msg_number, $section, FT_PEEK );
+				$decoded = $this->decode_part( $raw, isset( $part->encoding ) ? $part->encoding : 0 );
+
+				if ( 'PLAIN' === $subtype ) {
+					$found['plain'] = $decoded;
+				} else {
+					$found['html'] = $decoded;
+				}
+			}
 		}
 
 		private function decode_part( $raw, $encoding ) {
@@ -776,6 +823,28 @@ if ( ! class_exists( 'Bokun_Messaging' ) ) {
 				return array( 'ok' => false, 'error' => __( 'No valid reply address for this thread.', 'BOKUN_txt_domain' ) );
 			}
 
+			// Claim the message atomically BEFORE sending, so a lost AJAX response
+			// (button re-enabled → retry) or two admins approving the same card
+			// cannot each deliver a customer email. Only a message still open for
+			// reply can be claimed; the conditional UPDATE flips it to APPROVED and
+			// reports how many rows changed. Zero means someone/something already
+			// claimed or sent it — abort without emailing again.
+			global $wpdb;
+			$claimed = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$this->table} SET status = %s, updated_at = %s WHERE id = %d AND status IN ( %s, %s, %s )",
+					self::STATUS_APPROVED,
+					current_time( 'mysql' ),
+					(int) $message_id,
+					self::STATUS_DRAFT,
+					self::STATUS_RECEIVED,
+					self::STATUS_ERROR
+				)
+			);
+			if ( ! $claimed ) {
+				return array( 'ok' => false, 'error' => __( 'This message was already sent or is being handled. Refresh to see its current state.', 'BOKUN_txt_domain' ) );
+			}
+
 			$s       = $this->get_settings();
 			$subject = $message['subject'] ? $message['subject'] : __( 'Your booking', 'BOKUN_txt_domain' );
 			if ( stripos( $subject, 'Re:' ) !== 0 ) {
@@ -830,8 +899,12 @@ if ( ! class_exists( 'Bokun_Messaging' ) ) {
 
 		private function insert_message( $data ) {
 			global $wpdb;
-			$wpdb->insert( $this->table, $data );
-			return (int) $wpdb->insert_id;
+			// insert() returns false on failure (e.g. a duplicate message_uid).
+			// Guard explicitly: $wpdb->insert_id keeps the PREVIOUS successful id
+			// after a failed insert, so returning it blindly would falsely report
+			// a store. Return 0 on any failure.
+			$ok = $wpdb->insert( $this->table, $data );
+			return ( false === $ok ) ? 0 : (int) $wpdb->insert_id;
 		}
 
 		public function get_message( $id ) {
