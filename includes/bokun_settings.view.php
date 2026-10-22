@@ -180,6 +180,47 @@ $dashboard_page_dropdown = wp_dropdown_pages(
 
         </div>
 
+        <?php if ( function_exists( 'bokun_webhook_url' ) ) : ?>
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <h2><?php esc_html_e('Live sync from Bokun (webhook)', 'BOKUN_txt_domain'); ?></h2>
+                    <?php if ( isset( $_GET['bokun_webhook'] ) && 'regenerated' === $_GET['bokun_webhook'] ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
+                        <div class="notice notice-success is-dismissible"><p><?php esc_html_e('A new webhook URL was generated. Update it in Bokun — the old URL no longer works.', 'BOKUN_txt_domain'); ?></p></div>
+                    <?php endif; ?>
+                    <p>
+                        <?php esc_html_e('Paste this URL into Bokun → Settings → Connections → Webhooks (add a Booking notification, format JSON) and tick Created / Updated / Cancelled. Bokun then runs the same fetch automatically on every booking change, so you no longer need Zapier. The nightly auto-import stays on as a backstop.', 'BOKUN_txt_domain'); ?>
+                    </p>
+                    <p><strong><?php esc_html_e('Webhook URL', 'BOKUN_txt_domain'); ?></strong></p>
+                    <input type="text" readonly onclick="this.select();" style="width:100%;max-width:760px;font-family:monospace;" value="<?php echo esc_attr( bokun_webhook_url() ); ?>" aria-label="<?php esc_attr_e('Bokun webhook URL', 'BOKUN_txt_domain'); ?>" />
+                    <?php
+                    $bokun_webhook_last = get_option( 'bokun_webhook_last_received' );
+                    if ( is_array( $bokun_webhook_last ) && ! empty( $bokun_webhook_last['time'] ) ) :
+                        $bokun_webhook_ago = human_time_diff( (int) $bokun_webhook_last['time'] );
+                        ?>
+                        <p>
+                            <?php
+                            /* translators: %s: relative time, e.g. "3 minutes". */
+                            echo esc_html( sprintf( __('Last webhook received: %s ago', 'BOKUN_txt_domain'), $bokun_webhook_ago ) );
+                            if ( ! empty( $bokun_webhook_last['topic'] ) ) {
+                                echo ' — ' . esc_html( $bokun_webhook_last['topic'] );
+                            }
+                            ?>
+                        </p>
+                    <?php else : ?>
+                        <p><em><?php esc_html_e('No webhook received yet.', 'BOKUN_txt_domain'); ?></em></p>
+                    <?php endif; ?>
+                    <form method="post" action="<?php echo esc_url( admin_url('admin-post.php') ); ?>" style="margin-top:10px;">
+                        <?php wp_nonce_field('bokun_regenerate_webhook_secret'); ?>
+                        <input type="hidden" name="action" value="bokun_regenerate_webhook_secret" />
+                        <button type="submit" class="button"><?php esc_html_e('Regenerate secret URL', 'BOKUN_txt_domain'); ?></button>
+                        <span class="description"><?php esc_html_e('Use if the URL may have leaked — you will need to update it in Bokun.', 'BOKUN_txt_domain'); ?></span>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+
         <div class="row">
             <div class="col-12">
                 <div class="card">

@@ -40,7 +40,14 @@ Three layers, each in its own file under `includes/`:
    tour has passed, so a cancellation made after the tour date would otherwise
    never reach the plugin and the booking would linger as "confirmed". A booking
    cancelled in Bokun comes back with a "cancel" `booking_status` term, which is
-   what `bokun_analytics_is_cancelled()` keys on.
+   what `bokun_analytics_is_cancelled()` keys on. The import runs three ways, all
+   through `bokun_run_import_for_all_contexts($trigger)`: the daily cron
+   (`BOKUN_DAILY_IMPORT_HOOK` → `bokun_run_daily_import`), the manual Fetch
+   button, and a **Bokun webhook** (`includes/bokun-webhook.php`, REST route
+   `bokun/v1/sync`) that fires the same full windowed sync on any booking change
+   — debounced via a cooldown transient, run on a background cron event, auth by
+   shared token or Bokun HMAC. So analytics can refresh seconds after a change,
+   not only at midnight.
 2. **Partners catalog** — `bokun-partners-products.php` builds
    `wp_bokun_partners_products`, one row per product (`product_id`, `title`,
    `net_price`, `commission`, `departure_city`, `partner_page_id`). Seeded from

@@ -639,6 +639,15 @@ if ( file_exists( BOKUN_INCLUDES_DIR . "bokun-business.php" ) ) {
 }
 
 /**
+ * Live sync from Bokun via webhook (REST endpoint that triggers the existing
+ * import on any booking change). Loaded unconditionally so the REST route and
+ * its background-sync cron hook register on every request.
+ */
+if ( file_exists( BOKUN_INCLUDES_DIR . "bokun-webhook.php" ) ) {
+    include_once( BOKUN_INCLUDES_DIR . "bokun-webhook.php" );
+}
+
+/**
  * GitHub auto-sync.
  *
  * Merges the former "Github Plugin Installer and Updater" helper directly into
