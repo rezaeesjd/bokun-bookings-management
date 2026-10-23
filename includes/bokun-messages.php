@@ -431,7 +431,17 @@ class BOKUN_Messages {
                 $conditions[] = $wpdb->prepare('state=%s', $state);
             }
             $where = $conditions ? ' WHERE ' . implode(' AND ', $conditions) : '';
-            $rows = $wpdb->get_results('SELECT id,account,reference,subject,state,latest_at,version, (SELECT MAX(draft.id) FROM ' . self::table('drafts') . ' draft WHERE draft.conversation_id=' . self::table('conversations') . '.id) AS latest_draft_id, (SELECT latest.body FROM ' . self::table('messages') . ' latest WHERE latest.conversation_id=' . self::table('conversations') . '.id ORDER BY latest.sent_at DESC,latest.id DESC LIMIT 1) AS preview, (SELECT latest.kind FROM ' . self::table('messages') . ' latest WHERE latest.conversation_id=' . self::table('conversations') . '.id ORDER BY latest.sent_at DESC,latest.id DESC LIMIT 1) AS latest_kind FROM ' . self::table('conversations') . $where . $wpdb->prepare(' ORDER BY latest_at DESC,id DESC LIMIT 50 OFFSET %d', ($page - 1) * 50), ARRAY_A);
+            // Sort is chosen from a fixed allowlist (never interpolated from raw
+            // input) so the ORDER BY clause is always a trusted constant. The
+            // default preserves the historical order: newest last message first.
+            $sort = sanitize_key($request['sort'] ?? 'recent');
+            $order_map = array(
+                'recent'   => 'latest_at DESC,id DESC',
+                'oldest'   => 'latest_at ASC,id ASC',
+                'priority' => "CASE state WHEN 'needs_reply' THEN 0 WHEN 'needs_review' THEN 1 WHEN 'answered' THEN 2 WHEN 'closed' THEN 3 ELSE 4 END ASC,latest_at DESC,id DESC",
+            );
+            $order = isset($order_map[$sort]) ? $order_map[$sort] : $order_map['recent'];
+            $rows = $wpdb->get_results('SELECT id,account,reference,subject,state,latest_at,version, (SELECT MAX(draft.id) FROM ' . self::table('drafts') . ' draft WHERE draft.conversation_id=' . self::table('conversations') . '.id) AS latest_draft_id, (SELECT latest.body FROM ' . self::table('messages') . ' latest WHERE latest.conversation_id=' . self::table('conversations') . '.id ORDER BY latest.sent_at DESC,latest.id DESC LIMIT 1) AS preview, (SELECT latest.kind FROM ' . self::table('messages') . ' latest WHERE latest.conversation_id=' . self::table('conversations') . '.id ORDER BY latest.sent_at DESC,latest.id DESC LIMIT 1) AS latest_kind FROM ' . self::table('conversations') . $where . ' ORDER BY ' . $order . $wpdb->prepare(' LIMIT 50 OFFSET %d', ($page - 1) * 50), ARRAY_A);
             foreach ($rows as &$row) {
                 $row['preview'] = mb_substr(preg_replace('/\s+/u', ' ', $row['preview'] ?? ''), 0, 200);
             }
