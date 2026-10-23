@@ -688,9 +688,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
         public function render_booking_dashboard($atts = []) {
             $this->prevent_private_cache();
-            if (!$this->can_view_staff_data()) {
-                return '<div class="bokun-booking-dashboard__empty" role="alert">' . esc_html__('Sign in with an authorized staff account to view the booking dashboard.', 'BOKUN_txt_domain') . '</div>';
-            }
+            // The Bookings view is intentionally public (de-indexed + no-cache).
+            // Staff-only surfaces inside it — the Fetch/import control, the
+            // Analytics tab, and the per-booking message composer — are gated
+            // individually below and server-side, so opening the view does not
+            // expose any admin action to anonymous visitors.
+            $can_view_staff_data = $this->can_view_staff_data();
             if (!post_type_exists('bokun_booking')) {
                 return '';
             }
@@ -759,8 +762,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 );
 
                 // Still surface the per-API fetch status so the note stays
-                // visible even when there are no bookings to display.
-                if (function_exists('bokun_render_fetch_status_note')) {
+                // visible even when there are no bookings to display. Staff only —
+                // the public Bookings view never shows import status.
+                if ($can_view_staff_data && function_exists('bokun_render_fetch_status_note')) {
                     $empty_message .= bokun_render_fetch_status_note();
                 }
 
@@ -1612,13 +1616,15 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             <?php esc_html_e('Bookings Dashboard', 'BOKUN_txt_domain'); ?>
                         </h2>
                     </div>
+                    <?php if ($can_view_staff_data) : ?>
                     <div class="bokun-booking-dashboard__toolbar-group bokun-booking-dashboard__toolbar-group--right">
                         <a href="#" class="bokun-booking-dashboard__toolbar-link bokun_fetch_booking_data_front" role="button">
                             <?php esc_html_e('Fetch bookings', 'BOKUN_txt_domain'); ?>
                         </a>
                     </div>
+                    <?php endif; ?>
                 </div>
-                <?php if ($should_render_progress) : ?>
+                <?php if ($should_render_progress && $can_view_staff_data) : ?>
                     <div id="bokun_progress" class="bokun-progress" style="display:none;" role="status" aria-live="polite">
                         <div class="bokun-progress__header">
                             <span id="bokun_progress_message" class="bokun-progress__message">Import progress</span>
@@ -2024,7 +2030,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 </div>
 
                 <?php
-                if (function_exists('bokun_render_fetch_status_note')) {
+                if ($can_view_staff_data && function_exists('bokun_render_fetch_status_note')) {
                     echo bokun_render_fetch_status_note(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Output is pre-escaped in the helper.
                 }
                 ?>
