@@ -49,6 +49,9 @@ if (empty($api_credentials)) {
 }
 
 $next_api_index = count($api_credentials);
+$webhook_enabled = current_user_can('manage_options') && bokun_webhook_is_configured();
+$webhook_last = get_option(BOKUN_WEBHOOK_LAST_OPTION, array());
+$webhook_result = get_option(BOKUN_WEBHOOK_RESULT_OPTION, array());
 $dashboard_page_id = (int) get_option('bokun_dashboard_page_id', 0);
 $dashboard_page_dropdown = wp_dropdown_pages(
     array(
@@ -66,7 +69,7 @@ $dashboard_page_dropdown = wp_dropdown_pages(
     <div class="container-fluid">
 
         <div class="row">
-            
+
             <div class="col-8">
                 <div class="card">
                     <h2><?php esc_html_e('Manage Bokun API Keys', 'BOKUN_txt_domain'); ?></h2>
@@ -184,6 +187,7 @@ $dashboard_page_dropdown = wp_dropdown_pages(
             <div class="col-12">
                 <div class="card">
                     <h2><?php esc_html_e('Booking dashboard display', 'BOKUN_txt_domain'); ?></h2>
+                    <p><?php esc_html_e('The dashboard requires an Administrator or Editor account. Customer messages require an Administrator. Booking data pages are excluded from indexing; existing shared single-booking links retain their current access behavior.', 'BOKUN_txt_domain'); ?></p>
                     <p>
                         <?php esc_html_e('Use the [bokun_booking_dashboard] shortcode or choose a page below to automatically display the dashboard.', 'BOKUN_txt_domain'); ?>
                     </p>
@@ -209,6 +213,42 @@ $dashboard_page_dropdown = wp_dropdown_pages(
                             </div>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <h2><?php esc_html_e('Optional live booking updates', 'BOKUN_txt_domain'); ?></h2>
+                    <p><?php echo esc_html($webhook_enabled ? __('Webhook receiver enabled. External Bókun registration must be completed separately.', 'BOKUN_txt_domain') : __('Not configured. Gmail synchronization, manual booking refresh and daily imports continue normally.', 'BOKUN_txt_domain')); ?></p>
+                    <p><?php esc_html_e('This optional receiver queues booking imports only. It does not generate AI drafts or send customer replies. Creating a URL does not register a webhook with Bókun. Keep the token private; prefer the X-Bokun-Webhook-Token header where the sender supports it.', 'BOKUN_txt_domain'); ?></p>
+                    <?php if ($webhook_enabled) : ?>
+                        <details>
+                            <summary><?php esc_html_e('Private webhook URL', 'BOKUN_txt_domain'); ?></summary>
+                            <input type="text" readonly class="widefat" aria-label="Private booking webhook URL" value="<?php echo esc_attr(bokun_webhook_url()); ?>">
+                            <p><?php esc_html_e('POST booking changes here. For a read-only connection check, use GET with ping=1. Do not place this URL in public documents or source control.', 'BOKUN_txt_domain'); ?></p>
+                        </details>
+                    <?php endif; ?>
+                    <?php if (is_array($webhook_last) && !empty($webhook_last['time'])) : ?>
+                        <p><?php echo esc_html('Last change received: ' . wp_date('Y-m-d H:i:s T', (int) $webhook_last['time'])); ?></p>
+                    <?php endif; ?>
+                    <?php if (is_array($webhook_result) && !empty($webhook_result['time'])) : ?>
+                        <p><?php echo esc_html((!empty($webhook_result['ok']) ? 'Last import completed: ' : 'Last import incomplete; pending changes retained: ') . wp_date('Y-m-d H:i:s T', (int) $webhook_result['time'])); ?></p>
+                    <?php endif; ?>
+                    <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                        <input type="hidden" name="action" value="bokun_regenerate_webhook_secret">
+                        <?php wp_nonce_field('bokun_regenerate_webhook_secret'); ?>
+                        <button type="submit" class="button"><?php echo esc_html($webhook_enabled ? __('Rotate private webhook URL', 'BOKUN_txt_domain') : __('Create private webhook URL', 'BOKUN_txt_domain')); ?></button>
+                        <?php if ($webhook_enabled) : ?><p><?php esc_html_e('Rotating invalidates the old URL immediately. Update any registered sender afterward.', 'BOKUN_txt_domain'); ?></p><?php endif; ?>
+                    </form>
+                    <?php if ($webhook_enabled) : ?>
+                        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                            <input type="hidden" name="action" value="bokun_disable_webhook">
+                            <?php wp_nonce_field('bokun_disable_webhook'); ?>
+                            <button type="submit" class="button"><?php esc_html_e('Disable webhook receiver', 'BOKUN_txt_domain'); ?></button>
+                        </form>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>

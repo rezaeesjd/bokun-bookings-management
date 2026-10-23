@@ -1,0 +1,13 @@
+{
+  "name": "bokun-booking-messages-tests",
+  "private": true,
+  "scripts": {
+    "test": "node messages-ui.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -31,6 +31,8 @@ Bokun Bookings Management is a WordPress plugin that lets tour and activity oper
 
 ## Features
 
+- **Administrator-reviewed Messages tab** — Connect the two business Gmail inboxes, group relevant email and support history by booking, retrieve historical Bókun context, generate editable AI replies, and send only the exact draft explicitly approved by an administrator. Includes mailbox isolation, stale-context checks, immutable draft history, and uncertain-send reconciliation. See [Booking Messages setup](docs/booking-messages.md).
+
 - **Multiple Bokun API credentials** – Store, validate, and remove any number of API key/secret pairs from a repeatable UI component. The settings screen persists them in the `bokun_api_credentials` option and gracefully migrates legacy single-key installs. 【F:includes/bokun_settings.view.php†L1-L97】
 - **Booking imports with progress tracking** – Secure admin/AJAX actions (`bokun_bookings_manager_page` and `bokun_get_import_progress`) call the Bokun Booking Search endpoint, paginate through results, and save bookings as the `bokun_booking` custom post type while reporting completion stats and errors back to the UI. 【F:includes/bokun_settings.class.php†L15-L166】
 - **Dedicated post type & taxonomies** – Bookings are stored as first-class posts, enriched with Booking Status, Product Tags, and Team Member taxonomies so you can build filtered lists, Elementor widgets, or REST/GraphQL queries. 【F:bokun-bookings-management.php†L200-L279】

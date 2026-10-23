@@ -1,0 +1,65 @@
+name: Booking Messages regression
+
+on:
+  pull_request:
+    paths:
+      - '**.php'
+      - 'assets/**'
+      - 'tests/**'
+      - '.github/workflows/booking-messages.yml'
+  push:
+    branches: [main]
+    paths:
+      - '**.php'
+      - 'assets/**'
+      - 'tests/**'
+      - '.github/workflows/booking-messages.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: booking-messages-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php:
+    name: PHP ${{ matrix.php }} safety checks
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        php: ['8.2', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, mbstring, openssl, curl
+          coverage: none
+      - name: Check PHP syntax
+        run: find . -name '*.php' -not -path './tests/node_modules/*' -print0 | xargs -0 -n 1 php -l
+      - name: Check dashboard authorization and privacy
+        run: php tests/dashboard-access.php
+      - name: Check booking webhook safety
+        run: php tests/booking-webhook.php
+      - name: Check GitHub updater secret handling
+        run: php tests/github-sync-security.php
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check disposable WordPress workflows and imports
+        run: python tests/wordpress/run.py
+  javascript:
+    name: Messages operator workflow
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/package-lock.json
+      - name: Install locked test dependencies without lifecycle scripts
+        run: npm ci --prefix tests --ignore-scripts --no-audit --no-fund
+      - name: Check operator workflow with mocked transports
+        run: npm --prefix tests test

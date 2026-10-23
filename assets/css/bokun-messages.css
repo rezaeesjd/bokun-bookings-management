@@ -1,0 +1,103 @@
+.bokun-messages { container-type:inline-size; color:#1e293b; background:#fff; padding:20px; border:1px solid #dbe3ed; border-radius:12px; font:14px/1.55 system-ui,sans-serif; }
+.bokun-messages *, .bokun-messages *::before, .bokun-messages *::after { box-sizing:border-box; }
+.bokun-messages__header, .bokun-messages__toolbar, .bokun-messages__pagination { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+.bokun-messages h2, .bokun-messages h3, .bokun-messages h4 { color:#0f172a; margin:0 0 10px; }
+.bokun-messages h4 { margin-top:16px; }
+.bokun-messages button, .bokun-messages select, .bokun-messages input, .bokun-messages textarea { font:inherit; }
+.bokun-messages button { color:#0f172a; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 12px; cursor:pointer; margin:4px 6px 4px 0; }
+.bokun-messages button:hover { background:#e8eff7; }
+.bokun-messages button:disabled { cursor:not-allowed; opacity:.5; }
+.bokun-messages :focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+.bokun-messages.is-busy button { pointer-events:none; opacity:.65; }
+.bokun-messages select, .bokun-messages input[type=search] { padding:7px; border:1px solid #94a3b8; border-radius:6px; max-width:100%; }
+.bokun-messages__connections { padding:8px 0; font-size:12px; color:#475569; }
+.bokun-messages__connections p { margin:4px 0; }
+.bokun-messages__counts { color:#475569; font-size:13px; }
+.bokun-messages__layout { display:grid; grid-template-columns:minmax(240px,28%) minmax(0,1fr); gap:22px; border-top:1px solid #e2e8f0; padding-top:18px; }
+.bokun-messages__layout aside { min-width:0; max-height:1050px; overflow:auto; }
+.bokun-messages .bokun-messages__item { display:flex; flex-direction:column; text-align:left; gap:5px; width:100%; margin:0 0 8px; overflow-wrap:anywhere; }
+.bokun-messages .bokun-messages__item[aria-pressed=true] { border-color:#2563eb; background:#eff6ff; }
+.bokun-messages__item small { color:#64748b; }
+.bokun-messages__detail { min-width:0; }
+.bokun-messages__review { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px; }
+.bokun-messages__message { padding:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; margin-bottom:10px; }
+.bokun-messages__body { white-space:pre-wrap; overflow-wrap:anywhere; }
+.bokun-messages__facts { white-space:pre-wrap; overflow-wrap:anywhere; max-height:400px; overflow:auto; font:12px/1.6 ui-monospace,monospace; background:#f1f5f9; padding:12px; }
+.bokun-messages .bokun-messages__warning { padding:10px; border-left:3px solid #d97706; background:#fffbeb; color:#78350f; }
+.bokun-messages label { display:block; }
+.bokun-messages textarea { display:block; width:100%; max-width:100%; padding:10px; border:1px solid #94a3b8; border-radius:6px; background:#fff; color:#0f172a; margin:6px 0; }
+.bokun-messages__draft { border-top:1px solid #e2e8f0; margin-top:20px; padding-top:18px; }
+.bokun-messages__approval { margin:16px 0; }
+.bokun-messages__approval input { margin-right:8px; }
+.bokun-messages [data-msg-status].is-error { color:#b91c1c; padding:10px; background:#fef2f2; }
+@media(max-width:1000px) { .bokun-messages__review { grid-template-columns:1fr; } }
+@media(max-width:700px) { .bokun-messages { padding:12px; } .bokun-messages__layout { grid-template-columns:1fr; } .bokun-messages__layout aside { max-height:350px; } }
+@container(max-width:950px) { .bokun-messages__review { grid-template-columns:1fr; } }
+@container(max-width:650px) { .bokun-messages__layout { grid-template-columns:1fr; } .bokun-messages__layout aside { max-height:300px; } }
+
+.bokun-messages h2 { font-size:26px; }
+.bokun-messages h3 { font-size:21px; overflow-wrap:anywhere; line-height:1.35; }
+.bokun-messages h4 { font-size:17px; margin-top:0; }
+.bokun-messages h5 { font-size:15px; margin:10px 0; color:#0f172a; }
+.bokun-messages p { margin:8px 0; }
+.bokun-messages button { margin:0; line-height:1.45; white-space:normal; text-transform:none; letter-spacing:normal; border-radius:7px; }
+.bokun-messages button:hover, .bokun-messages button:focus { color:#0f172a; background:#e8eff7; border-color:#94a3b8; }
+.bokun-messages button.bokun-messages__primary { color:#fff; background:#1d4ed8; border-color:#1d4ed8; }
+.bokun-messages button.bokun-messages__primary:hover { color:#fff; background:#1e40af; }
+.bokun-messages.is-busy button { cursor:wait; }
+.bokun-messages select, .bokun-messages input[type=search] { width:100%; min-height:38px; padding:7px 9px; background:#fff; color:#0f172a; }
+.bokun-messages__toolbar { display:grid; grid-template-columns:minmax(145px,1fr) minmax(145px,1fr) minmax(190px,2fr) auto auto; align-items:end; margin:16px 0 10px; }
+.bokun-messages__toolbar label { font-size:12px; font-weight:600; color:#475569; }
+.bokun-messages__toolbar button { min-height:38px; }
+.bokun-messages__connections { display:flex; gap:8px; flex-wrap:wrap; padding:8px 0 14px; }
+.bokun-messages__connections p { margin:0; padding:6px 10px; background:#f1f5f9; border-radius:6px; }
+.bokun-messages__muted { color:#475569; font-size:12px; }
+.bokun-messages__layout { grid-template-columns:minmax(230px,26%) minmax(0,1fr); gap:20px; align-items:start; }
+.bokun-messages__layout > aside { position:sticky; top:44px; max-height:calc(100vh - 64px); overflow-y:auto; overflow-x:hidden; scrollbar-gutter:stable; padding:2px 6px 4px 2px; }
+.bokun-messages button.bokun-messages__item { gap:5px; min-width:0; overflow:hidden; color:#1e293b; background:#f8fafc; padding:12px; }
+.bokun-messages button.bokun-messages__item[aria-pressed=true], .bokun-messages button.bokun-messages__item[aria-pressed=true]:hover, .bokun-messages button.bokun-messages__item[aria-pressed=true]:focus { border-color:#2563eb; color:#0f172a; background:#eff6ff; box-shadow:inset 3px 0 #2563eb; }
+.bokun-messages__item strong, .bokun-messages__item span, .bokun-messages__item small { color:inherit; max-width:100%; overflow-wrap:anywhere; }
+.bokun-messages__item .bokun-messages__preview { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:12px; line-height:1.5; color:#475569; }
+.bokun-messages__item small { font-size:11px; color:#475569; }
+.bokun-messages__badge { display:inline-block; padding:3px 8px; border:1px solid #cbd5e1; border-radius:5px; background:#f1f5f9; color:#334155; font-size:11px; font-weight:600; }
+.bokun-messages__badge--cancelled, .bokun-messages__badge--needs_review { background:#fff7ed; color:#9a3412; border-color:#fdba74; }
+.bokun-messages__badge--confirmed, .bokun-messages__badge--answered { background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }
+.bokun-messages__badge--needs_reply { background:#eff6ff; color:#1e40af; border-color:#bfdbfe; }
+.bokun-messages__main, .bokun-messages__context { min-width:0; }
+.bokun-messages__titlebar, .bokun-messages__actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.bokun-messages__titlebar { align-items:start; justify-content:space-between; margin-bottom:16px; }
+.bokun-messages__titlebar > div { flex:1; min-width:180px; }
+.bokun-messages__review { grid-template-columns:minmax(0,1.5fr) minmax(220px,1fr); gap:18px; align-items:start; }
+.bokun-messages__history, .bokun-messages__draft, .bokun-messages__context { padding:16px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; }
+.bokun-messages__history { max-height:460px; overflow:auto; scrollbar-gutter:stable; }
+.bokun-messages__message--outgoing { background:#eff6ff; border-color:#bfdbfe; }
+.bokun-messages__message--support { background:#f1f5f9; }
+.bokun-messages__message:last-child { margin-bottom:0; }
+.bokun-messages__message > strong { font-size:12px; }
+.bokun-messages details { margin:10px 0; min-width:0; }
+.bokun-messages summary { color:#1e40af; cursor:pointer; font-weight:600; padding:4px 0; overflow-wrap:anywhere; }
+.bokun-messages__context > details { padding-top:10px; border-top:1px solid #e2e8f0; }
+.bokun-messages__context .bokun-messages__body { font-size:12px; }
+.bokun-messages__facts { display:grid; grid-template-columns:1fr; gap:6px; margin:12px 0; white-space:normal; max-height:none; overflow:visible; font:inherit; background:transparent; padding:0; }
+.bokun-messages__fact { margin:0; padding:6px 0; border-bottom:1px solid #f1f5f9; overflow-wrap:anywhere; }
+.bokun-messages__fact strong { display:block; font-size:11px; color:#64748b; }
+.bokun-messages .bokun-messages__warning { padding:10px 12px; border-radius:4px; font-size:12px; overflow-wrap:anywhere; }
+.bokun-messages__warning ul { padding-left:18px; margin:6px 0; }
+.bokun-messages label { color:#334155; font-size:13px; }
+.bokun-messages textarea { padding:12px; border-radius:7px; margin:6px 0 10px; resize:vertical; line-height:1.6; }
+.bokun-messages textarea[readonly] { background:#f8fafc; }
+.bokun-messages__draft { margin-top:16px; }
+.bokun-messages__analysis { padding:12px; background:#f1f5f9; border-radius:7px; margin:12px 0; }
+.bokun-messages__approval { margin:16px 0 10px; padding:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:7px; }
+.bokun-messages__approval input { vertical-align:middle; }
+.bokun-messages__pagination { font-size:11px; padding:8px 0; }
+.bokun-messages__pagination button { padding:6px; font-size:12px; }
+.bokun-messages [data-msg-status] { min-height:22px; margin:8px 0; font-size:13px; }
+.bokun-messages__dirty { color:#92400e; font-size:12px; margin:6px 0; }
+@media(max-width:1100px) { .bokun-messages__review { grid-template-columns:1fr; } .bokun-messages__toolbar { grid-template-columns:1fr 1fr; } .bokun-messages__toolbar label:nth-child(3) { grid-column:1/-1; } }
+@media(max-width:700px) { .bokun-messages__layout { grid-template-columns:1fr; } .bokun-messages__layout > aside { position:static; max-height:310px; } .bokun-messages__review { grid-template-columns:1fr; } .bokun-messages__history, .bokun-messages__draft, .bokun-messages__context { padding:12px; } .bokun-messages__header > a { font-size:12px; } }
+@container(max-width:1050px) { .bokun-messages__review { grid-template-columns:1fr; } }
+@container(max-width:750px) { .bokun-messages__toolbar { grid-template-columns:1fr 1fr; } .bokun-messages__toolbar label:nth-child(3) { grid-column:1/-1; } }
+@container(max-width:650px) { .bokun-messages__layout { grid-template-columns:1fr; } .bokun-messages__layout > aside { position:static; max-height:310px; } }
+@media(max-width:1100px) { .bokun-messages__main { display:contents; } .bokun-messages__history { order:1; } .bokun-messages__context { order:2; } .bokun-messages__draft { order:3; margin-top:0; } }
+@container(max-width:1050px) { .bokun-messages__main { display:contents; } .bokun-messages__history { order:1; } .bokun-messages__context { order:2; } .bokun-messages__draft { order:3; margin-top:0; } }

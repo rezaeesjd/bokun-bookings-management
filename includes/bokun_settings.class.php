@@ -23,11 +23,15 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
 
             add_action('wp_ajax_bokun_import_product_tag_images', array($this, 'bokun_import_product_tag_images'));
 
-        } 
+        }
 
-        
+
         function bokun_bookings_manager_page() {
-            
+            if (!bokun_can_send_booking_message()) {
+                wp_send_json_error(array('msg' => __('Sign in as authorized staff to import bookings.', 'BOKUN_txt_domain')), 403);
+                return;
+            }
+
             // Check the nonce first
             if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
                 wp_send_json_error(array('msg' => 'Nonce verification failed.'));
@@ -63,7 +67,17 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
 
             $progress_context = bokun_normalize_import_context($mode);
 
-            $bookings = bokun_fetch_bookings($progress_context);
+            $import_lock = bokun_webhook_acquire_import_lock();
+            if (is_wp_error($import_lock)) {
+                wp_send_json_error(array('msg' => $import_lock->get_error_message()), 409);
+                return;
+            }
+            try {
+                $bookings = bokun_fetch_bookings($progress_context);
+                $import_summary = is_array($bookings) ? bokun_save_bookings_as_posts($bookings, $progress_context) : array();
+            } finally {
+                bokun_webhook_release_import_lock($import_lock);
+            }
             // echo 'out';
             // echo '<pre>';
             // print_r($bookings);
@@ -108,8 +122,6 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
                     )
                 );
             } else {
-                $import_summary = bokun_save_bookings_as_posts($bookings, $progress_context);
-
                 if (!is_array($import_summary)) {
                     $import_summary = array();
                 }
@@ -130,8 +142,8 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
 
                 wp_send_json_success(
                     array(
-                        'msg'             => 'Bookings have been successfully imported as custom posts.',
-                        'status'          => true,
+                        'msg'             => 'error' === $save_status ? __('The import could not be completed. Check import status.', 'BOKUN_txt_domain') : __('Bookings have been successfully imported as custom posts.', 'BOKUN_txt_domain'),
+                        'status'          => 'error' !== $save_status,
                         'import_summary'  => $normalized_summary,
                     )
                 );
@@ -141,6 +153,10 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
         }
 
         function bokun_get_import_progress() {
+            if (!bokun_can_send_booking_message()) {
+                wp_send_json_error(array('msg' => __('Sign in as authorized staff to view import status.', 'BOKUN_txt_domain')), 403);
+                return;
+            }
             if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
                 wp_send_json_error(array('msg' => 'Nonce verification failed.'));
                 wp_die();
@@ -156,7 +172,7 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
             wp_send_json_success($progress);
             wp_die();
         }
-       
+
         function bokun_save_api_auth() {
             if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
                 wp_send_json_error(array('msg' => 'Invalid nonce.'));
@@ -413,5 +429,5 @@ if( !class_exists ( 'BOKUN_Settings' ) ) {
     global $bokun_settings;
     $bokun_settings = new BOKUN_Settings();
 }
-    
+
 ?>

@@ -116,6 +116,10 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
          */
         private $settings = array();
 
+        private $downloaded_sha = '';
+
+        private $completed_upgrade_sha = '';
+
         /**
          * Constructor.
          *
@@ -137,6 +141,8 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
             add_filter( 'plugins_api', array( $this, 'plugin_information' ), 10, 3 );
             add_filter( 'http_request_args', array( $this, 'authorize_github_download' ), 10, 2 );
             add_filter( 'upgrader_source_selection', array( $this, 'rename_source_folder' ), 10, 4 );
+            add_filter( 'upgrader_pre_download', array( $this, 'capture_upgrade_package' ), 10, 4 );
+            add_filter( 'upgrader_install_package_result', array( $this, 'capture_upgrade_result' ), PHP_INT_MAX, 2 );
             add_action( 'upgrader_process_complete', array( $this, 'after_update' ), 10, 2 );
 
             // Enable WordPress auto-updates for this plugin when auto-sync is on.
@@ -448,17 +454,36 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
                 return $args;
             }
 
-            if ( false === stripos( $url, 'api.github.com/repos' ) && false === stripos( $url, 'raw.githubusercontent.com' ) && false === stripos( $url, 'codeload.github.com' ) ) {
+            $parts = wp_parse_url( $url );
+            $host = strtolower( (string) ( $parts['host'] ?? '' ) );
+            if ( ! is_array( $parts ) || 'https' !== strtolower( (string) ( $parts['scheme'] ?? '' ) ) || ! in_array( $host, array( 'api.github.com', 'raw.githubusercontent.com', 'codeload.github.com' ), true ) || isset( $parts['user'] ) || isset( $parts['pass'] ) || ( isset( $parts['port'] ) && 443 !== (int) $parts['port'] ) ) {
                 return $args;
             }
 
-            if ( ! isset( $args['headers'] ) || ! is_array( $args['headers'] ) ) {
+            $settings = $this->get_settings();
+            $repository = $this->parse_repository_url( $settings['repository_url'] );
+            if ( is_wp_error( $repository ) ) {
+                return $args;
+            }
+            $prefix = ( 'api.github.com' === $host ? '/repos/' : '/' ) . $repository['owner'] . '/' . $repository['repo'];
+            $path = strtolower( (string) ( $parts['path'] ?? '' ) );
+            $prefix = strtolower( $prefix );
+            if ( $path !== $prefix && 0 !== strpos( $path, $prefix . '/' ) ) {
+                return $args;
+            }
+            if ( isset( $args['headers'] ) && ! is_array( $args['headers'] ) ) {
+                return $args;
+            }
+            if ( ! isset( $args['headers'] ) ) {
                 $args['headers'] = array();
             }
 
-            if ( empty( $args['headers']['Authorization'] ) ) {
-                $args['headers']['Authorization'] = 'Bearer ' . $token;
+            foreach ( array_keys( $args['headers'] ) as $name ) {
+                if ( 0 === strcasecmp( (string) $name, 'Authorization' ) ) {
+                    return $args;
+                }
             }
+            $args['headers']['Authorization'] = 'Bearer ' . $token;
 
             if ( empty( $args['headers']['User-Agent'] ) ) {
                 $args['headers']['User-Agent'] = 'WordPress/' . get_bloginfo( 'version' ) . '; ' . home_url();
@@ -517,8 +542,34 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
          * @param WP_Upgrader $upgrader Upgrader instance.
          * @param array       $data     Update data.
          */
+        public function capture_upgrade_package( $reply, $package, $upgrader, $hook_extra ) {
+            if ( ( $hook_extra['plugin'] ?? '' ) !== $this->plugin_basename ) {
+                return $reply;
+            }
+            $this->downloaded_sha = '';
+            $this->completed_upgrade_sha = '';
+            $settings = $this->get_settings();
+            $repository = $this->parse_repository_url( $settings['repository_url'] );
+            $parts = wp_parse_url( $package );
+            if ( is_wp_error( $repository ) || ! is_array( $parts ) || 'https' !== strtolower( (string) ( $parts['scheme'] ?? '' ) ) || 'api.github.com' !== strtolower( (string) ( $parts['host'] ?? '' ) ) || isset( $parts['user'] ) || isset( $parts['pass'] ) || isset( $parts['query'] ) || isset( $parts['fragment'] ) || ( isset( $parts['port'] ) && 443 !== (int) $parts['port'] ) ) {
+                return $reply;
+            }
+            $prefix = '/repos/' . $repository['owner'] . '/' . $repository['repo'] . '/zipball/';
+            if ( preg_match( '#^' . preg_quote( $prefix, '#' ) . '([a-f0-9]{40})$#iD', (string) ( $parts['path'] ?? '' ), $matches ) ) {
+                $this->downloaded_sha = strtolower( $matches[1] );
+            }
+            return $reply;
+        }
+
+        public function capture_upgrade_result( $result, $hook_extra ) {
+            if ( ( $hook_extra['plugin'] ?? '' ) === $this->plugin_basename ) {
+                $this->completed_upgrade_sha = is_array( $result ) && ( $result['destination_name'] ?? '' ) === $this->plugin_slug ? $this->downloaded_sha : '';
+            }
+            return $result;
+        }
+
         public function after_update( $upgrader, $data ) {
-            if ( empty( $data['type'] ) || 'plugin' !== $data['type'] ) {
+            if ( ( $data['type'] ?? '' ) !== 'plugin' || ( $data['action'] ?? '' ) !== 'update' ) {
                 return;
             }
 
@@ -534,14 +585,14 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
                 return;
             }
 
-            // Promote the SHA whose archive we actually installed. Re-querying
-            // the branch HEAD here would risk recording a commit pushed after
-            // the archive was resolved, marking it installed even though its
-            // files never landed.
-            $pending = (string) get_option( self::PENDING_SHA_KEY, '' );
-
-            if ( '' !== $pending ) {
-                update_option( self::INSTALLED_SHA_KEY, $pending );
+            if ( '' === $this->completed_upgrade_sha ) {
+                return;
+            }
+            $installed = $this->completed_upgrade_sha;
+            $this->completed_upgrade_sha = '';
+            $this->downloaded_sha = '';
+            update_option( self::INSTALLED_SHA_KEY, $installed );
+            if ( $installed === (string) get_option( self::PENDING_SHA_KEY, '' ) ) {
                 delete_option( self::PENDING_SHA_KEY );
             }
 
@@ -687,8 +738,6 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
                 return new WP_REST_Response( array( 'message' => $result->get_error_message() ), 500 );
             }
 
-            update_option( self::INSTALLED_SHA_KEY, $remote['sha'] );
-
             return new WP_REST_Response(
                 array(
                     'message' => 'Synced to latest commit.',
@@ -760,9 +809,6 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
 
             $result = $this->install_from_remote( $remote );
 
-            if ( ! is_wp_error( $result ) ) {
-                update_option( self::INSTALLED_SHA_KEY, $remote['sha'] );
-            }
         }
 
         /**
@@ -1279,7 +1325,6 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
             if ( is_wp_error( $result ) ) {
                 $this->persist_notice( $result->get_error_message(), 'error' );
             } else {
-                update_option( self::INSTALLED_SHA_KEY, $remote['sha'] );
                 $this->persist_notice(
                     sprintf(
                         /* translators: %s: short commit SHA. */
@@ -1345,6 +1390,10 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
                 $message  = ! empty( $messages ) ? implode( ' ', array_map( 'wp_strip_all_tags', (array) $messages ) ) : __( 'The GitHub sync did not complete.', 'BOKUN_text_domain' );
 
                 return new WP_Error( 'bokun_github_install', $message );
+            }
+
+            if ( (string) get_option( self::INSTALLED_SHA_KEY, '' ) !== (string) $remote['sha'] ) {
+                return new WP_Error( 'bokun_github_receipt', __( 'The installed GitHub commit could not be confirmed. Review the installed files before retrying.', 'BOKUN_text_domain' ) );
             }
 
             return true;
@@ -1532,7 +1581,7 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
             $url   = trim( (string) $url );
             $parts = wp_parse_url( $url );
 
-            if ( empty( $parts['host'] ) || false === stripos( $parts['host'], 'github.com' ) ) {
+            if ( ! is_array( $parts ) || 'https' !== strtolower( (string) ( $parts['scheme'] ?? '' ) ) || 'github.com' !== strtolower( (string) ( $parts['host'] ?? '' ) ) || isset( $parts['user'] ) || isset( $parts['pass'] ) || isset( $parts['query'] ) || isset( $parts['fragment'] ) || ( isset( $parts['port'] ) && 443 !== (int) $parts['port'] ) ) {
                 return new WP_Error( 'bokun_github_repo', __( 'Please provide a valid GitHub repository URL.', 'BOKUN_text_domain' ) );
             }
 
@@ -1544,7 +1593,7 @@ if ( ! class_exists( 'Bokun_Github_Sync' ) ) {
 
             $segments = explode( '/', $path );
 
-            if ( count( $segments ) < 2 ) {
+            if ( count( $segments ) !== 2 || ! preg_match( '/^[a-z0-9][a-z0-9-]{0,38}$/iD', $segments[0] ) || ! preg_match( '/^[a-z0-9_.-]+$/iD', $segments[1] ) || in_array( $segments[1], array( '.', '..' ), true ) ) {
                 return new WP_Error( 'bokun_github_repo', __( 'Unable to detect the repository owner and name from the URL.', 'BOKUN_text_domain' ) );
             }
 

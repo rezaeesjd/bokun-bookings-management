@@ -8,11 +8,68 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             add_shortcode('bokun_fetch_button', array($this, "function_bokun_fetch_button" ) );
             add_shortcode('bokun_booking_history', array($this, 'render_booking_history_table'));
             add_shortcode('bokun_booking_dashboard', array($this, 'render_booking_dashboard'));
+            add_filter('wp_robots', array($this, 'filter_booking_robots'));
+            add_action('template_redirect', array($this, 'protect_booking_page_cache'));
 
+        }
+
+        private function can_view_staff_data() {
+            return is_user_logged_in() && (current_user_can('manage_options') || current_user_can('edit_others_posts'));
+        }
+
+        private function prevent_private_cache() {
+            if (!defined('DONOTCACHEPAGE')) {
+                define('DONOTCACHEPAGE', true);
+            }
+            if (!headers_sent()) {
+                nocache_headers();
+            }
+        }
+
+        private function is_booking_data_page() {
+            if (is_singular('bokun_booking')) {
+                return true;
+            }
+            if (!is_singular()) {
+                return false;
+            }
+            $dashboard_page_id = absint(get_option('bokun_dashboard_page_id', 0));
+            if ($dashboard_page_id && get_queried_object_id() === $dashboard_page_id) {
+                return true;
+            }
+            $post = get_post();
+            if (!$post instanceof WP_Post) {
+                return false;
+            }
+            foreach (array('bokun_booking_dashboard', 'bokun_booking_history', 'bokun_messages', 'bokun_fetch_button') as $shortcode) {
+                if (has_shortcode((string) $post->post_content, $shortcode)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public function filter_booking_robots($robots) {
+            if ($this->is_booking_data_page()) {
+                unset($robots['index'], $robots['follow']);
+                $robots['noindex'] = true;
+                $robots['nofollow'] = true;
+            }
+            return $robots;
+        }
+
+        public function protect_booking_page_cache() {
+            if ($this->is_booking_data_page()) {
+                $this->prevent_private_cache();
+            }
         }
 
         
         function function_bokun_fetch_button() {
+            $this->prevent_private_cache();
+            if (!$this->can_view_staff_data()) {
+                return '';
+            }
             $should_render_progress = !defined('BOKUN_PROGRESS_RENDERED');
 
             if ($should_render_progress) {
@@ -187,6 +244,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
         function render_booking_history_table($atts = []) {
             global $wpdb;
+            $this->prevent_private_cache();
+            if (!$this->can_view_staff_data()) {
+                return '<div class="bokun-booking-history-notice" role="alert">' . esc_html__('Sign in with an authorized staff account to view booking history.', 'BOKUN_txt_domain') . '</div>';
+            }
 
             $atts = shortcode_atts(
                 [
@@ -626,6 +687,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
 
         public function render_booking_dashboard($atts = []) {
+            $this->prevent_private_cache();
+            if (!$this->can_view_staff_data()) {
+                return '<div class="bokun-booking-dashboard__empty" role="alert">' . esc_html__('Sign in with an authorized staff account to view the booking dashboard.', 'BOKUN_txt_domain') . '</div>';
+            }
             if (!post_type_exists('bokun_booking')) {
                 return '';
             }
@@ -699,7 +764,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     $empty_message .= bokun_render_fetch_status_note();
                 }
 
-                return $empty_message;
+                return $this->wrap_dashboard_tabs($empty_message, $this->render_analytics_panel());
             }
 
             $color_priority_map = [
@@ -786,12 +851,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             $product_tags_without_partner = [];
             $processed_product_tag_ids    = [];
 
-            // Use the same authorization predicate as the AJAX handler. This also
-            // allows guests to use the composer on the public booking dashboard,
-            // while hiding it from logged-in users without a staff capability.
             $user_can_send_message = function_exists('bokun_can_send_booking_message')
                 ? bokun_can_send_booking_message()
-                : (!is_user_logged_in() || current_user_can('edit_others_posts') || current_user_can('manage_options'));
+                : (is_user_logged_in() && (current_user_can('edit_others_posts') || current_user_can('manage_options')));
 
             while ($query->have_posts()) {
                 $query->the_post();
@@ -2930,6 +2992,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
          * @return string
          */
         private function wrap_dashboard_tabs( $bookings_html, $analytics_html ) {
+            $analytics_html = $this->can_view_staff_data() ? $analytics_html : '';
+            $messages_html = class_exists('BOKUN_Messages') && BOKUN_Messages::can_manage() ? BOKUN_Messages::render() : '';
+            if ('' === trim((string) $analytics_html) && '' === trim((string) $messages_html)) {
+                return $bookings_html;
+            }
             $tabs_id = 'bokun-dash-tabs-' . wp_rand( 1000, 9999 );
 
             ob_start();
@@ -2939,16 +3006,30 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     <button type="button" class="bokun-dash-tabs__tab is-active" role="tab" aria-selected="true" data-tab-target="bookings">
                         <?php esc_html_e( 'Bookings', 'BOKUN_txt_domain' ); ?>
                     </button>
+                    <?php if ('' !== trim((string) $analytics_html)) : ?>
                     <button type="button" class="bokun-dash-tabs__tab" role="tab" aria-selected="false" data-tab-target="analytics">
                         <?php esc_html_e( 'Analytics', 'BOKUN_txt_domain' ); ?>
                     </button>
+                    <?php endif; ?>
+                    <?php if ('' !== trim((string) $messages_html)) : ?>
+                    <button type="button" class="bokun-dash-tabs__tab" role="tab" aria-selected="false" data-tab-target="messages">
+                        <?php esc_html_e( 'Messages', 'BOKUN_txt_domain' ); ?>
+                    </button>
+                    <?php endif; ?>
                 </div>
                 <div class="bokun-dash-tabs__panel is-active" data-tab-panel="bookings">
                     <?php echo $bookings_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                 </div>
+                <?php if ('' !== trim((string) $analytics_html)) : ?>
                 <div class="bokun-dash-tabs__panel" data-tab-panel="analytics" hidden>
                     <?php echo $analytics_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                 </div>
+                <?php endif; ?>
+                <?php if ('' !== trim((string) $messages_html)) : ?>
+                <div class="bokun-dash-tabs__panel" data-tab-panel="messages" hidden>
+                    <?php echo $messages_html; ?>
+                </div>
+                <?php endif; ?>
             </div>
             <style>
                 .bokun-dash-tabs__nav { display:flex; gap:4px; border-bottom:2px solid #e2e4e7; margin-bottom:16px; flex-wrap:wrap; }
@@ -3023,6 +3104,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
          * @return string
          */
         public function render_analytics_panel() {
+            $this->prevent_private_cache();
+            if (!$this->can_view_staff_data()) {
+                return '';
+            }
             if ( ! function_exists( 'bokun_analytics_get_rows' ) ) {
                 return '<div class="bokun-andash__empty">' . esc_html__( 'Analytics data layer is unavailable.', 'BOKUN_txt_domain' ) . '</div>';
             }
@@ -4019,6 +4104,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
          * @return string
          */
         public function render_business_panel() {
+            $this->prevent_private_cache();
+            if (!$this->can_view_staff_data()) {
+                return '';
+            }
             if ( ! function_exists( 'bokun_analytics_get_rows' ) || ! function_exists( 'bokun_business_get_expenses' ) ) {
                 return '';
             }

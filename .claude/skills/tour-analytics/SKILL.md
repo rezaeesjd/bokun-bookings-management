@@ -40,7 +40,14 @@ Three layers, each in its own file under `includes/`:
    tour has passed, so a cancellation made after the tour date would otherwise
    never reach the plugin and the booking would linger as "confirmed". A booking
    cancelled in Bokun comes back with a "cancel" `booking_status` term, which is
-   what `bokun_analytics_is_cancelled()` keys on.
+   what `bokun_analytics_is_cancelled()` keys on. Daily imports and optional
+   webhook imports use `bokun_run_import_for_all_contexts($trigger)`; manual
+   Fetch imports the selected API context. Full imports share an advisory
+   database lock. The optional `includes/bokun-webhook.php` receiver is disabled
+   until explicit administrator setup and requires a shared token. It queues
+   authoritative API imports with durable pending generations and bounded
+   retries. It does not guess Bókun HMAC authentication or guarantee a
+   seconds-level refresh: delivery depends on a reliable WP-Cron runner.
 2. **Partners catalog** — `bokun-partners-products.php` builds
    `wp_bokun_partners_products`, one row per product (`product_id`, `title`,
    `net_price`, `commission`, `departure_city`, `partner_page_id`). Seeded from

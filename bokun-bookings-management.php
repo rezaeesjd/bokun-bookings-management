@@ -3,7 +3,7 @@
 Plugin Name: Bokun Bookings Management
 Plugin URI: #
 Description:  Manage Bokun bookings and notifications.
-Version: 1.0.0
+Version: 1.2.3
 Author: Hitesh (HWT)
 Author URI: #
 Domain Path: /languages
@@ -99,7 +99,7 @@ function bokun_polish_common_conversation_copy($translated_text, $text, $domain)
 add_filter('gettext', 'bokun_polish_common_conversation_copy', 10, 3);
 
 global $bokun_version;
-$bokun_version = '1.0.0';
+$bokun_version = '1.2.3';
 
 class BokunBookingManagement {
     var $bokun_settings = '';
@@ -319,6 +319,7 @@ class BokunBookingManagement {
     static function bokun_deactivation() {
         // deactivation process here
         bokun_clear_daily_import_schedule();
+        wp_clear_scheduled_hook('bokun_messages_poll');
     }
 
     public function bokun_add_settings_link( $links ) {
@@ -595,6 +596,11 @@ function bokun_clear_daily_import_schedule() {
 // begin!
 global $rb;
 $rb = new BokunBookingManagement();
+
+require_once __DIR__ . '/includes/bokun-messages.php';
+require_once __DIR__ . '/includes/bokun-webhook.php';
+
+register_deactivation_hook(__FILE__, 'bokun_webhook_deactivate');
 
 add_action('init', 'bokun_schedule_daily_import');
 

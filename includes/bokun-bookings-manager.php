@@ -171,6 +171,10 @@ function bokun_fetch_bookings($context = 'default') {
     $today = new DateTime('today', new DateTimeZone('GMT')); // Midnight today in GMT
     $yesterday = (clone $today)->modify('-1 day');
     $oneMonthLater = (clone $today)->modify('+1 month');
+    $lookahead_days = apply_filters('bokun_booking_start_date_lookahead_days', null);
+    if (is_numeric($lookahead_days) && (int) $lookahead_days >= 0) {
+        $oneMonthLater = (clone $today)->modify('+' . min(3650, (int) $lookahead_days) . ' days');
+    }
 
     // Look back as well as forward. The search is keyed on each booking's start
     // (travel) date, so a forward-only range never re-fetches a booking whose
@@ -237,20 +241,26 @@ function bokun_fetch_bookings($context = 'default') {
         $response = wp_remote_post($url, $args);
 
         if (is_wp_error($response)) {
-            return $page === 1 ? 'Error: ' . $response->get_error_message() : $all_bookings;
+            return 'Error: Bókun booking search failed on page ' . $page . '. No partial import was saved.';
         }
 
         $response_code = wp_remote_retrieve_response_code($response);
         $body = wp_remote_retrieve_body($response);
 
         if ($response_code !== 200) {
-            return $page === 1 ? 'Error: Received unexpected response code ' . $response_code . '. Response: ' . $body : $all_bookings;
+            return 'Error: Bókun returned HTTP ' . (int) $response_code . ' on page ' . $page . '. No partial import was saved.';
         }
 
         $data = json_decode($body, true);
+        if (!is_array($data) || !isset($data['items']) || !is_array($data['items'])) {
+            return 'Error: Bókun returned an invalid booking page. No partial import was saved.';
+        }
 
         if (isset($data['items']) && is_array($data['items'])) {
             foreach ($data['items'] as $item) {
+                if (!is_array($item) || !isset($item['confirmationCode']) || !is_string($item['confirmationCode']) || '' === trim($item['confirmationCode'])) {
+                    return 'Error: Bókun returned an invalid booking item. No partial import was saved.';
+                }
                 if (!empty($item['confirmationCode'])) {
                     error_log('Found booking ' . $item['confirmationCode']);
                 }
@@ -258,24 +268,42 @@ function bokun_fetch_bookings($context = 'default') {
             $all_bookings = array_merge($all_bookings, $data['items']);
         }
 
+        if (isset($data['paging']) && !is_array($data['paging'])) {
+            return 'Error: Bókun returned invalid booking pagination. No partial import was saved.';
+        }
+        $parse_page_number = static function ($value) {
+            return (is_int($value) && $value >= 0) || (is_string($value) && preg_match('/^[0-9]{1,9}$/D', $value)) ? (int) $value : false;
+        };
         $total_pages = null;
         if (isset($data['totalPages'])) {
-            $total_pages = (int) $data['totalPages'];
+            $total_pages = $parse_page_number($data['totalPages']);
         } elseif (isset($data['paging']['totalPages'])) {
-            $total_pages = (int) $data['paging']['totalPages'];
+            $total_pages = $parse_page_number($data['paging']['totalPages']);
         } elseif (isset($data['paging']['totalPageCount'])) {
-            $total_pages = (int) $data['paging']['totalPageCount'];
+            $total_pages = $parse_page_number($data['paging']['totalPageCount']);
         }
 
         $next_page = null;
         if (isset($data['nextPage'])) {
-            $next_page = (int) $data['nextPage'];
+            $next_page = $parse_page_number($data['nextPage']);
         } elseif (isset($data['paging']['nextPage'])) {
-            $next_page = (int) $data['paging']['nextPage'];
+            $next_page = $parse_page_number($data['paging']['nextPage']);
         }
-
-        if (!is_null($next_page) && $next_page <= $page) {
-            $next_page = null;
+        $has_more_flag = null;
+        foreach (array($data, $data['paging'] ?? array()) as $pagination) {
+            if (array_key_exists('hasMore', $pagination)) {
+                if (!in_array($pagination['hasMore'], array(true, false, 1, 0, '1', '0', 'true', 'false'), true)) {
+                    return 'Error: Bókun returned invalid booking pagination. No partial import was saved.';
+                }
+                $flag = in_array($pagination['hasMore'], array(true, 1, '1', 'true'), true);
+                if (null !== $has_more_flag && $flag !== $has_more_flag) {
+                    return 'Error: Bókun returned conflicting booking pagination. No partial import was saved.';
+                }
+                $has_more_flag = $flag;
+            }
+        }
+        if (false === $total_pages || false === $next_page || ($next_page > 0 && $next_page !== $page + 1) || ($next_page > 0 && null !== $total_pages && $next_page > $total_pages) || (0 === $next_page && null !== $total_pages && $total_pages > $page) || (null !== $total_pages && $total_pages < $page && ($data['items'] || $total_pages > 0)) || (true === $has_more_flag && (0 === $next_page || (null !== $total_pages && $total_pages <= $page))) || (false === $has_more_flag && ($next_page > 0 || (null !== $total_pages && $total_pages > $page)))) {
+            return 'Error: Bókun returned conflicting booking pagination. No partial import was saved.';
         }
 
         $has_more = false;
@@ -283,11 +311,7 @@ function bokun_fetch_bookings($context = 'default') {
             $has_more = true;
         }
 
-        if (isset($data['hasMore']) && $data['hasMore']) {
-            $has_more = true;
-        }
-
-        if (isset($data['paging']['hasMore']) && $data['paging']['hasMore']) {
+        if (true === $has_more_flag) {
             $has_more = true;
         }
 
@@ -295,12 +319,18 @@ function bokun_fetch_bookings($context = 'default') {
             $has_more = true;
         }
 
-        if (!$has_more && isset($data['items']) && is_array($data['items']) && count($data['items']) === $items_per_page) {
+        if (!$has_more && null === $has_more_flag && null === $next_page && null === $total_pages && count($data['items']) === $items_per_page) {
             $has_more = true;
             $next_page = $page + 1;
         }
 
-        if (!$has_more || empty($data['items'])) {
+        if ($has_more && empty($data['items'])) {
+            return 'Error: Bókun returned an incomplete booking page. No partial import was saved.';
+        }
+        if ($has_more && $page >= 1000) {
+            return 'Error: Bókun booking search exceeded the page limit. No partial import was saved.';
+        }
+        if (!$has_more) {
             break;
         }
 
@@ -585,7 +615,7 @@ function bokun_record_import_run($context, $status, $trigger, $message = '', $su
     $context = bokun_normalize_import_context($context);
 
     $status  = ('error' === $status) ? 'error' : 'success';
-    $trigger = in_array($trigger, array('manual', 'scheduled'), true) ? $trigger : 'manual';
+    $trigger = in_array($trigger, array('manual', 'scheduled', 'webhook'), true) ? $trigger : 'manual';
     $now     = time();
 
     $runs  = bokun_get_import_last_runs();
@@ -626,6 +656,9 @@ function bokun_record_import_run($context, $status, $trigger, $message = '', $su
  * @return string
  */
 function bokun_get_import_trigger_label($trigger) {
+    if ('webhook' === $trigger) {
+        return __('Bokun webhook (live change)', 'bokun-bookings-manager');
+    }
     if ('scheduled' === $trigger) {
         return __('Scheduled daily auto-import', 'bokun-bookings-manager');
     }
@@ -727,65 +760,86 @@ function bokun_render_fetch_status_note() {
 }
 
 function bokun_run_daily_import() {
+    return bokun_run_import_for_all_contexts('scheduled');
+}
+
+function bokun_run_import_for_all_contexts($trigger = 'scheduled') {
+    $trigger = in_array($trigger, array('manual', 'scheduled', 'webhook'), true) ? $trigger : 'scheduled';
     $configured_credentials = bokun_get_configured_api_credentials();
 
     if (empty($configured_credentials)) {
         error_log(__('Bokun import skipped: no API credentials configured.', 'bokun-bookings-manager'));
-        return;
+        return new WP_Error('import_credentials', 'No Bókun API credentials are configured.');
     }
 
-    foreach ($configured_credentials as $context => $config) {
-        $progress_context = bokun_normalize_import_context($context);
+    $import_lock = bokun_webhook_acquire_import_lock();
+    if (is_wp_error($import_lock)) {
+        return $import_lock;
+    }
+    $failed_contexts = array();
+    try {
+        foreach ($configured_credentials as $context => $config) {
+            $progress_context = bokun_normalize_import_context($context);
 
-        bokun_reset_import_progress_state($progress_context);
+            bokun_reset_import_progress_state($progress_context);
 
-        $bookings = bokun_fetch_bookings($progress_context);
+            $bookings = bokun_fetch_bookings($progress_context);
 
-        if (is_string($bookings)) {
-            $normalized_message = trim($bookings);
-            $is_error_message = stripos($normalized_message, 'error') === 0;
+            if (is_string($bookings)) {
+                $normalized_message = trim($bookings);
+                $is_error_message = stripos($normalized_message, 'error') === 0;
 
-            if ($is_error_message) {
-                $progress_message = bokun_get_import_progress_message($progress_context, 'error');
-            } else {
-                $progress_label = bokun_get_import_progress_label($progress_context);
-                /* translators: %s: API label. */
-                $progress_message = sprintf(__('%s — no bookings found; continuing with remaining imports.', 'bokun-bookings-manager'), $progress_label);
+                if ($is_error_message) {
+                    $progress_message = bokun_get_import_progress_message($progress_context, 'error');
+                } else {
+                    $progress_label = bokun_get_import_progress_label($progress_context);
+                    /* translators: %s: API label. */
+                    $progress_message = sprintf(__('%s — no bookings found; continuing with remaining imports.', 'bokun-bookings-manager'), $progress_label);
+                }
+
+                bokun_set_import_progress_state($progress_context, array(
+                    'status'    => $is_error_message ? 'error' : 'completed',
+                    'total'     => 0,
+                    'processed' => 0,
+                    'created'   => 0,
+                    'updated'   => 0,
+                    'skipped'   => 0,
+                    'message'   => $progress_message,
+                ));
+
+                bokun_record_import_run(
+                    $progress_context,
+                    $is_error_message ? 'error' : 'success',
+                    $trigger,
+                    $is_error_message ? $normalized_message : __('No bookings found.', 'bokun-bookings-manager'),
+                    array()
+                );
+
+                if ($is_error_message) {
+                    $failed_contexts[] = $progress_context;
+                }
+                continue;
             }
 
-            bokun_set_import_progress_state($progress_context, array(
-                'status'    => $is_error_message ? 'error' : 'completed',
-                'total'     => 0,
-                'processed' => 0,
-                'created'   => 0,
-                'updated'   => 0,
-                'skipped'   => 0,
-                'message'   => $progress_message,
-            ));
+            $import_summary = bokun_save_bookings_as_posts($bookings, $progress_context);
+            $save_status    = (is_array($import_summary) && isset($import_summary['status']) && 'error' === $import_summary['status']) ? 'error' : 'success';
+            $save_message   = (is_array($import_summary) && !empty($import_summary['message'])) ? $import_summary['message'] : '';
 
             bokun_record_import_run(
                 $progress_context,
-                $is_error_message ? 'error' : 'success',
-                'scheduled',
-                $is_error_message ? $normalized_message : __('No bookings found.', 'bokun-bookings-manager'),
-                array()
+                $save_status,
+                $trigger,
+                $save_message,
+                is_array($import_summary) ? $import_summary : array()
             );
-
-            continue;
+            if ('error' === $save_status) {
+                $failed_contexts[] = $progress_context;
+            }
         }
-
-        $import_summary = bokun_save_bookings_as_posts($bookings, $progress_context);
-        $save_status    = (is_array($import_summary) && isset($import_summary['status']) && 'error' === $import_summary['status']) ? 'error' : 'success';
-        $save_message   = (is_array($import_summary) && !empty($import_summary['message'])) ? $import_summary['message'] : '';
-
-        bokun_record_import_run(
-            $progress_context,
-            $save_status,
-            'scheduled',
-            $save_message,
-            is_array($import_summary) ? $import_summary : array()
-        );
+    } finally {
+        bokun_webhook_release_import_lock($import_lock);
     }
+    return $failed_contexts ? new WP_Error('import_failed', 'Bókun import failed for one or more configured accounts. Check import status before retrying.', array('contexts' => $failed_contexts)) : true;
 }
 
 add_action(BOKUN_DAILY_IMPORT_HOOK, 'bokun_run_daily_import');
@@ -1196,6 +1250,8 @@ function bokun_scan_booking_terminal_status($data) {
 
 // Function to save specific fields of the booking
 function bokun_save_specific_fields($post_id, $booking, $context = 'default') {
+    update_post_meta($post_id, '_bokun_import_context', bokun_normalize_import_context($context));
+    update_post_meta($post_id, '_bokun_last_imported_at', time());
     // Extract nested values
     $customer = $booking['customer'] ?? [];
     $productBooking = $booking['productBookings'][0] ?? [];
@@ -3432,6 +3488,10 @@ function bokun_record_booking_history($post_id, $booking_id, $action_type, $chec
 
 // Handle AJAX request to update booking status and track click logs
 function update_booking_status() {
+    if (!bokun_can_send_booking_message()) {
+        wp_send_json_error(array('message' => __('Sign in as authorized staff to update bookings.', 'bokun-bookings-manager')), 403);
+        return;
+    }
     check_ajax_referer('update_booking_nonce', 'security');
 
     $booking_id = isset($_POST['booking_id']) ? sanitize_text_field(wp_unslash($_POST['booking_id'])) : '';
@@ -3683,6 +3743,10 @@ function bokun_team_member_has_verified_grant() {
 
 // Handle AJAX request to create Team Member taxonomy terms
 function bokun_handle_add_team_member() {
+    if (!bokun_can_send_booking_message()) {
+        wp_send_json_error(array('message' => __('Sign in as authorized staff to manage team members.', 'bokun-bookings-manager')), 403);
+        return;
+    }
     check_ajax_referer('add_team_member_nonce', 'security');
 
     $team_member_name = isset($_POST['team_member_name']) ? sanitize_text_field(wp_unslash($_POST['team_member_name'])) : '';
@@ -3782,6 +3846,10 @@ function bokun_product_tag_can_be_updated_from_dashboard($term_id, $days = 30) {
 }
 
 function bokun_update_partner_page_id() {
+    if (!bokun_can_send_booking_message()) {
+        wp_send_json_error(array('msg' => __('Sign in as authorized staff to update booking products.', 'bokun-bookings-manager')), 403);
+        return;
+    }
     if (!check_ajax_referer('bokun_api_auth_nonce', 'security', false)) {
         wp_send_json_error(array('msg' => __('Invalid nonce.', 'bokun-bookings-manager')));
         wp_die();
@@ -3846,9 +3914,7 @@ add_action('wp_ajax_nopriv_bokun_send_booking_message', 'bokun_send_booking_mess
 /**
  * Whether the current requester may send a client message from the dashboard.
  *
- * Anonymous dashboard visitors are allowed to send messages because the
- * booking dashboard is designed to be operated without a WordPress account.
- * Logged-in users still require a trusted-staff capability.
+ * Customer messaging requires an authenticated staff account.
  *
  * The boundary is `edit_others_posts` (Editors and Administrators), not the
  * broader `edit_posts`: the latter is also granted to Contributors and Authors,
@@ -3856,7 +3922,7 @@ add_action('wp_ajax_nopriv_bokun_send_booking_message', 'bokun_send_booking_mess
  * able to email a customer for any booking whose confirmation code they obtain.
  */
 function bokun_can_send_booking_message() {
-    return !is_user_logged_in() || current_user_can('manage_options') || current_user_can('edit_others_posts');
+    return is_user_logged_in() && (current_user_can('manage_options') || current_user_can('edit_others_posts'));
 }
 
 // Handle AJAX request to send a message to the booking's stored contact email.
@@ -5072,18 +5138,31 @@ add_action('rest_api_init', function () {
     register_rest_route('bokun/v1', '/import-bookings', [
         'methods' => 'POST',
         'callback' => 'bokun_import_bookings',
-        'permission_callback' => '__return_true', // Adjust based on security needs
+        'permission_callback' => 'bokun_can_send_booking_message',
     ]);
 });
 
 // Callback function for the endpoint to import bookings
 function bokun_import_bookings() {
-    // Fetch and process the bookings
-    $bookings = bokun_fetch_bookings();
+    if (!bokun_can_send_booking_message()) {
+        return new WP_Error('import_forbidden', 'Sign in as authorized staff to import bookings.', array('status' => 403));
+    }
+    $import_lock = bokun_webhook_acquire_import_lock();
+    if (is_wp_error($import_lock)) {
+        return $import_lock;
+    }
+    try {
+        $bookings = bokun_fetch_bookings();
+        $summary = is_array($bookings) ? bokun_save_bookings_as_posts($bookings, 'default') : array();
+    } finally {
+        bokun_webhook_release_import_lock($import_lock);
+    }
     if (is_array($bookings)) {
-        $summary = bokun_save_bookings_as_posts($bookings, 'rest');
         if (!is_array($summary)) {
             $summary = array();
+        }
+        if ('error' === ($summary['status'] ?? '')) {
+            return new WP_Error('import_failed', 'The booking import could not be completed. Check import status.', array('status' => 500));
         }
 
         $normalized_summary = array(
@@ -5102,6 +5181,9 @@ function bokun_import_bookings() {
             200
         );
     } else {
+        if (is_string($bookings) && 0 !== stripos(trim($bookings), 'error')) {
+            return new WP_REST_Response(array('message' => 'No bookings available to process.', 'summary' => array('total' => 0)), 200);
+        }
         return new WP_REST_Response('Error fetching bookings: ' . $bookings, 500);
     }
 }
