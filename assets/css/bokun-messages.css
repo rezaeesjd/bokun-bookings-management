@@ -46,7 +46,7 @@
 .bokun-messages button.bokun-messages__primary:hover { color:#fff; background:#1e40af; }
 .bokun-messages.is-busy button { cursor:wait; }
 .bokun-messages select, .bokun-messages input[type=search] { width:100%; min-height:38px; padding:7px 9px; background:#fff; color:#0f172a; }
-.bokun-messages__toolbar { display:grid; grid-template-columns:minmax(145px,1fr) minmax(145px,1fr) minmax(190px,2fr) auto auto; align-items:end; margin:16px 0 10px; }
+.bokun-messages__toolbar { display:grid; grid-template-columns:minmax(130px,1fr) minmax(130px,1fr) minmax(130px,1fr) minmax(190px,2fr) auto auto; align-items:end; margin:16px 0 10px; }
 .bokun-messages__toolbar label { font-size:12px; font-weight:600; color:#475569; }
 .bokun-messages__toolbar button { min-height:38px; }
 .bokun-messages__connections { display:flex; gap:8px; flex-wrap:wrap; padding:8px 0 14px; }
@@ -94,10 +94,10 @@
 .bokun-messages__pagination button { padding:6px; font-size:12px; }
 .bokun-messages [data-msg-status] { min-height:22px; margin:8px 0; font-size:13px; }
 .bokun-messages__dirty { color:#92400e; font-size:12px; margin:6px 0; }
-@media(max-width:1100px) { .bokun-messages__review { grid-template-columns:1fr; } .bokun-messages__toolbar { grid-template-columns:1fr 1fr; } .bokun-messages__toolbar label:nth-child(3) { grid-column:1/-1; } }
+@media(max-width:1100px) { .bokun-messages__review { grid-template-columns:1fr; } .bokun-messages__toolbar { grid-template-columns:1fr 1fr; } .bokun-messages__toolbar label:nth-child(4) { grid-column:1/-1; } }
 @media(max-width:700px) { .bokun-messages__layout { grid-template-columns:1fr; } .bokun-messages__layout > aside { position:static; max-height:310px; } .bokun-messages__review { grid-template-columns:1fr; } .bokun-messages__history, .bokun-messages__draft, .bokun-messages__context { padding:12px; } .bokun-messages__header > a { font-size:12px; } }
 @container(max-width:1050px) { .bokun-messages__review { grid-template-columns:1fr; } }
-@container(max-width:750px) { .bokun-messages__toolbar { grid-template-columns:1fr 1fr; } .bokun-messages__toolbar label:nth-child(3) { grid-column:1/-1; } }
+@container(max-width:750px) { .bokun-messages__toolbar { grid-template-columns:1fr 1fr; } .bokun-messages__toolbar label:nth-child(4) { grid-column:1/-1; } }
 @container(max-width:650px) { .bokun-messages__layout { grid-template-columns:1fr; } .bokun-messages__layout > aside { position:static; max-height:310px; } }
 @media(max-width:1100px) { .bokun-messages__main { display:contents; } .bokun-messages__history { order:1; } .bokun-messages__context { order:2; } .bokun-messages__draft { order:3; margin-top:0; } }
 @container(max-width:1050px) { .bokun-messages__main { display:contents; } .bokun-messages__history { order:1; } .bokun-messages__context { order:2; } .bokun-messages__draft { order:3; margin-top:0; } }
