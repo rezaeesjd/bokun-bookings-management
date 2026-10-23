@@ -1210,6 +1210,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     $result_panel_id      = 'bokun-result-panel-' . uniqid();
                     $has_result_selection = ! empty( $checkbox_states['full'] ) || ! empty( $checkbox_states['partial'] ) || ! empty( $checkbox_states['not-available'] );
                     ?>
+                    <?php if ($can_view_staff_data) : // Result/payment toggles are staff-only mutation controls (their AJAX rejects anonymous callers), so they are never rendered on the public view. ?>
                     <div class="bokun-booking-dashboard__result" data-result>
                         <button type="button" class="bokun-booking-dashboard__result-toggle" data-result-toggle aria-expanded="false" aria-controls="<?php echo esc_attr($result_panel_id); ?>">
                             <span class="bokun-booking-dashboard__result-title"><?php esc_html_e('Result', 'BOKUN_txt_domain'); ?></span>
@@ -1260,6 +1261,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             </div>
                         </div>
                     </div>
+                    <?php endif; // end staff-only result/payment block ?>
 
                     <div class="bokun-booking-dashboard__body">
                         <?php if (!empty($product_title) || !empty($rate_title) || !empty($meeting_point) || !empty($start_date_display) || !empty($start_time_display) || !empty($participants) || !empty($inclusions)) : ?>
@@ -2035,7 +2037,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
                 ?>
 
-                <?php if (!empty($product_tags_without_partner)) : ?>
+                <?php if ($can_view_staff_data && !empty($product_tags_without_partner)) : // Staff-only: partner-page-id assignment forms mutate term meta via AJAX. ?>
                     <div class="bokun-booking-dashboard__missing-tags">
                         <h3><?php esc_html_e('Product tags without link to partner website:', 'BOKUN_txt_domain'); ?></h3>
                         <ul class="bokun-booking-dashboard__missing-tags-list">
