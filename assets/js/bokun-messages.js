@@ -3,6 +3,7 @@
     document.querySelectorAll('[data-bokun-messages]').forEach(function (root) {
         var account = root.querySelector('[data-msg-account]');
         var filter = root.querySelector('[data-msg-filter]');
+        var sort = root.querySelector('[data-msg-sort]');
         var search = root.querySelector('[data-msg-search]');
         var status = root.querySelector('[data-msg-status]');
         var list = root.querySelector('[data-msg-list]');
@@ -149,7 +150,7 @@
 
         async function loadInbox() {
             var sequence = ++inboxSequence;
-            var data = await api('inbox', {account: account.value, state: filter.value, search: search.value, page: page}, 'GET');
+            var data = await api('inbox', {account: account.value, state: filter.value, sort: sort ? sort.value : 'recent', search: search.value, page: page}, 'GET');
             if (sequence !== inboxSequence) { return; }
             conversations = data.conversations;
             total = data.total;
@@ -549,6 +550,7 @@
         root.querySelector('[data-msg-reload]').addEventListener('click', function () { run(loadInbox); });
         search.addEventListener('input', function () { window.clearTimeout(searchTimer); searchTimer = window.setTimeout(reloadInbox, 300); });
         filter.addEventListener('change', reloadInbox);
+        if (sort) { sort.addEventListener('change', reloadInbox); }
         account.addEventListener('change', function () {
             if (selected && account.value && selected.conversation.account !== account.value) {
                 if (!canDiscard()) { account.value = selected.conversation.account; return; }

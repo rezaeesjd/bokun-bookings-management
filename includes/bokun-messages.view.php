@@ -12,6 +12,7 @@ if (!defined('ABSPATH')) {
     <div class="bokun-messages__toolbar">
         <label>Business <select data-msg-account><option value="">All businesses</option><?php foreach (self::accounts() as $key => $account) : ?><option value="<?php echo esc_attr($key); ?>"><?php echo esc_html($account['name']); ?></option><?php endforeach; ?></select></label>
         <label>Status <select data-msg-filter><option value="attention">Needs attention</option><option value="all">All messages</option><option value="needs_reply">Needs reply</option><option value="needs_review">Needs review</option><option value="answered">Answered</option><option value="closed">Handled</option></select></label>
+        <label>Sort <select data-msg-sort><option value="recent" selected>Last message (newest)</option><option value="oldest">Last message (oldest)</option><option value="priority">Priority (needs reply first)</option></select></label>
         <label>Search inbox <input type="search" data-msg-search placeholder="Booking, customer or message"></label>
         <button type="button" data-msg-sync>Sync both mailboxes</button>
         <button type="button" data-msg-reload>Refresh inbox</button>
