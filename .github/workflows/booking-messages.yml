@@ -2,18 +2,8 @@ name: Booking Messages regression
 
 on:
   pull_request:
-    paths:
-      - '**.php'
-      - 'assets/**'
-      - 'tests/**'
-      - '.github/workflows/booking-messages.yml'
   push:
     branches: [main]
-    paths:
-      - '**.php'
-      - 'assets/**'
-      - 'tests/**'
-      - '.github/workflows/booking-messages.yml'
 
 permissions:
   contents: read
