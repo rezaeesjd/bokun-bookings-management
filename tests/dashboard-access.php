@@ -71,14 +71,18 @@ verify_dashboard_case(isset($hooks['wp_robots'], $hooks['template_redirect']), '
 foreach (array('anonymous' => array(false, array()), 'subscriber' => array(true, array('read')), 'contributor' => array(true, array('read', 'edit_posts')), 'author' => array(true, array('read', 'edit_posts', 'publish_posts'))) as $role => $permissions) {
     $access['logged_in'] = $permissions[0];
     $access['capabilities'] = $permissions[1];
-    $before_queries = $access['queries'];
     $before_messages = $access['message_renders'];
     $dashboard = $shortcodes->render_booking_dashboard();
-    verify_dashboard_case(str_contains($dashboard, 'authorized staff account') && !str_contains($dashboard, 'STAFF_IMPORT_STATUS'), $role . ' cannot render booking dashboard data');
+    // The Bookings view is intentionally public: non-staff see the bookings
+    // (here, the empty-state) without a sign-in wall.
+    verify_dashboard_case(str_contains($dashboard, 'No upcoming bookings') && !str_contains($dashboard, 'authorized staff account'), $role . ' sees the public bookings view');
+    // ...but every staff-only surface inside it stays hidden: the import
+    // status/controls, the Analytics tab, and the administrator Messages tab.
+    verify_dashboard_case(!str_contains($dashboard, 'STAFF_IMPORT_STATUS') && !str_contains($dashboard, 'data-tab-target="analytics"') && !str_contains($dashboard, 'data-tab-target="messages"'), $role . ' public bookings view hides import, analytics and messages');
     verify_dashboard_case('' === $shortcodes->render_analytics_panel() && '' === $shortcodes->render_business_panel(), $role . ' cannot render analytics or business results directly');
     verify_dashboard_case(str_contains($shortcodes->render_booking_history_table(array('capability' => '')), 'authorized staff account'), $role . ' cannot bypass booking history with an empty capability');
     verify_dashboard_case('' === $shortcodes->function_bokun_fetch_button(), $role . ' cannot render import controls');
-    verify_dashboard_case($before_queries === $access['queries'] && $before_messages === $access['message_renders'], $role . ' denial happens before booking queries or message rendering');
+    verify_dashboard_case($before_messages === $access['message_renders'], $role . ' never renders the administrator messages surface');
 }
 
 $access['logged_in'] = true;

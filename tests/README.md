@@ -22,9 +22,10 @@ offline. Keep `--ignore-scripts`; no dependency lifecycle scripts are required.
 
 ## Coverage
 
-- `dashboard-access.php`: 40 checks for staff authorization before booking queries,
-  direct analytics/business/history access, independent Messages visibility,
-  empty booking inventories, noindex, and cache protection.
+- `dashboard-access.php`: 44 checks for the public Bookings view hiding every
+  staff-only surface (import controls/status, Analytics and Messages tabs),
+  staff-only direct analytics/business/history access, independent Messages
+  visibility, empty booking inventories, noindex, and cache protection.
 - `booking-webhook.php`: 53 checks for explicit activation, secret authorization,
   request shape, durable pending markers, database lock ownership, scheduling,
   retries, trailing work, and safe deactivation.
