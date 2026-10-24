@@ -111,6 +111,20 @@
 	border-radius: var(--bk-radius-sm);
 }
 
+/* Forced-colors mode (e.g. Windows High Contrast) suppresses box-shadow, which
+   would make the shadow-based focus ring invisible. Restore a visible outline
+   for keyboard focus across the plugin's surfaces. !important is needed to beat
+   component rules that set `outline: none` alongside their box-shadow ring. */
+@media (forced-colors: active) {
+	.bokun-booking-dashboard *:focus-visible,
+	.bokun-dash-tabs *:focus-visible,
+	.bokun-messages *:focus-visible,
+	.bokun-booking-dashboard__tab:focus-visible {
+		outline: 2px solid CanvasText !important;
+		outline-offset: 2px;
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.bokun-booking-dashboard *,
 	.bokun-dash-tabs *,
