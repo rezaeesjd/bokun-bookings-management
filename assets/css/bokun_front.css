@@ -120,15 +120,17 @@
 
 .bokun-booking-dashboard {
   --bokun-booking-dashboard-columns: 3;
-  --bokun-booking-dashboard-accent: #7b1e3a;
-  --bokun-booking-dashboard-accent-dark: #5f152c;
+  --bokun-booking-dashboard-accent: var(--bk-brand-600);
+  --bokun-booking-dashboard-accent-dark: var(--bk-brand-700);
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--bk-space-5);
   margin: 0;
-  padding: 1.5rem;
-  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.08);
+  padding: var(--bk-space-5);
+  background: var(--bk-surface);
+  border: 1px solid var(--bk-border);
+  border-radius: var(--bk-radius-lg);
+  box-shadow: var(--bk-shadow-md);
 }
 
 .bokun-booking-dashboard__toolbar {
@@ -151,10 +153,10 @@
 
 .bokun-booking-dashboard__toolbar-title {
   margin: 0;
-  font-size: 1.15rem;
-  font-weight: 700;
+  font-size: var(--bk-text-xl);
+  font-weight: var(--bk-weight-bold);
   line-height: 1.2;
-  color: #0f172a;
+  color: var(--bk-text);
 }
 
 .bokun-booking-dashboard__toolbar-link {
@@ -163,21 +165,21 @@
   justify-content: center;
   gap: 0.35rem;
   padding: 0.45rem 0.9rem;
-  border-radius: 0.65rem;
-  border: 1px solid rgba(59, 130, 246, 0.28);
-  background: rgba(59, 130, 246, 0.12);
-  color: #1d4ed8;
-  font-size: 0.82rem;
-  font-weight: 600;
+  border-radius: var(--bk-radius-md);
+  border: 1px solid var(--bk-brand-200);
+  background: var(--bk-brand-50);
+  color: var(--bk-brand-600);
+  font-size: var(--bk-text-sm);
+  font-weight: var(--bk-weight-semibold);
   text-decoration: none;
-  transition: color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+  transition: color var(--bk-transition), background-color var(--bk-transition), box-shadow var(--bk-transition);
 }
 
 .bokun-booking-dashboard__toolbar-link:hover,
 .bokun-booking-dashboard__toolbar-link:focus {
-  color: #0f172a;
-  background: rgba(59, 130, 246, 0.2);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+  color: var(--bk-text-on-brand);
+  background: var(--bk-brand-600);
+  box-shadow: var(--bk-focus-ring);
   outline: none;
 }
 
@@ -186,10 +188,10 @@
   flex-wrap: wrap;
   gap: 1rem;
   align-items: flex-end;
-  padding: 1.25rem;
-  border-radius: 1rem;
-  background: rgba(37, 99, 235, 0.06);
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  padding: var(--bk-space-4);
+  border-radius: var(--bk-radius-lg);
+  background: var(--bk-surface-sunken);
+  border: 1px solid var(--bk-border);
 }
 
 .bokun-booking-dashboard__search {
@@ -221,15 +223,15 @@
 .bokun-booking-dashboard__search-input {
   width: 100%;
   padding: 0.55rem 2.5rem 0.55rem 0.75rem;
-  border-radius: 0.5rem;
-  border: 1px solid #cbd5e1;
-  font-size: 0.95rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  border-radius: var(--bk-radius-sm);
+  border: 1px solid var(--bk-border-strong);
+  font-size: var(--bk-text-base);
+  transition: border-color var(--bk-transition), box-shadow var(--bk-transition);
 }
 
 .bokun-booking-dashboard__search-input:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+  border-color: var(--bk-brand-500);
+  box-shadow: var(--bk-focus-ring);
   outline: none;
 }
 
@@ -317,14 +319,14 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.65rem 2.5rem 0.65rem 0.85rem;
-  border-radius: 0.85rem;
-  border: 1px solid #bfdbfe;
-  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
-  font-size: 0.94rem;
-  font-weight: 600;
-  color: #1e3a8a;
+  border-radius: var(--bk-radius-md);
+  border: 1px solid var(--bk-border-strong);
+  background: var(--bk-surface);
+  font-size: var(--bk-text-base);
+  font-weight: var(--bk-weight-semibold);
+  color: var(--bk-text);
   cursor: pointer;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition: border-color var(--bk-transition), box-shadow var(--bk-transition), transform var(--bk-transition);
 }
 
 .bokun-booking-dashboard__filter-dropdown summary::-webkit-details-marker {
@@ -334,7 +336,7 @@
 .bokun-booking-dashboard__filter-dropdown summary::after {
   content: "\25BE";
   font-size: 0.7rem;
-  color: #1e3a8a;
+  color: var(--bk-text-muted);
   position: absolute;
   right: 1rem;
   top: 50%;
@@ -343,9 +345,9 @@
 }
 
 .bokun-booking-dashboard__filter-dropdown[open] summary {
-  border-color: #1d4ed8;
-  background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%);
-  box-shadow: 0 16px 28px rgba(37, 99, 235, 0.18);
+  border-color: var(--bk-brand-500);
+  background: var(--bk-brand-50);
+  box-shadow: var(--bk-shadow-md);
   transform: translateY(-1px);
 }
 
@@ -355,10 +357,10 @@
 
 .bokun-booking-dashboard__filter-menu {
   margin-top: 0.45rem;
-  border: 1px solid #bfdbfe;
-  border-radius: 0.85rem;
-  background: #ffffff;
-  box-shadow: 0 22px 38px rgba(15, 23, 42, 0.12);
+  border: 1px solid var(--bk-border);
+  border-radius: var(--bk-radius-md);
+  background: var(--bk-surface);
+  box-shadow: var(--bk-shadow-lg);
   padding: 0.85rem;
 }
 
@@ -389,8 +391,8 @@
   width: 1rem;
   height: 1rem;
   border-radius: 0.35rem;
-  border: 1px solid #bfdbfe;
-  accent-color: #2563eb;
+  border: 1px solid var(--bk-border-strong);
+  accent-color: var(--bk-brand-600);
 }
 
 .bokun-booking-dashboard__empty--filtered[hidden] {
@@ -408,28 +410,32 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.55rem 1.1rem;
-  border-radius: 999px;
-  border: 1px solid rgba(59, 130, 246, 0.4);
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(59, 130, 246, 0.05) 100%);
-  color: #1e3a8a;
-  font-size: 0.95rem;
-  font-weight: 600;
+  border-radius: var(--bk-radius-pill);
+  border: 1px solid var(--bk-border-strong);
+  background: var(--bk-surface);
+  color: var(--bk-text-muted);
+  font-size: var(--bk-text-base);
+  font-weight: var(--bk-weight-semibold);
   cursor: pointer;
   text-decoration: none;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
+  transition: transform var(--bk-transition), box-shadow var(--bk-transition), background var(--bk-transition), color var(--bk-transition), border-color var(--bk-transition);
+}
+
+.bokun-booking-dashboard__tab:hover {
+  border-color: var(--bk-brand-500);
+  color: var(--bk-brand-600);
 }
 
 .bokun-booking-dashboard__tab[aria-selected="true"] {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  border-color: #1d4ed8;
-  color: #ffffff;
-  box-shadow: 0 12px 22px rgba(37, 99, 235, 0.3);
-  transform: translateY(-1px);
+  background: var(--bk-brand-600);
+  border-color: var(--bk-brand-600);
+  color: var(--bk-text-on-brand);
+  box-shadow: var(--bk-shadow-sm);
 }
 
-.bokun-booking-dashboard__tab:focus {
-  outline: 3px solid rgba(37, 99, 235, 0.4);
-  outline-offset: 2px;
+.bokun-booking-dashboard__tab:focus-visible {
+  outline: none;
+  box-shadow: var(--bk-focus-ring);
 }
 
 .bokun-booking-dashboard__tab-label {
@@ -486,18 +492,19 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 1.25rem;
-  border-radius: 1rem;
-  border: 1px solid #e2e8f0;
-  background: #ffffff;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  padding: var(--bk-space-4);
+  border-radius: var(--bk-radius-lg);
+  border: 1px solid var(--bk-border);
+  background: var(--bk-surface);
+  box-shadow: var(--bk-shadow-sm);
+  transition: box-shadow var(--bk-transition), transform var(--bk-transition), border-color var(--bk-transition);
 }
 
 .bokun-booking-dashboard__card:hover,
 .bokun-booking-dashboard__card:focus-within {
   transform: translateY(-2px);
-  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12);
+  border-color: var(--bk-border-strong);
+  box-shadow: var(--bk-shadow-lg);
 }
 
 .bokun-booking-dashboard__header {
@@ -524,9 +531,9 @@
 
 .bokun-booking-dashboard__title {
   margin: 0;
-  font-size: 1.125rem;
-  font-weight: 700;
-  color: #0f172a;
+  font-size: var(--bk-text-lg);
+  font-weight: var(--bk-weight-bold);
+  color: var(--bk-text);
 }
 
 .bokun-booking-dashboard__title a {
@@ -536,7 +543,7 @@
 
 .bokun-booking-dashboard__title a:hover,
 .bokun-booking-dashboard__title a:focus {
-  color: #2563eb;
+  color: var(--bk-brand-600);
 }
 
 
@@ -695,15 +702,15 @@
 }
 
 .bokun-booking-dashboard__status-item {
-  padding: 0.15rem 0.4rem;
-  border-radius: 999px;
-  background: #e0f2fe;
-  color: #1d4ed8;
-  font-size: 0.55rem;
-  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--bk-radius-pill);
+  background: var(--bk-neutral-100);
+  color: var(--bk-neutral-600);
+  font-size: 0.6rem;
+  font-weight: var(--bk-weight-bold);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  line-height: 1.35;
+  line-height: 1.4;
 }
 
 .bokun-booking-dashboard__dual-status {
@@ -744,12 +751,12 @@
   justify-content: center;
   min-width: 2.25rem;
   padding: 0.35rem 0.6rem;
-  border-radius: 999px;
-  background: #1d4ed8;
-  color: #ffffff;
+  border-radius: var(--bk-radius-pill);
+  background: var(--bk-brand-600);
+  color: var(--bk-text-on-brand);
   font-size: 0.8rem;
-  font-weight: 700;
-  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.28);
+  font-weight: var(--bk-weight-bold);
+  box-shadow: var(--bk-shadow-sm);
 }
 
 .bokun-booking-dashboard__dual-status-toggle {
@@ -758,14 +765,14 @@
   justify-content: center;
   gap: 0.35rem;
   padding: 0.5rem 0.9rem;
-  border-radius: 999px;
-  border: 1px solid rgba(37, 99, 235, 0.4);
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
-  color: #ffffff;
+  border-radius: var(--bk-radius-pill);
+  border: 1px solid var(--bk-brand-600);
+  background: var(--bk-brand-600);
+  color: var(--bk-text-on-brand);
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: var(--bk-weight-semibold);
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  transition: transform var(--bk-transition), box-shadow var(--bk-transition), background var(--bk-transition);
   text-decoration: none;
 }
 

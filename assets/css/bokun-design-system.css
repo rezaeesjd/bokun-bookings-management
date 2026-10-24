@@ -1,0 +1,121 @@
+/*
+ * Bokun Bookings Management — shared design system (tokens + base).
+ *
+ * A single source of truth for color, type, spacing, radius, shadow, focus and
+ * motion across the plugin's front-end surfaces (Bookings dashboard, Analytics,
+ * Messages inbox). Tokens live on :root (harmless globally — a custom property
+ * does nothing until it is used). Base typography is scoped to the plugin's own
+ * containers so it never restyles the rest of the host WordPress theme.
+ *
+ * Light mode only for now; the token structure leaves room for a future dark
+ * theme (add a prefers-color-scheme block that reassigns the --bk-* values).
+ */
+
+:root {
+	/* Brand — a refined wine/burgundy, the single accent across the product. */
+	--bk-brand-50:  #fbf3f5;
+	--bk-brand-100: #f6e7eb;
+	--bk-brand-200: #ecc9d2;
+	--bk-brand-500: #9a2947;
+	--bk-brand-600: #7b1e3a;
+	--bk-brand-700: #5f152c;
+
+	/* Neutrals — one slate ramp for text, borders and surfaces. */
+	--bk-neutral-0:   #ffffff;
+	--bk-neutral-50:  #f8fafc;
+	--bk-neutral-100: #f1f5f9;
+	--bk-neutral-200: #e2e8f0;
+	--bk-neutral-300: #cbd5e1;
+	--bk-neutral-400: #94a3b8;
+	--bk-neutral-500: #64748b;
+	--bk-neutral-600: #475569;
+	--bk-neutral-700: #334155;
+	--bk-neutral-900: #0f172a;
+
+	/* Semantic states (text + soft background pairs). */
+	--bk-success:      #15803d;
+	--bk-success-bg:   #dcfce7;
+	--bk-warning:      #b45309;
+	--bk-warning-bg:   #fef3c7;
+	--bk-danger:       #b91c1c;
+	--bk-danger-bg:    #fee2e2;
+	--bk-info:         var(--bk-brand-600);
+	--bk-info-bg:      var(--bk-brand-50);
+
+	/* Surfaces & text roles. */
+	--bk-surface:        var(--bk-neutral-0);
+	--bk-surface-sunken: var(--bk-neutral-50);
+	--bk-border:         var(--bk-neutral-200);
+	--bk-border-strong:  var(--bk-neutral-300);
+	--bk-text:           var(--bk-neutral-900);
+	--bk-text-muted:     var(--bk-neutral-500);
+	--bk-text-on-brand:  var(--bk-neutral-0);
+
+	/* Typography — a real system stack and a modest scale. */
+	--bk-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+	--bk-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--bk-text-xs:   0.75rem;   /* 12 */
+	--bk-text-sm:   0.8125rem; /* 13 */
+	--bk-text-base: 0.9375rem; /* 15 */
+	--bk-text-lg:   1.125rem;  /* 18 */
+	--bk-text-xl:   1.375rem;  /* 22 */
+	--bk-text-2xl:  1.75rem;   /* 28 */
+	--bk-weight-medium: 500;
+	--bk-weight-semibold: 600;
+	--bk-weight-bold: 700;
+	--bk-leading: 1.5;
+
+	/* Spacing scale (4px base). */
+	--bk-space-1: 0.25rem;
+	--bk-space-2: 0.5rem;
+	--bk-space-3: 0.75rem;
+	--bk-space-4: 1rem;
+	--bk-space-5: 1.5rem;
+	--bk-space-6: 2rem;
+
+	/* Radius. */
+	--bk-radius-sm:  0.375rem;
+	--bk-radius-md:  0.625rem;
+	--bk-radius-lg:  0.875rem;
+	--bk-radius-pill: 999px;
+
+	/* Shadows — low-alpha, calm. */
+	--bk-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06), 0 1px 1px rgba(15, 23, 42, 0.04);
+	--bk-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+	--bk-shadow-lg: 0 12px 28px rgba(15, 23, 42, 0.10);
+
+	/* Focus ring + motion. */
+	--bk-focus-ring: 0 0 0 3px var(--bk-brand-200);
+	--bk-transition: 0.18s ease;
+}
+
+/* Base typography foundation — scoped to the plugin's own surfaces only. */
+.bokun-booking-dashboard,
+.bokun-dash-tabs,
+.bokun-messages,
+.bokun-booking-history {
+	font-family: var(--bk-font);
+	color: var(--bk-text);
+	line-height: var(--bk-leading);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+/* A consistent, accessible focus ring for interactive elements on our surfaces,
+   without overriding deliberate per-component focus styling. */
+.bokun-booking-dashboard :focus-visible,
+.bokun-dash-tabs :focus-visible,
+.bokun-messages :focus-visible {
+	outline: none;
+	box-shadow: var(--bk-focus-ring);
+	border-radius: var(--bk-radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.bokun-booking-dashboard *,
+	.bokun-dash-tabs *,
+	.bokun-messages * {
+		transition-duration: 0.001ms !important;
+		animation-duration: 0.001ms !important;
+	}
+}
