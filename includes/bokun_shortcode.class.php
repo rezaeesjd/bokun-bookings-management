@@ -941,11 +941,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $status_terms = get_the_terms($post_id, 'booking_status');
                 $status_labels = [];
                 $status_values = [];
+                $status_label_slugs = [];
                 $is_cancelled = false;
 
                 if ($status_terms && !is_wp_error($status_terms)) {
                     foreach ($status_terms as $term) {
                         $status_labels[] = $term->name;
+                        $status_label_slugs[] = sanitize_title($term->name);
 
                         $sanitized_status = sanitize_title($term->name);
                         if ('' !== $sanitized_status) {
@@ -1476,8 +1478,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                             <?php if (!empty($status_labels)) : ?>
                                 <ul class="bokun-booking-dashboard__status-list">
-                                    <?php foreach ($status_labels as $status_label) : ?>
-                                        <li class="bokun-booking-dashboard__status-item"><?php echo esc_html($status_label); ?></li>
+                                    <?php foreach ($status_labels as $status_index => $status_label) :
+                                        $status_slug = isset($status_label_slugs[$status_index]) ? $status_label_slugs[$status_index] : sanitize_title($status_label);
+                                    ?>
+                                        <li class="bokun-booking-dashboard__status-item bokun-booking-dashboard__status-item--<?php echo esc_attr($status_slug); ?>"><?php echo esc_html($status_label); ?></li>
                                     <?php endforeach; ?>
                                 </ul>
                             <?php endif; ?>

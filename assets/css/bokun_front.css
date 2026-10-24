@@ -8,7 +8,7 @@
 .bokun-progress {
   font-size: 14px;
   font-weight: 600;
-  color: #0073aa;
+  color: #7b1e3a;
   display: none;
 }
 
@@ -53,7 +53,7 @@
 .bokun-progress__bar {
   height: 100%;
   width: 0;
-  background: #0073aa;
+  background: #7b1e3a;
   border-radius: inherit;
   transition: width 0.3s ease;
 }
@@ -298,7 +298,7 @@
 .bokun-booking-dashboard__search-paste:focus {
   color: #1e293b;
   background-color: rgba(148, 163, 184, 0.16);
-  border-color: #2563eb;
+  border-color: #9a2947;
   outline: none;
 }
 
@@ -552,36 +552,36 @@
   padding: 0;
   margin: 0;
   border: none;
-  border-radius: 0.25rem;
+  border-radius: var(--bk-radius-sm);
   background: transparent;
-  color: #1d4ed8;
+  color: var(--bk-brand-600);
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: var(--bk-weight-semibold);
   letter-spacing: 0.02em;
   line-height: inherit;
   cursor: pointer;
   text-decoration: none;
-  transition: color 0.2s ease;
+  transition: color var(--bk-transition);
 }
 
 .bokun-booking-dashboard__copy-button:hover,
 .bokun-booking-dashboard__copy-button:focus {
-  color: #172554;
+  color: var(--bk-brand-700);
   text-decoration: underline;
   outline: none;
 }
 
 .bokun-booking-dashboard__copy-button:focus-visible {
-  outline: 2px solid #93c5fd;
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: var(--bk-focus-ring);
 }
 
 .bokun-booking-dashboard__copy-button[data-copy-state="copied"] {
-  color: #16a34a;
+  color: var(--bk-success);
 }
 
 .bokun-booking-dashboard__copy-button[data-copy-state="error"] {
-  color: #dc2626;
+  color: var(--bk-danger);
 }
 
 .bokun-booking-dashboard__reserve-link {
@@ -611,10 +611,10 @@
 }
 
 .bokun-booking-dashboard__reserve-link--highlight {
-  --bokun-booking-dashboard-reserve-link-bg: #2563eb;
-  --bokun-booking-dashboard-reserve-link-bg-hover: #1d4ed8;
-  --bokun-booking-dashboard-reserve-link-shadow: 0 10px 20px rgba(37, 99, 235, 0.25);
-  --bokun-booking-dashboard-reserve-link-shadow-hover: 0 12px 28px rgba(30, 64, 175, 0.35);
+  --bokun-booking-dashboard-reserve-link-bg: var(--bk-brand-500);
+  --bokun-booking-dashboard-reserve-link-bg-hover: var(--bk-brand-700);
+  --bokun-booking-dashboard-reserve-link-shadow: var(--bk-shadow-sm);
+  --bokun-booking-dashboard-reserve-link-shadow-hover: var(--bk-shadow-md);
 }
 
 .bokun-booking-dashboard__reserve-link:hover,
@@ -633,7 +633,7 @@
 }
 
 .bokun-booking-dashboard__vendor--highlight {
-  color: #2563eb;
+  color: var(--bk-brand-600);
 }
 
 .bokun-booking-dashboard__vendor--accent {
@@ -713,6 +713,26 @@
   line-height: 1.4;
 }
 
+/* Semantic status colors — keyed off the status term slug so each badge reads
+   its meaning at a glance. Unknown statuses keep the neutral default above. */
+.bokun-booking-dashboard__status-item--confirmed,
+.bokun-booking-dashboard__status-item--booking-made {
+  background: var(--bk-success-bg);
+  color: var(--bk-success);
+}
+.bokun-booking-dashboard__status-item--cancelled,
+.bokun-booking-dashboard__status-item--canceled,
+.bokun-booking-dashboard__status-item--not-available {
+  background: var(--bk-danger-bg);
+  color: var(--bk-danger);
+}
+.bokun-booking-dashboard__status-item--partial,
+.bokun-booking-dashboard__status-item--booking-not-made,
+.bokun-booking-dashboard__status-item--pending {
+  background: var(--bk-warning-bg);
+  color: var(--bk-warning);
+}
+
 .bokun-booking-dashboard__dual-status {
   margin-top: 1.5rem;
   padding: 1.2rem;
@@ -779,16 +799,16 @@
 .bokun-booking-dashboard__dual-status-toggle:hover,
 .bokun-booking-dashboard__dual-status-toggle:focus {
   transform: translateY(-1px);
-  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.26);
+  box-shadow: 0 10px 22px rgba(123, 30, 58, 0.26);
   outline: none;
 }
 
 .bokun-booking-dashboard__dual-status-toggle.is-active {
-  background: linear-gradient(135deg, #1e3a8a, #1d4ed8);
+  background: linear-gradient(135deg, #5f152c, #7b1e3a);
 }
 
 .bokun-booking-dashboard__dual-status-toggle:focus-visible {
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.45);
+  box-shadow: 0 0 0 3px rgba(123, 30, 58, 0.45);
 }
 
 .bokun-booking-dashboard__dual-status-description {
@@ -875,7 +895,7 @@
 }
 
 .bokun-booking-dashboard__history-close:focus-visible {
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 0 0 3px rgba(123, 30, 58, 0.35);
 }
 
 .bokun-booking-dashboard__history-body {
@@ -1047,7 +1067,7 @@ body.bokun-dashboard-modal-open {
 }
 
 .bokun-booking-dashboard__history-launch:focus-visible {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
+  box-shadow: 0 0 0 3px rgba(154, 41, 71, 0.35);
 }
 
 .bokun-booking-dashboard__details {
@@ -1068,12 +1088,16 @@ body.bokun-dashboard-modal-open {
 
 .bokun-booking-dashboard__detail dt {
   flex: 0 0 auto;
-  font-weight: 600;
-  color: #1f2937;
+  font-size: var(--bk-text-xs);
+  font-weight: var(--bk-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bk-text-muted);
 }
 
 .bokun-booking-dashboard__detail dd {
   margin: 0;
+  color: var(--bk-text);
 }
 
 .bokun-booking-dashboard__detail-copy {
@@ -1157,22 +1181,22 @@ body.bokun-dashboard-modal-open {
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 0.5rem;
-  border: 1px solid rgba(59, 130, 246, 0.25);
-  background: rgba(59, 130, 246, 0.12);
-  color: #1d4ed8;
-  font-weight: 600;
-  font-size: 0.75rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--bk-radius-sm);
+  border: 1px solid var(--bk-brand-200);
+  background: var(--bk-brand-50);
+  color: var(--bk-brand-600);
+  font-weight: var(--bk-weight-semibold);
+  font-size: var(--bk-text-xs);
   text-decoration: none;
-  transition: color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+  transition: color var(--bk-transition), background-color var(--bk-transition), box-shadow var(--bk-transition);
 }
 
 .bokun-booking-dashboard__reference-link:hover,
 .bokun-booking-dashboard__reference-link:focus {
-  color: #0f172a;
-  background: rgba(59, 130, 246, 0.22);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+  color: var(--bk-text-on-brand);
+  background: var(--bk-brand-600);
+  box-shadow: var(--bk-focus-ring);
   outline: none;
 }
 
@@ -1222,7 +1246,7 @@ body.bokun-dashboard-modal-open {
   width: 1rem;
   height: 1rem;
   cursor: pointer;
-  accent-color: #2563eb;
+  accent-color: #9a2947;
 }
 
 /* Collapsible "Result" disclosure */
@@ -1265,7 +1289,7 @@ body.bokun-dashboard-modal-open {
 
 .bokun-booking-dashboard .bokun-booking-dashboard__result-toggle:focus-visible {
   outline: none !important;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35) !important;
+  box-shadow: 0 0 0 3px rgba(123, 30, 58, 0.35) !important;
 }
 
 .bokun-booking-dashboard .bokun-booking-dashboard__result-title {
@@ -1274,7 +1298,7 @@ body.bokun-dashboard-modal-open {
 
 .bokun-booking-dashboard .bokun-booking-dashboard__result-summary {
   font-weight: 500;
-  color: #2563eb !important;
+  color: #9a2947 !important;
 }
 
 .bokun-booking-dashboard__result-summary:empty {
@@ -1402,7 +1426,7 @@ body.bokun-dashboard-modal-open {
   margin: 0 0 0.5rem;
   font-size: 0.95rem;
   font-weight: 700;
-  color: #1d4ed8;
+  color: #7b1e3a;
 }
 
 .bokun-booking-dashboard__conversation p {
@@ -1413,7 +1437,7 @@ body.bokun-dashboard-modal-open {
 }
 
 .bokun-booking-dashboard__conversation a {
-  color: #1d4ed8;
+  color: #7b1e3a;
   text-decoration: underline;
   word-break: break-word;
 }
@@ -1498,9 +1522,9 @@ body.bokun-dashboard-modal-open {
   gap: 0.25rem;
   padding: 0.2rem 0.55rem;
   border-radius: 0.5rem;
-  border: 1px solid rgba(37, 99, 235, 0.28);
-  background: rgba(37, 99, 235, 0.1);
-  color: #1d4ed8;
+  border: 1px solid rgba(123, 30, 58, 0.28);
+  background: rgba(123, 30, 58, 0.1);
+  color: #7b1e3a;
   font-weight: 600;
   font-size: 0.75rem;
   text-decoration: none;
@@ -1510,8 +1534,8 @@ body.bokun-dashboard-modal-open {
 .bokun-booking-dashboard__missing-tag-link:hover,
 .bokun-booking-dashboard__missing-tag-link:focus {
   color: #0f172a;
-  background: rgba(37, 99, 235, 0.18);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  background: rgba(123, 30, 58, 0.18);
+  box-shadow: 0 0 0 3px rgba(123, 30, 58, 0.18);
   outline: none;
 }
 
@@ -1543,8 +1567,8 @@ body.bokun-dashboard-modal-open {
 
 .bokun-booking-dashboard__missing-tag-source:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  border-color: #9a2947;
+  box-shadow: 0 0 0 2px rgba(123, 30, 58, 0.2);
 }
 
 .bokun-booking-dashboard__missing-tag-input {
@@ -1560,8 +1584,8 @@ body.bokun-dashboard-modal-open {
 
 .bokun-booking-dashboard__missing-tag-input:focus {
   outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+  border-color: #9a2947;
+  box-shadow: 0 0 0 2px rgba(123, 30, 58, 0.2);
 }
 
 .bokun-booking-dashboard__missing-tag-save {
@@ -1571,7 +1595,7 @@ body.bokun-dashboard-modal-open {
   padding: 0.3rem 0.75rem;
   border-radius: 0.4rem;
   border: none;
-  background-color: #2563eb;
+  background-color: #9a2947;
   color: #fff;
   font-size: 0.75rem;
   font-weight: 600;
@@ -1581,7 +1605,7 @@ body.bokun-dashboard-modal-open {
 
 .bokun-booking-dashboard__missing-tag-save:hover,
 .bokun-booking-dashboard__missing-tag-save:focus {
-  background-color: #1d4ed8;
+  background-color: #7b1e3a;
   transform: translateY(-1px);
 }
 
@@ -1621,13 +1645,13 @@ body.bokun-dashboard-modal-open {
   gap: 0.35rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #2563eb;
+  color: #9a2947;
   text-decoration: none;
 }
 
 .bokun-booking-dashboard__link:hover,
 .bokun-booking-dashboard__link:focus {
-  color: #1d4ed8;
+  color: #7b1e3a;
   text-decoration: underline;
 }
 
@@ -1653,16 +1677,16 @@ body.bokun-dashboard-modal-open {
   border-radius: 0.5rem;
   /* Force a defined blue border/text so the theme's own button colours (which
      otherwise render the label red on the blue background) cannot leak in. */
-  border: 1px solid #1d4ed8 !important;
-  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
-  color: #ffffff !important;
-  font-weight: 600;
-  font-size: 0.75rem;
+  border: 1px solid var(--bk-brand-700) !important;
+  background: var(--bk-brand-600);
+  color: var(--bk-text-on-brand) !important;
+  font-weight: var(--bk-weight-semibold);
+  font-size: var(--bk-text-xs);
   line-height: 1.2;
   cursor: pointer;
   text-decoration: none;
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.3);
-  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.12s ease;
+  box-shadow: var(--bk-shadow-sm);
+  transition: background var(--bk-transition), box-shadow var(--bk-transition), transform var(--bk-transition);
 }
 
 /* Keep the label and icon white in every state, including theme link colours. */
@@ -1687,14 +1711,14 @@ body.bokun-dashboard-modal-open {
 }
 
 .bokun-booking-dashboard__message-button:hover {
-  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  background: linear-gradient(180deg, #9a2947 0%, #7b1e3a 100%);
+  box-shadow: 0 4px 10px rgba(123, 30, 58, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   transform: translateY(-1px);
 }
 
 .bokun-booking-dashboard__message-button:active {
   transform: translateY(0);
-  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 1px 2px rgba(123, 30, 58, 0.4);
 }
 
 .bokun-booking-dashboard__message-button:focus {
@@ -1703,7 +1727,7 @@ body.bokun-dashboard-modal-open {
 
 .bokun-booking-dashboard__message-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.4), 0 1px 2px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 0 0 3px rgba(123, 30, 58, 0.4), 0 1px 2px rgba(123, 30, 58, 0.35);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1807,7 +1831,7 @@ body.bokun-dashboard-modal-open {
 
 .bokun-booking-dashboard__message-recipient-value {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  color: #1d4ed8;
+  color: #7b1e3a;
 }
 
 .bokun-booking-dashboard__message-no-email {
@@ -1855,8 +1879,8 @@ body.bokun-dashboard-modal-open {
 .bokun-booking-dashboard__message-select:focus,
 .bokun-booking-dashboard__message-subject:focus,
 .bokun-booking-dashboard__message-textarea:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  border-color: #9a2947;
+  box-shadow: 0 0 0 3px rgba(123, 30, 58, 0.18);
   outline: none;
 }
 
@@ -1888,7 +1912,7 @@ body.bokun-dashboard-modal-open {
   align-items: center;
   justify-content: center;
   border: none;
-  background: #2563eb;
+  background: #9a2947;
   color: #ffffff;
   font-weight: 700;
   font-size: 0.8rem;
@@ -1900,8 +1924,8 @@ body.bokun-dashboard-modal-open {
 
 .bokun-booking-dashboard__message-send:hover:not(:disabled),
 .bokun-booking-dashboard__message-send:focus:not(:disabled) {
-  background: #1d4ed8;
-  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
+  background: #7b1e3a;
+  box-shadow: 0 10px 20px rgba(123, 30, 58, 0.3);
   outline: none;
 }
 
