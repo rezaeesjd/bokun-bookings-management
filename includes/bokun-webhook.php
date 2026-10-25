@@ -346,6 +346,7 @@ function bokun_webhook_run_sync() {
         $deadline = microtime(true) + 40;
         $eligible = array_filter($jobs, static function ($job) { return (int) ($job['retry_at'] ?? 0) <= time(); });
         $failure = null;
+        $failure_trace = array();
         foreach (array_slice($eligible, 0, 3, true) as $key => $job) {
             if (microtime(true) >= $deadline) {
                 break;
@@ -354,6 +355,7 @@ function bokun_webhook_run_sync() {
             if (is_wp_error($imported)) {
                 $retained = bokun_webhook_retry_booking($key, $job);
                 $failure = is_wp_error($retained) ? $retained : $imported;
+                $failure_trace = $GLOBALS['bokun_webhook_lookup_trace'] ?? array();
                 continue;
             }
             if (true !== $imported) {
@@ -365,6 +367,7 @@ function bokun_webhook_run_sync() {
             }
         }
         if (is_wp_error($failure)) {
+            $GLOBALS['bokun_webhook_lookup_trace'] = $failure_trace;
             return bokun_webhook_record_failure($failure);
         }
         if (!bokun_webhook_jobs() && false === bokun_webhook_clear_pending($marker)) {
