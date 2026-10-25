@@ -109,6 +109,30 @@
 	-moz-osx-font-smoothing: grayscale;
 }
 
+/* Theme-leak guard. Host themes / Elementor often force button and form-control
+   chrome (uppercasing, letter-spacing, their own font, native appearance) onto
+   every <button>/<input>. Normalize just those properties on our surfaces so our
+   component styling reads consistently — deliberately NOT touching background,
+   color or border, which each component sets itself. */
+.bokun-booking-dashboard button,
+.bokun-booking-dashboard input,
+.bokun-booking-dashboard select,
+.bokun-booking-dashboard textarea,
+.bokun-dash-tabs button,
+.bokun-messages button,
+.bokun-messages input,
+.bokun-messages select,
+.bokun-messages textarea,
+.bokun-andash button,
+.bokun-andash input,
+.bokun-andash select,
+.bokun-bizdash button {
+	font-family: inherit;
+	text-transform: none;
+	letter-spacing: normal;
+	text-shadow: none;
+}
+
 /* A consistent, accessible focus ring for interactive elements on our surfaces,
    without overriding deliberate per-component focus styling. */
 .bokun-booking-dashboard :focus-visible,

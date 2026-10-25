@@ -3044,14 +3044,43 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 <?php endif; ?>
             </div>
             <style>
-                .bokun-dash-tabs__nav { display:flex; gap:4px; border-bottom:2px solid #e2e4e7; margin-bottom:16px; flex-wrap:wrap; }
-                .bokun-dash-tabs__tab { appearance:none; background:transparent; border:0; border-bottom:3px solid transparent; margin-bottom:-2px; padding:10px 18px; font-size:15px; font-weight:600; color:#50575e; cursor:pointer; }
-                .bokun-dash-tabs__tab:hover { color:#1d2327; }
-                .bokun-dash-tabs__tab.is-active { color:#2271b1; border-bottom-color:#2271b1; }
+                .bokun-dash-tabs__nav { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
+                /* Raised specificity + a full button reset with !important on the
+                   visual props so the host theme / Elementor button chrome (its
+                   own background, border, box-shadow, uppercasing) cannot leak
+                   into the dashboard view tabs. Wine pill, not WP-admin blue. */
+                .bokun-dash-tabs .bokun-dash-tabs__tab {
+                    appearance:none; -webkit-appearance:none;
+                    display:inline-flex; align-items:center; margin:0;
+                    padding:8px 18px; font-size:15px; font-weight:600; line-height:1.2;
+                    text-transform:none; letter-spacing:normal; text-decoration:none;
+                    background:transparent !important;
+                    border:1px solid var(--bk-border-strong) !important;
+                    border-radius:var(--bk-radius-pill) !important;
+                    box-shadow:none !important; text-shadow:none !important;
+                    color:var(--bk-text-muted) !important;
+                    cursor:pointer;
+                    transition:background var(--bk-transition), color var(--bk-transition), border-color var(--bk-transition);
+                }
+                .bokun-dash-tabs .bokun-dash-tabs__tab:hover,
+                .bokun-dash-tabs .bokun-dash-tabs__tab:focus {
+                    color:var(--bk-brand-600) !important;
+                    border-color:var(--bk-brand-500) !important;
+                    background:var(--bk-brand-50) !important;
+                }
+                .bokun-dash-tabs .bokun-dash-tabs__tab.is-active,
+                .bokun-dash-tabs .bokun-dash-tabs__tab[aria-selected="true"] {
+                    color:var(--bk-text-on-brand) !important;
+                    background:var(--bk-brand-600) !important;
+                    border-color:var(--bk-brand-600) !important;
+                }
+                .bokun-dash-tabs .bokun-dash-tabs__tab:focus-visible {
+                    outline:none; box-shadow:var(--bk-focus-ring) !important;
+                }
                 .bokun-dash-tabs__panel[hidden] { display:none; }
                 @media (max-width:600px){
-                    .bokun-dash-tabs__nav { gap:0; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; }
-                    .bokun-dash-tabs__tab { padding:10px 14px; font-size:14px; white-space:nowrap; flex:0 0 auto; }
+                    .bokun-dash-tabs__nav { gap:4px; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+                    .bokun-dash-tabs .bokun-dash-tabs__tab { padding:8px 14px; font-size:14px; white-space:nowrap; flex:0 0 auto; }
                 }
             </style>
             <script>
