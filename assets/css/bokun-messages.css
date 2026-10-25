@@ -7,7 +7,7 @@
 .bokun-messages button { color:#0f172a; background:#f8fafc; border:1px solid #cbd5e1; border-radius:6px; padding:8px 12px; cursor:pointer; margin:4px 6px 4px 0; }
 .bokun-messages button:hover { background:#e8eff7; }
 .bokun-messages button:disabled { cursor:not-allowed; opacity:.5; }
-.bokun-messages :focus-visible { outline:3px solid #2563eb; outline-offset:2px; }
+.bokun-messages :focus-visible { outline:3px solid #9a2947; outline-offset:2px; }
 .bokun-messages.is-busy button { pointer-events:none; opacity:.65; }
 .bokun-messages select, .bokun-messages input[type=search] { padding:7px; border:1px solid #94a3b8; border-radius:6px; max-width:100%; }
 .bokun-messages__connections { padding:8px 0; font-size:12px; color:#475569; }
@@ -16,7 +16,7 @@
 .bokun-messages__layout { display:grid; grid-template-columns:minmax(240px,28%) minmax(0,1fr); gap:22px; border-top:1px solid #e2e8f0; padding-top:18px; }
 .bokun-messages__layout aside { min-width:0; max-height:1050px; overflow:auto; }
 .bokun-messages .bokun-messages__item { display:flex; flex-direction:column; text-align:left; gap:5px; width:100%; margin:0 0 8px; overflow-wrap:anywhere; }
-.bokun-messages .bokun-messages__item[aria-pressed=true] { border-color:#2563eb; background:#eff6ff; }
+.bokun-messages .bokun-messages__item[aria-pressed=true] { border-color:#9a2947; background:#fbf3f5; }
 .bokun-messages__item small { color:#64748b; }
 .bokun-messages__detail { min-width:0; }
 .bokun-messages__review { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px; }
@@ -42,8 +42,8 @@
 .bokun-messages p { margin:8px 0; }
 .bokun-messages button { margin:0; line-height:1.45; white-space:normal; text-transform:none; letter-spacing:normal; border-radius:7px; }
 .bokun-messages button:hover, .bokun-messages button:focus { color:#0f172a; background:#e8eff7; border-color:#94a3b8; }
-.bokun-messages button.bokun-messages__primary { color:#fff; background:#1d4ed8; border-color:#1d4ed8; }
-.bokun-messages button.bokun-messages__primary:hover { color:#fff; background:#1e40af; }
+.bokun-messages button.bokun-messages__primary { color:#fff; background:#7b1e3a; border-color:#7b1e3a; }
+.bokun-messages button.bokun-messages__primary:hover { color:#fff; background:#5f152c; }
 .bokun-messages.is-busy button { cursor:wait; }
 .bokun-messages select, .bokun-messages input[type=search] { width:100%; min-height:38px; padding:7px 9px; background:#fff; color:#0f172a; }
 .bokun-messages__toolbar { display:grid; grid-template-columns:minmax(130px,1fr) minmax(130px,1fr) minmax(130px,1fr) minmax(190px,2fr) auto auto; align-items:end; margin:16px 0 10px; }
@@ -55,14 +55,14 @@
 .bokun-messages__layout { grid-template-columns:minmax(230px,26%) minmax(0,1fr); gap:20px; align-items:start; }
 .bokun-messages__layout > aside { position:sticky; top:44px; max-height:calc(100vh - 64px); overflow-y:auto; overflow-x:hidden; scrollbar-gutter:stable; padding:2px 6px 4px 2px; }
 .bokun-messages button.bokun-messages__item { gap:5px; min-width:0; overflow:hidden; color:#1e293b; background:#f8fafc; padding:12px; }
-.bokun-messages button.bokun-messages__item[aria-pressed=true], .bokun-messages button.bokun-messages__item[aria-pressed=true]:hover, .bokun-messages button.bokun-messages__item[aria-pressed=true]:focus { border-color:#2563eb; color:#0f172a; background:#eff6ff; box-shadow:inset 3px 0 #2563eb; }
+.bokun-messages button.bokun-messages__item[aria-pressed=true], .bokun-messages button.bokun-messages__item[aria-pressed=true]:hover, .bokun-messages button.bokun-messages__item[aria-pressed=true]:focus { border-color:#9a2947; color:#0f172a; background:#fbf3f5; box-shadow:inset 3px 0 #9a2947; }
 .bokun-messages__item strong, .bokun-messages__item span, .bokun-messages__item small { color:inherit; max-width:100%; overflow-wrap:anywhere; }
 .bokun-messages__item .bokun-messages__preview { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; font-size:12px; line-height:1.5; color:#475569; }
 .bokun-messages__item small { font-size:11px; color:#475569; }
 .bokun-messages__badge { display:inline-block; padding:3px 8px; border:1px solid #cbd5e1; border-radius:5px; background:#f1f5f9; color:#334155; font-size:11px; font-weight:600; }
 .bokun-messages__badge--cancelled, .bokun-messages__badge--needs_review { background:#fff7ed; color:#9a3412; border-color:#fdba74; }
 .bokun-messages__badge--confirmed, .bokun-messages__badge--answered { background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }
-.bokun-messages__badge--needs_reply { background:#eff6ff; color:#1e40af; border-color:#bfdbfe; }
+.bokun-messages__badge--needs_reply { background:#fbf3f5; color:#5f152c; border-color:#ecc9d2; }
 .bokun-messages__main, .bokun-messages__context { min-width:0; }
 .bokun-messages__titlebar, .bokun-messages__actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
 .bokun-messages__titlebar { align-items:start; justify-content:space-between; margin-bottom:16px; }
@@ -70,12 +70,12 @@
 .bokun-messages__review { grid-template-columns:minmax(0,1.5fr) minmax(220px,1fr); gap:18px; align-items:start; }
 .bokun-messages__history, .bokun-messages__draft, .bokun-messages__context { padding:16px; border:1px solid #e2e8f0; border-radius:10px; background:#fff; }
 .bokun-messages__history { max-height:460px; overflow:auto; scrollbar-gutter:stable; }
-.bokun-messages__message--outgoing { background:#eff6ff; border-color:#bfdbfe; }
+.bokun-messages__message--outgoing { background:#fbf3f5; border-color:#ecc9d2; }
 .bokun-messages__message--support { background:#f1f5f9; }
 .bokun-messages__message:last-child { margin-bottom:0; }
 .bokun-messages__message > strong { font-size:12px; }
 .bokun-messages details { margin:10px 0; min-width:0; }
-.bokun-messages summary { color:#1e40af; cursor:pointer; font-weight:600; padding:4px 0; overflow-wrap:anywhere; }
+.bokun-messages summary { color:#5f152c; cursor:pointer; font-weight:600; padding:4px 0; overflow-wrap:anywhere; }
 .bokun-messages__context > details { padding-top:10px; border-top:1px solid #e2e8f0; }
 .bokun-messages__context .bokun-messages__body { font-size:12px; }
 .bokun-messages__facts { display:grid; grid-template-columns:1fr; gap:6px; margin:12px 0; white-space:normal; max-height:none; overflow:visible; font:inherit; background:transparent; padding:0; }
