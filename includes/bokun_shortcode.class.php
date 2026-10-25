@@ -728,11 +728,23 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             $days    = max(1, absint($atts['days']));
             $columns = max(1, min(6, absint($atts['columns'])));
 
-            $current_user      = wp_get_current_user();
+            // The "Current user" shown in the footer must match the identity that
+            // the booking-history action log records, so key-session users
+            // (booking/admin) read as themselves rather than "Guest user".
             $user_display_name = '';
 
-            if ($current_user instanceof WP_User && $current_user->exists()) {
-                $user_display_name = $current_user->display_name ?: $current_user->user_login;
+            if (function_exists('bokun_access_current')) {
+                $access_actor = bokun_access_current();
+                if (is_array($access_actor) && !empty($access_actor['name'])) {
+                    $user_display_name = $access_actor['name'];
+                }
+            }
+
+            if ('' === $user_display_name) {
+                $current_user = wp_get_current_user();
+                if ($current_user instanceof WP_User && $current_user->exists()) {
+                    $user_display_name = $current_user->display_name ?: $current_user->user_login;
+                }
             }
 
             if ('' === $user_display_name) {

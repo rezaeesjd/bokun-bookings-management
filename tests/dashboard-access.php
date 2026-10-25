@@ -124,6 +124,7 @@ verify_dashboard_case(str_contains($shortcodes->render_booking_history_table(arr
 set_actor('sjd');
 $generic = $shortcodes->render_booking_dashboard();
 verify_dashboard_case(str_contains($generic, 'No upcoming bookings') && str_contains($generic, 'Signed in as'), 'the generic key sees the bookings view with an account bar');
+verify_dashboard_case(str_contains($generic, 'SJD'), 'the account identity shows the mapped key user name, not Guest');
 verify_dashboard_case(!str_contains($generic, 'STAFF_IMPORT_STATUS') && !str_contains($generic, 'data-tab-target="analytics"') && !str_contains($generic, 'data-tab-target="messages"'), 'the generic key hides import, analytics and messages');
 verify_dashboard_case('' === $shortcodes->function_bokun_fetch_button() && '' === $shortcodes->render_analytics_panel(), 'the generic key cannot import or view analytics');
 verify_dashboard_case(str_contains($generic, 'Sign out'), 'the generic key gets a sign-out control');
