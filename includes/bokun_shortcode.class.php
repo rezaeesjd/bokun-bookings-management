@@ -3344,8 +3344,12 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
             <style>
                 .bokun-andash { --an-surface:#fff; --an-ink:#1d2327; --an-ink-2:#646970; --an-line:#e2e4e7; --an-blue:#7b1e3a; --an-blue-soft:rgba(123,30,58,.14); --an-good:#008300; --an-warn:#eda100; --an-crit:#e34948; --an-c1:#2a78d6; --an-c2:#eb6834; --an-c3:#1baf7a; --an-c4:#eda100; --an-c5:#e87ba4; --an-c6:#4a3aa7; color:var(--an-ink); }
+                /* Dark palette kept for a future app-wide dark mode, but gated
+                   behind an explicit opt-in class so Analytics does NOT auto-dark
+                   on a dark-mode browser while the rest of the (light-only) UI
+                   stays light — that mismatch is the bug this prevents. */
                 @media (prefers-color-scheme: dark) {
-                    .bokun-andash { --an-surface:#1f1f1e; --an-ink:#f2f2f0; --an-ink-2:#b5b5ad; --an-line:#3a3a38; --an-blue:#d76b86; --an-blue-soft:rgba(215,107,134,.22); --an-good:#2faa4a; --an-warn:#c98500; --an-crit:#e66767; --an-c1:#3987e5; --an-c2:#d95926; --an-c3:#199e70; --an-c4:#c98500; --an-c5:#d55181; --an-c6:#9085e9; }
+                    .bokun-theme-dark .bokun-andash { --an-surface:#1f1f1e; --an-ink:#f2f2f0; --an-ink-2:#b5b5ad; --an-line:#3a3a38; --an-blue:#d76b86; --an-blue-soft:rgba(215,107,134,.22); --an-good:#2faa4a; --an-warn:#c98500; --an-crit:#e66767; --an-c1:#3987e5; --an-c2:#d95926; --an-c3:#199e70; --an-c4:#c98500; --an-c5:#d55181; --an-c6:#9085e9; }
                 }
                 .bokun-andash__head { margin-bottom:12px; }
                 .bokun-andash__title { margin:0; font-size:20px; }
@@ -4280,8 +4284,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
             <style>
                 .bokun-bizdash { --an-surface:#fff; --an-ink:#1d2327; --an-ink-2:#646970; --an-line:#e2e4e7; --an-blue:#7b1e3a; --an-blue-soft:rgba(123,30,58,.14); --an-good:#008300; --an-warn:#eda100; --an-crit:#e34948; --an-c1:#2a78d6; --an-c2:#eb6834; --an-c3:#1baf7a; --an-c4:#eda100; --an-c5:#e87ba4; --an-c6:#4a3aa7; color:var(--an-ink); }
+                /* Gated behind the explicit opt-in class — see the Analytics
+                   panel note; prevents an auto-dark Business Results view on a
+                   dark-mode browser while the rest of the UI stays light. */
                 @media (prefers-color-scheme: dark) {
-                    .bokun-bizdash { --an-surface:#1f1f1e; --an-ink:#f2f2f0; --an-ink-2:#b5b5ad; --an-line:#3a3a38; --an-blue:#d76b86; --an-blue-soft:rgba(215,107,134,.22); --an-good:#2faa4a; --an-warn:#c98500; --an-crit:#e66767; --an-c1:#3987e5; --an-c2:#d95926; --an-c3:#199e70; --an-c4:#c98500; --an-c5:#d55181; --an-c6:#9085e9; }
+                    .bokun-theme-dark .bokun-bizdash { --an-surface:#1f1f1e; --an-ink:#f2f2f0; --an-ink-2:#b5b5ad; --an-line:#3a3a38; --an-blue:#d76b86; --an-blue-soft:rgba(215,107,134,.22); --an-good:#2faa4a; --an-warn:#c98500; --an-crit:#e66767; --an-c1:#3987e5; --an-c2:#d95926; --an-c3:#199e70; --an-c4:#c98500; --an-c5:#d55181; --an-c6:#9085e9; }
                 }
                 .bokun-bizdash__notice { background:var(--an-blue-soft); border:1px solid var(--an-line); border-radius:10px; padding:12px 14px; margin-bottom:16px; font-size:13px; }
                 .bokun-bizdash__cardhead { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px; }
