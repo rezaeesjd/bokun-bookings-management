@@ -12,6 +12,83 @@ define('BOKUN_WEBHOOK_LAST_OPTION', 'bokun_webhook_last_received');
 define('BOKUN_WEBHOOK_PENDING_OPTION', 'bokun_webhook_pending');
 define('BOKUN_WEBHOOK_LAST_RUN_OPTION', 'bokun_webhook_last_run_start');
 define('BOKUN_WEBHOOK_RESULT_OPTION', 'bokun_webhook_last_result');
+define('BOKUN_WEBHOOK_JOBS_OPTION', 'bokun_webhook_booking_jobs');
+
+// Notification data is a lookup hint only. Booking facts always come from the API.
+function bokun_webhook_booking_reference($value) {
+    if (!is_string($value) && !is_int($value)) {
+        return '';
+    }
+    $value = trim((string) $value);
+    if (strlen($value) > 128) {
+        return '';
+    }
+    $decoded = base64_decode(strtr($value, '-_', '+/'), true);
+    if (is_string($decoded) && preg_match('/^Booking:([1-9][0-9]{0,18})$/D', $decoded, $match)) {
+        return $match[1];
+    }
+    return preg_match('/^(?:[1-9][0-9]{0,18}|[A-Za-z][A-Za-z0-9_]{0,31}-[A-Za-z0-9_-]{1,64})$/D', $value) ? $value : '';
+}
+
+function bokun_webhook_request_reference($request) {
+    $reference = bokun_webhook_booking_reference($request->get_header('x-bokun-booking-id'));
+    if ('' !== $reference) {
+        return $reference;
+    }
+    $body = $request->get_json_params();
+    if (!is_array($body)) {
+        return '';
+    }
+    foreach (array('bookingId', 'id', 'confirmationCode') as $field) {
+        $reference = bokun_webhook_booking_reference($body[$field] ?? null);
+        if ('' !== $reference) {
+            return $reference;
+        }
+    }
+    return '';
+}
+
+function bokun_webhook_jobs() {
+    // Refresh after taking the queue lock: another request may have changed it.
+    wp_cache_delete(BOKUN_WEBHOOK_JOBS_OPTION, 'options');
+    $jobs = get_option(BOKUN_WEBHOOK_JOBS_OPTION, array());
+    return is_array($jobs) ? $jobs : array();
+}
+
+function bokun_webhook_enqueue_booking($reference, $marker) {
+    $lock = bokun_webhook_acquire_lock('webhook_queue');
+    if (is_wp_error($lock)) {
+        return $lock;
+    }
+    try {
+        $jobs = bokun_webhook_jobs();
+        $key = hash('sha256', $reference);
+        if (!isset($jobs[$key]) && count($jobs) >= 1000) {
+            return new WP_Error('webhook_queue_full', 'The booking queue is full.');
+        }
+        $jobs[$key] = array('reference' => $reference, 'marker' => $marker);
+        return update_option(BOKUN_WEBHOOK_JOBS_OPTION, $jobs, false) ? true : new WP_Error('webhook_storage', 'Could not queue the booking.');
+    } finally {
+        bokun_webhook_release_lock($lock, 'webhook_queue');
+    }
+}
+
+function bokun_webhook_acknowledge_booking($key, $job) {
+    $lock = bokun_webhook_acquire_lock('webhook_queue');
+    if (is_wp_error($lock)) {
+        return $lock;
+    }
+    try {
+        $jobs = bokun_webhook_jobs();
+        if (!isset($jobs[$key]) || $jobs[$key] !== $job) {
+            return true; // A newer event for this booking must survive this run.
+        }
+        unset($jobs[$key]);
+        return update_option(BOKUN_WEBHOOK_JOBS_OPTION, $jobs, false) ? true : new WP_Error('webhook_storage', 'Could not acknowledge the booking.');
+    } finally {
+        bokun_webhook_release_lock($lock, 'webhook_queue');
+    }
+}
 
 function bokun_webhook_get_secret() {
     $secret = get_option(BOKUN_WEBHOOK_SECRET_OPTION, '');
@@ -98,14 +175,21 @@ function bokun_webhook_handle_request($request) {
     if ('POST' !== $request->get_method()) {
         return new WP_REST_Response(array('ok' => false, 'error' => 'post_required'), 405);
     }
+    $reference = bokun_webhook_request_reference($request);
+    if ('' === $reference) {
+        return new WP_REST_Response(array('ok' => false, 'error' => 'booking_reference_required'), 400);
+    }
     $marker = wp_generate_uuid4();
+    if (is_wp_error(bokun_webhook_enqueue_booking($reference, $marker))) {
+        return new WP_REST_Response(array('ok' => false, 'error' => 'queue_unavailable'), 503);
+    }
     if (!update_option(BOKUN_WEBHOOK_PENDING_OPTION, $marker, false)) {
         return new WP_REST_Response(array('ok' => false, 'error' => 'queue_unavailable'), 503);
     }
     update_option(BOKUN_WEBHOOK_LAST_OPTION, array(
         'time' => time(),
         'topic' => substr(sanitize_text_field((string) $request->get_header('x-bokun-topic')), 0, 128),
-        'booking_id' => substr(sanitize_text_field((string) $request->get_header('x-bokun-booking-id')), 0, 64),
+        'booking_id' => $reference,
     ), false);
     $scheduled = bokun_webhook_schedule_sync();
     if (is_wp_error($scheduled)) {
@@ -151,7 +235,7 @@ function bokun_webhook_cooldown() {
 }
 
 function bokun_webhook_schedule_sync($earliest = 0) {
-    if (!bokun_webhook_is_configured() || !get_option(BOKUN_WEBHOOK_PENDING_OPTION, '')) {
+    if (!bokun_webhook_is_configured() || (!get_option(BOKUN_WEBHOOK_PENDING_OPTION, '') && !bokun_webhook_jobs())) {
         return true;
     }
     if (wp_next_scheduled(BOKUN_WEBHOOK_SYNC_HOOK)) {
@@ -189,7 +273,7 @@ function bokun_webhook_clear_pending($marker) {
 }
 
 function bokun_webhook_run_sync() {
-    if (!bokun_webhook_is_configured() || !get_option(BOKUN_WEBHOOK_PENDING_OPTION, '')) {
+    if (!bokun_webhook_is_configured() || (!get_option(BOKUN_WEBHOOK_PENDING_OPTION, '') && !bokun_webhook_jobs())) {
         return true;
     }
     $result = get_option(BOKUN_WEBHOOK_RESULT_OPTION, array());
@@ -204,29 +288,44 @@ function bokun_webhook_run_sync() {
         bokun_webhook_schedule_sync(time() + 60);
         return $lock;
     }
-    $window = max(1, min(730, (int) apply_filters('bokun_webhook_sync_window_days', 730)));
-    $widen = static function () use ($window) {
-        return $window;
-    };
     try {
         $marker = get_option(BOKUN_WEBHOOK_PENDING_OPTION, '');
-        if (!$marker) {
-            return true;
-        }
         update_option(BOKUN_WEBHOOK_LAST_RUN_OPTION, time(), false);
-        add_filter('bokun_booking_start_date_lookback_days', $widen, 99);
-        add_filter('bokun_booking_start_date_lookahead_days', $widen, 99);
-        if (!function_exists('bokun_run_import_for_all_contexts')) {
+        if (!function_exists('bokun_import_webhook_booking')) {
             return bokun_webhook_record_failure(new WP_Error('import_unavailable', 'The booking import pipeline is unavailable.'));
         }
-        $imported = bokun_run_import_for_all_contexts('webhook');
-        if (is_wp_error($imported)) {
-            return bokun_webhook_record_failure($imported);
+        $jobs = bokun_webhook_jobs();
+        // Recover the last identifiable notification queued by the previous worker.
+        if (!$jobs && $marker) {
+            $last = get_option(BOKUN_WEBHOOK_LAST_OPTION, array());
+            $reference = bokun_webhook_booking_reference(is_array($last) ? ($last['booking_id'] ?? '') : '');
+            if ('' === $reference) {
+                return bokun_webhook_record_failure(new WP_Error('booking_reference_missing', 'The pending notification has no booking reference.'));
+            }
+            $queued = bokun_webhook_enqueue_booking($reference, $marker);
+            if (is_wp_error($queued)) {
+                return bokun_webhook_record_failure($queued);
+            }
+            $jobs = bokun_webhook_jobs();
         }
-        if (true !== $imported) {
-            return bokun_webhook_record_failure(new WP_Error('import_unconfirmed', 'The booking import did not confirm completion.'));
+        $deadline = microtime(true) + 40;
+        foreach (array_slice($jobs, 0, 3, true) as $key => $job) {
+            if (microtime(true) >= $deadline) {
+                break;
+            }
+            $imported = bokun_import_webhook_booking($job['reference'], $deadline);
+            if (is_wp_error($imported)) {
+                return bokun_webhook_record_failure($imported);
+            }
+            if (true !== $imported) {
+                return bokun_webhook_record_failure(new WP_Error('import_unconfirmed', 'The booking import did not confirm completion.'));
+            }
+            $acknowledged = bokun_webhook_acknowledge_booking($key, $job);
+            if (is_wp_error($acknowledged)) {
+                return bokun_webhook_record_failure($acknowledged);
+            }
         }
-        if (false === bokun_webhook_clear_pending($marker)) {
+        if (!bokun_webhook_jobs() && false === bokun_webhook_clear_pending($marker)) {
             return bokun_webhook_record_failure(new WP_Error('webhook_storage', 'Could not acknowledge the completed booking import.'));
         }
         update_option(BOKUN_WEBHOOK_RESULT_OPTION, array('ok' => true, 'time' => time(), 'attempt' => 0, 'next_retry_at' => 0), false);
@@ -235,8 +334,6 @@ function bokun_webhook_run_sync() {
     } catch (Throwable $error) {
         return bokun_webhook_record_failure(new WP_Error('import_exception', 'The booking import was interrupted. Pending changes will be retried.'));
     } finally {
-        remove_filter('bokun_booking_start_date_lookback_days', $widen, 99);
-        remove_filter('bokun_booking_start_date_lookahead_days', $widen, 99);
         bokun_webhook_release_lock($lock, 'webhook_worker');
     }
 }

@@ -232,9 +232,12 @@ $dashboard_page_dropdown = wp_dropdown_pages(
                     <?php endif; ?>
                     <?php if (is_array($webhook_last) && !empty($webhook_last['time'])) : ?>
                         <p><?php echo esc_html('Last change received: ' . wp_date('Y-m-d H:i:s T', (int) $webhook_last['time'])); ?></p>
+                        <p><?php echo esc_html('Notified booking: ' . ($webhook_last['booking_id'] ?? '')); ?></p>
                     <?php endif; ?>
+                    <?php if ($webhook_enabled) : ?><p><?php echo esc_html('Pending booking changes: ' . count(bokun_webhook_jobs())); ?></p><?php endif; ?>
                     <?php if (is_array($webhook_result) && !empty($webhook_result['time'])) : ?>
                         <p><?php echo esc_html((!empty($webhook_result['ok']) ? 'Last import completed: ' : 'Last import incomplete; pending changes retained: ') . wp_date('Y-m-d H:i:s T', (int) $webhook_result['time'])); ?></p>
+                        <?php if (empty($webhook_result['ok']) && !empty($webhook_result['error_code'])) : ?><p><?php echo esc_html('Retry reason: ' . $webhook_result['error_code']); ?></p><?php endif; ?>
                     <?php endif; ?>
                     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                         <input type="hidden" name="action" value="bokun_regenerate_webhook_secret">
