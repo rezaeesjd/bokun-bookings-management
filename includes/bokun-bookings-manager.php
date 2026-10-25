@@ -3880,9 +3880,15 @@ function bokun_update_partner_page_id() {
 
     $has_capability = current_user_can('edit_term', $term_id);
 
+    // A key session with the booking/admin role is authorized by its role, not
+    // by a WordPress term capability (it has no WP user). The top-of-function
+    // bokun_can_send_booking_message() gate has already confirmed the role.
+    $role_can_manage = function_exists('bokun_access_can') && bokun_access_can('manage_bookings');
+
     if (
         !$has_capability
         && !current_user_can($required_capability)
+        && !$role_can_manage
         && !(
             bokun_team_member_has_verified_grant()
             && bokun_product_tag_can_be_updated_from_dashboard($term_id, $dashboard_days)
@@ -3922,6 +3928,11 @@ add_action('wp_ajax_nopriv_bokun_send_booking_message', 'bokun_send_booking_mess
  * able to email a customer for any booking whose confirmation code they obtain.
  */
 function bokun_can_send_booking_message() {
+    // Booking write access (message composer + result/payment toggles): the
+    // booking and admin roles, or — as a failsafe — logged-in WordPress staff.
+    if (function_exists('bokun_access_can')) {
+        return bokun_access_can('manage_bookings');
+    }
     return is_user_logged_in() && (current_user_can('manage_options') || current_user_can('edit_others_posts'));
 }
 
