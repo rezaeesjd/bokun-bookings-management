@@ -1504,23 +1504,27 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 </ul>
                             <?php endif; ?>
 
-                            <?php if (!empty($tag_editor_link)) : ?>
-                                <a href="<?php echo esc_url($tag_editor_link); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link bokun-booking-dashboard__tag-editor-link">
-                                    <?php esc_html_e('Tag Editor', 'BOKUN_txt_domain'); ?>
-                                </a>
-                            <?php endif; ?>
-
-                            <?php if (!empty($viator_url) || !empty($bokun_url)) : ?>
-                                <div class="bokun-booking-dashboard__reference-links">
-                                    <?php if (!empty($viator_url)) : ?>
-                                        <a href="<?php echo esc_url($viator_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
-                                            <?php esc_html_e('Viator link', 'BOKUN_txt_domain'); ?>
+                            <?php if (!empty($tag_editor_link) || !empty($viator_url) || !empty($bokun_url)) : ?>
+                                <div class="bokun-booking-dashboard__link-row">
+                                    <?php if (!empty($tag_editor_link)) : ?>
+                                        <a href="<?php echo esc_url($tag_editor_link); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link bokun-booking-dashboard__tag-editor-link">
+                                            <?php esc_html_e('Tag Editor', 'BOKUN_txt_domain'); ?>
                                         </a>
                                     <?php endif; ?>
-                                    <?php if (!empty($bokun_url)) : ?>
-                                        <a href="<?php echo esc_url($bokun_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
-                                            <?php esc_html_e('Bokun link', 'BOKUN_txt_domain'); ?>
-                                        </a>
+
+                                    <?php if (!empty($viator_url) || !empty($bokun_url)) : ?>
+                                        <div class="bokun-booking-dashboard__reference-links">
+                                            <?php if (!empty($viator_url)) : ?>
+                                                <a href="<?php echo esc_url($viator_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
+                                                    <?php esc_html_e('Viator link', 'BOKUN_txt_domain'); ?>
+                                                </a>
+                                            <?php endif; ?>
+                                            <?php if (!empty($bokun_url)) : ?>
+                                                <a href="<?php echo esc_url($bokun_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
+                                                    <?php esc_html_e('Bokun link', 'BOKUN_txt_domain'); ?>
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
                                     <?php endif; ?>
                                 </div>
                             <?php endif; ?>

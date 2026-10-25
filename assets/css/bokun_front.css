@@ -660,6 +660,7 @@
   padding: 0;
   list-style: none;
   overflow-x: auto;
+  max-width: 100%;
 }
 
 .bokun-booking-dashboard__status-list::-webkit-scrollbar {
@@ -672,14 +673,26 @@
 }
 
 .bokun-booking-dashboard__meta-line {
+  /* Always three stacked rows: the Message client button, the status tags,
+     and the link buttons (Tag Editor / Viator / Bokun) — each on its own row,
+     never sharing a line. */
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
   margin-top: 1.1rem;
   padding-top: 0.65rem;
   border-top: 1px solid #e2e8f0;
+}
+
+/* Row 3: the link buttons sit together on one line (wrapping only if the card
+   is too narrow to hold them). */
+.bokun-booking-dashboard__link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
 }
 
 .bokun-booking-dashboard__reference-links {
