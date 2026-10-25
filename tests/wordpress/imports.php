@@ -89,8 +89,8 @@ $wpdb = new Import_Integration_DB($wpdb);
 add_filter('pre_wp_mail', '__return_false');
 add_filter('pre_http_request', static function ($previous, $arguments, $url) {
     global $import_test;
-    $import_test['requests'][] = array('url' => $url, 'payload' => json_decode($arguments['body'] ?? '{}', true));
-    if ($url !== BOKUN_API_BASE_URL . BOKUN_API_BOOKING_API) {
+    $import_test['requests'][] = array('url' => $url, 'payload' => json_decode($arguments['body'] ?? '{}', true), 'arguments' => $arguments);
+    if ($url !== BOKUN_API_BASE_URL . BOKUN_API_BOOKING_API && !preg_match('~^https://api\\.bokun\\.io/booking\\.json/booking/[1-9][0-9]*$~D', $url)) {
         return new WP_Error('network_disabled', 'All non-fixture requests are disabled in this isolated test.');
     }
     if (!$import_test['responses']) {
@@ -239,6 +239,32 @@ import_fixture(array(import_http_response(array('items' => array(), 'totalPages'
 verify_import_case(true === bokun_run_daily_import(), 'daily import confirms a successful empty sync');
 verify_import_case('scheduled' === bokun_get_import_last_runs()['api_1']['last_run_trigger'], 'daily import records the scheduled trigger');
 verify_import_case(!has_action('wp_ajax_nopriv_bokun_save_api_credentials'), 'anonymous API-credential mutation action remains unregistered');
+
+register_post_type('bokun_booking', array('public' => true));
+$unrelated = wp_insert_post(array('post_type' => 'bokun_booking', 'post_title' => 'UNRELATED-PAST', 'post_status' => 'publish', 'post_date' => '2025-01-01 12:00:00'));
+update_post_meta($unrelated, '_confirmation_code', 'UNRELATED-PAST');
+$booking = array('id' => 123, 'confirmationCode' => 'TEST-123', 'creationDate' => '2026-10-25T12:00:00Z', 'externalBookingReference' => 'API-AUTHORITATIVE', 'customer' => array('firstName' => 'Synthetic', 'lastName' => 'Webhook'), 'productBookings' => array(array('id' => 456, 'confirmationCode' => 'TEST-T456', 'parentBookingId' => 123, 'startDateTime' => 1793442600000, 'status' => 'CONFIRMED', 'product' => array('id' => 0, 'title' => 'Synthetic webhook tour'))));
+import_fixture(array(import_http_response(array('bookingId' => 123, 'confirmationCode' => 'TEST-123')), import_http_response(array('items' => array($booking)))));
+$result = bokun_import_webhook_booking('123', microtime(true) + 40);
+verify_import_case(true === $result && 2 === count($import_test['requests']), 'one webhook uses a bounded identity lookup and exact confirmation-code search');
+verify_import_case(array('confirmationCode' => 'TEST-123', 'page' => 1, 'pageSize' => 10, 'itemsPerPage' => 10) === $import_test['requests'][1]['payload'], 'the targeted search has no travel-date restriction or full-history pagination');
+verify_import_case(0 === $import_test['requests'][0]['arguments']['redirection'] && $import_test['requests'][0]['arguments']['timeout'] <= 15, 'targeted API requests bound time and never forward credentials through redirects');
+$posts = get_posts(array('post_type' => 'bokun_booking', 'post_status' => 'any', 'meta_key' => '_confirmation_code', 'meta_value' => 'TEST-123', 'fields' => 'ids'));
+verify_import_case(1 === count($posts) && 'API-AUTHORITATIVE' === get_post_meta($posts[0], '_external_booking_reference', true), 'the real importer stores only the authoritative API booking');
+verify_import_case('publish' === get_post_status($unrelated), 'a one-booking webhook refresh leaves unrelated past bookings published');
+verify_import_case('webhook' === bokun_get_import_last_runs()['api_1']['last_success_trigger'], 'completed targeted refreshes record the webhook trigger on the dashboard');
+$booking['externalBookingReference'] = 'API-UPDATED';
+$booking['productBookings'][0]['status'] = 'CANCELLED';
+import_fixture(array(import_http_response(array('items' => array($booking)))));
+verify_import_case(true === bokun_import_webhook_booking('TEST-123', microtime(true) + 40) && 'API-UPDATED' === get_post_meta($posts[0], '_external_booking_reference', true) && 'CANCELLED' === get_post_meta($posts[0], '_booking_status_origin', true), 'updates and cancellations refresh the existing booking rather than creating duplicates');
+import_fixture(array(import_http_response(array('bookingId' => 999, 'confirmationCode' => 'OTHER-999'))));
+verify_import_case(is_wp_error(bokun_import_webhook_booking('123', microtime(true) + 40)) && 1 === count($import_test['requests']), 'a mismatched booking identity cannot reach persistence');
+import_fixture(array(import_http_response(array('items' => array($booking)), 500)));
+verify_import_case(is_wp_error(bokun_import_webhook_booking('TEST-123', microtime(true) + 40)), 'a targeted API error is retained for retry');
+import_fixture(array());
+verify_import_case(is_wp_error(bokun_import_webhook_booking('123', microtime(true) - 1)) && !$import_test['requests'], 'an exhausted worker budget never starts an API request');
+import_fixture(array(import_http_response(array(), 404)));
+verify_import_case(is_wp_error(bokun_import_webhook_booking('123', microtime(true) + 40)), 'an invisible booking never acknowledges successful synchronization');
 
 foreach ($import_test['checks'] as $label) {
     echo (in_array($label, $import_test['failures'], true) ? 'FAIL ' : 'PASS ') . $label . "\n";

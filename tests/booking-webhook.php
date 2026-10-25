@@ -24,10 +24,12 @@ class Webhook_Test_Request {
     private $method;
     private $query;
     private $headers;
-    public function __construct($method = 'POST', $query = array(), $headers = array()) { $this->method = $method; $this->query = $query; $this->headers = $headers; }
+    private $body;
+    public function __construct($method = 'POST', $query = array(), $headers = array(), $body = array('id' => 123)) { $this->method = $method; $this->query = $query; $this->headers = $headers; $this->body = $body; }
     public function get_method() { return $this->method; }
     public function get_query_params() { return $this->query; }
     public function get_header($name) { return $this->headers[$name] ?? ''; }
+    public function get_json_params() { return $this->body; }
 }
 
 class Webhook_Test_DB {
@@ -106,12 +108,13 @@ function check_admin_referer($action) {
     $GLOBALS['test_nonce_action'] = $action;
     if (!$GLOBALS['test_nonce_valid']) { throw new RuntimeException('Synthetic invalid nonce.'); }
 }
-function bokun_run_import_for_all_contexts($trigger) {
+function bokun_import_webhook_booking($reference, $deadline) {
     $lock = bokun_webhook_acquire_import_lock();
     if (is_wp_error($lock)) { return $lock; }
     try {
         $GLOBALS['import_count']++;
-        $GLOBALS['import_trigger'] = $trigger;
+        $GLOBALS['import_trigger'] = 'webhook';
+        $GLOBALS['import_references'][] = $reference;
         $GLOBALS['import_windows'][] = array(apply_filters('bokun_booking_start_date_lookback_days', 1), apply_filters('bokun_booking_start_date_lookahead_days', 30));
         return ($GLOBALS['test_import'])();
     } finally {
@@ -122,6 +125,7 @@ function bokun_run_import_for_all_contexts($trigger) {
 $test_options = $test_cron = $test_actions = $test_filters = $fail_options = $import_windows = array();
 $test_admin = $fail_clear = $fail_schedule = $test_nonce_valid = false;
 $unique_counter = $import_count = $checks = 0;
+$import_references = array();
 $test_import = static function () { return true; };
 $wpdb = new Webhook_Test_DB();
 
@@ -135,6 +139,7 @@ function verify_webhook($condition, $description) {
 
 function ready_webhook($callback = null) {
     $GLOBALS['test_options'] = array(BOKUN_WEBHOOK_SECRET_OPTION => str_repeat('a', 48), BOKUN_WEBHOOK_ENABLED_OPTION => 1, BOKUN_WEBHOOK_PENDING_OPTION => wp_generate_uuid4());
+    $GLOBALS['test_options'][BOKUN_WEBHOOK_JOBS_OPTION] = array(hash('sha256', '123') => array('reference' => '123', 'marker' => wp_generate_uuid4()));
     $GLOBALS['test_cron'] = $GLOBALS['fail_options'] = array();
     $GLOBALS['fail_schedule'] = $GLOBALS['fail_clear'] = false;
     $GLOBALS['wpdb']->connection = 1;
@@ -170,7 +175,7 @@ verify_webhook(200 === bokun_webhook_handle_request(new Webhook_Test_Request('GE
 verify_webhook(405 === bokun_webhook_handle_request(new Webhook_Test_Request('GET', array('token' => $new_secret)))->status && $test_options === $before_ping, 'GET cannot enqueue an import');
 $response = bokun_webhook_handle_request(new Webhook_Test_Request('POST', array('token' => $new_secret), array('x-bokun-topic' => str_repeat('x', 1000), 'x-bokun-booking-id' => str_repeat('y', 1000))));
 verify_webhook(200 === $response->status && get_option(BOKUN_WEBHOOK_PENDING_OPTION), 'an authenticated POST durably queues background work');
-verify_webhook(128 === strlen(get_option(BOKUN_WEBHOOK_LAST_OPTION)['topic']) && 64 === strlen(get_option(BOKUN_WEBHOOK_LAST_OPTION)['booking_id']), 'recorded inbound metadata is bounded');
+verify_webhook(128 === strlen(get_option(BOKUN_WEBHOOK_LAST_OPTION)['topic']) && '123' === get_option(BOKUN_WEBHOOK_LAST_OPTION)['booking_id'], 'metadata is bounded and invalid oversized identifiers are never used');
 verify_webhook(isset($test_cron[BOKUN_WEBHOOK_SYNC_HOOK]) && 0 === $import_count, 'webhook requests never import inline');
 $queued_at = $test_cron[BOKUN_WEBHOOK_SYNC_HOOK];
 $old_marker = get_option(BOKUN_WEBHOOK_PENDING_OPTION);
@@ -197,7 +202,7 @@ verify_webhook(is_wp_error($result) && get_option(BOKUN_WEBHOOK_PENDING_OPTION),
 ready_webhook();
 $before_import = $import_count;
 verify_webhook(true === bokun_webhook_run_sync() && $before_import + 1 === $import_count && 'webhook' === $import_trigger && !get_option(BOKUN_WEBHOOK_PENDING_OPTION), 'a successful import consumes its exact pending generation');
-verify_webhook(array(730, 730) === end($import_windows) && 1 === apply_filters('bokun_booking_start_date_lookback_days', 1) && 30 === apply_filters('bokun_booking_start_date_lookahead_days', 30), 'bounded webhook date filters are removed after success');
+verify_webhook(array(1, 30) === end($import_windows) && '123' === end($import_references), 'webhooks refresh the notified booking without widening travel-date windows');
 verify_webhook(!$wpdb->locks && true === get_option(BOKUN_WEBHOOK_RESULT_OPTION)['ok'], 'successful imports release locks and save success evidence');
 $before_import = $import_count;
 bokun_webhook_run_sync();
@@ -213,7 +218,7 @@ ready_webhook();
 $window_filter = static function () { return 1000000; };
 add_filter('bokun_webhook_sync_window_days', $window_filter);
 bokun_webhook_run_sync();
-verify_webhook(array(730, 730) === end($import_windows), 'an overlarge date-window override cannot create an unbounded import');
+verify_webhook(array(1, 30) === end($import_windows), 'an old date-window override cannot re-enable a full-history webhook import');
 remove_filter('bokun_webhook_sync_window_days', $window_filter);
 ready_webhook(static function () { update_option(BOKUN_WEBHOOK_PENDING_OPTION, 'event-arrived-during-import', false); return true; });
 verify_webhook(true === bokun_webhook_run_sync() && 'event-arrived-during-import' === get_option(BOKUN_WEBHOOK_PENDING_OPTION) && isset($test_cron[BOKUN_WEBHOOK_SYNC_HOOK]), 'a new event during import survives acknowledgement and receives a trailing run');
@@ -263,5 +268,37 @@ $schedules = bokun_webhook_schedules(array());
 verify_webhook(300 === $schedules['bokun_webhook_five_minutes']['interval'], 'the pending-work recovery backstop runs every five minutes');
 foreach ($test_actions['rest_api_init'] as $callback) { $callback(); }
 verify_webhook(array('POST', 'GET') === $test_route['methods'] && 'bokun_webhook_handle_request' === $test_route['callback'], 'the route exposes only POST events and authenticated GET health checks');
+
+verify_webhook('123' === bokun_webhook_booking_reference(rtrim(base64_encode('Booking:123'), '=')), 'GraphQL notification IDs decode to a bounded REST booking ID');
+foreach (array('../123', 'https://other.test/123', array(123), 1.5, str_repeat('9', 20), base64_encode('Experience:123')) as $invalid) {
+    verify_webhook('' === bokun_webhook_booking_reference($invalid), 'invalid references cannot select an arbitrary API route: ' . gettype($invalid));
+}
+ready_webhook();
+$before = $test_options;
+$response = bokun_webhook_handle_request(new Webhook_Test_Request('POST', array('token' => str_repeat('a', 48)), array(), array('status' => 'CANCELLED')));
+verify_webhook(400 === $response->status && $before === $test_options, 'notifications without an identifier cannot start an expensive full-history import');
+ready_webhook();
+foreach (array(456, 789, 987) as $id) {
+    bokun_webhook_handle_request(new Webhook_Test_Request('POST', array('token' => str_repeat('a', 48)), array(), array('id' => $id, 'customer' => array('firstName' => 'UNTRUSTED'))));
+}
+verify_webhook(4 === count(bokun_webhook_jobs()) && !str_contains(json_encode(bokun_webhook_jobs()), 'UNTRUSTED'), 'bursts preserve separate bookings while storing no notification-supplied customer facts');
+verify_webhook(true === bokun_webhook_run_sync() && 1 === count(bokun_webhook_jobs()) && get_option(BOKUN_WEBHOOK_PENDING_OPTION), 'one worker processes at most three bookings and retains the trailing batch');
+unset($test_options[BOKUN_WEBHOOK_LAST_RUN_OPTION]);
+verify_webhook(true === bokun_webhook_run_sync() && !bokun_webhook_jobs() && !get_option(BOKUN_WEBHOOK_PENDING_OPTION), 'the trailing batch eventually drains the durable queue');
+ready_webhook(static function () {
+    bokun_webhook_handle_request(new Webhook_Test_Request('POST', array('token' => str_repeat('a', 48)), array(), array('id' => 123)));
+    return true;
+});
+verify_webhook(true === bokun_webhook_run_sync() && 1 === count(bokun_webhook_jobs()) && get_option(BOKUN_WEBHOOK_PENDING_OPTION), 'a same-booking update arriving during import survives queue acknowledgement');
+ready_webhook();
+unset($test_options[BOKUN_WEBHOOK_JOBS_OPTION]);
+$test_options[BOKUN_WEBHOOK_LAST_OPTION] = array('booking_id' => rtrim(base64_encode('Booking:123'), '='));
+verify_webhook(true === bokun_webhook_run_sync() && !get_option(BOKUN_WEBHOOK_PENDING_OPTION), 'a legacy pending notification migrates from its saved booking ID');
+ready_webhook();
+$fail_options = array(BOKUN_WEBHOOK_PENDING_OPTION);
+bokun_webhook_handle_request(new Webhook_Test_Request('POST', array('token' => str_repeat('a', 48)), array(), array('id' => 456)));
+unset($test_options[BOKUN_WEBHOOK_PENDING_OPTION]);
+$fail_options = array();
+verify_webhook(true === bokun_webhook_run_sync() && !bokun_webhook_jobs(), 'queued bookings recover even when the coalescing-marker write failed');
 
 echo "Completed $checks isolated booking webhook checks without network access.\n";

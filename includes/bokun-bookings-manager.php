@@ -763,6 +763,115 @@ function bokun_run_daily_import() {
     return bokun_run_import_for_all_contexts('scheduled');
 }
 
+/** A bounded API lookup for a webhook. Never persist notification-supplied facts. */
+function bokun_webhook_api_lookup($endpoint, $context, $deadline, $payload = null) {
+    $remaining = $deadline - microtime(true);
+    if ($remaining < 1) {
+        return new WP_Error('webhook_budget', 'The booking refresh will resume on its next retry.');
+    }
+    list($key, $secret) = bokun_get_api_credentials_for_context($context);
+    $method = null === $payload ? 'GET' : 'POST';
+    $date = bokun_format_date();
+    $arguments = array(
+        'method' => $method,
+        'timeout' => min(15, $remaining),
+        'redirection' => 0,
+        'limit_response_size' => 2 * 1024 * 1024,
+        'headers' => array(
+            'X-Bokun-AccessKey' => $key,
+            'X-Bokun-Date' => $date,
+            'X-Bokun-Signature' => bokun_generate_signature($date, $key, $method, $endpoint, $secret),
+            'Content-Type' => 'application/json',
+            'Accept' => 'application/json',
+        ),
+    );
+    if (null !== $payload) {
+        $arguments['body'] = wp_json_encode($payload);
+    }
+    $response = wp_remote_request(BOKUN_API_BASE_URL . $endpoint, $arguments);
+    if (is_wp_error($response)) {
+        return new WP_Error('webhook_api_unavailable', 'The booking API did not respond.');
+    }
+    $status = (int) wp_remote_retrieve_response_code($response);
+    if (403 === $status || 404 === $status) {
+        return null; // This credential cannot see the notified booking.
+    }
+    if (200 !== $status) {
+        return new WP_Error('webhook_api_response', 'The booking API did not return a successful response.');
+    }
+    $data = json_decode(wp_remote_retrieve_body($response), true);
+    return is_array($data) ? $data : new WP_Error('webhook_api_invalid', 'The booking API returned invalid data.');
+}
+
+function bokun_import_webhook_booking($reference, $deadline) {
+    $reference = bokun_webhook_booking_reference($reference);
+    $credentials = bokun_get_configured_api_credentials();
+    if ('' === $reference || !$credentials) {
+        return new WP_Error('webhook_credentials', 'A booking reference and configured credentials are required.');
+    }
+    $lock = bokun_webhook_acquire_import_lock();
+    if (is_wp_error($lock)) {
+        return $lock;
+    }
+    $matched = false;
+    try {
+        foreach ($credentials as $context => $config) {
+            $code = $reference;
+            if (ctype_digit($reference)) {
+                $details = bokun_webhook_api_lookup('/booking.json/booking/' . rawurlencode($reference), $context, $deadline);
+                if (is_wp_error($details)) {
+                    return $details;
+                }
+                if (null === $details) {
+                    continue;
+                }
+                if ((string) ($details['bookingId'] ?? $details['id'] ?? '') !== $reference || empty($details['confirmationCode']) || !is_string($details['confirmationCode'])) {
+                    return new WP_Error('webhook_booking_mismatch', 'The booking lookup did not confirm the requested identity.');
+                }
+                $code = $details['confirmationCode'];
+            }
+            // Search by authoritative confirmation code to reuse the existing
+            // search-result schema, without a travel-date window or a full scan.
+            $data = bokun_webhook_api_lookup('/booking.json/booking-search', $context, $deadline, array(
+                'confirmationCode' => $code,
+                'page' => 1,
+                'pageSize' => 10,
+                'itemsPerPage' => 10,
+            ));
+            if (is_wp_error($data)) {
+                return $data;
+            }
+            if (null === $data) {
+                continue;
+            }
+            if (!isset($data['items']) || !is_array($data['items'])) {
+                return new WP_Error('webhook_api_invalid', 'The booking search returned invalid data.');
+            }
+            $bookings = array_values(array_filter($data['items'], static function ($booking) use ($code, $reference) {
+                return is_array($booking) && ($booking['confirmationCode'] ?? '') === $code
+                    && (!ctype_digit($reference) || (string) ($booking['id'] ?? '') === $reference);
+            }));
+            if (!$bookings) {
+                continue;
+            }
+            $start = $bookings[0]['productBookings'][0]['startDateTime'] ?? $bookings[0]['productBookings'][0]['startDate'] ?? null;
+            if (1 !== count($bookings) || !is_numeric($start) || (float) $start <= 0) {
+                return new WP_Error('webhook_booking_invalid', 'The booking search did not return one complete booking.');
+            }
+            // A one-booking refresh must never demote unrelated past bookings.
+            $summary = bokun_save_bookings_as_posts($bookings, $context, false);
+            if (!is_array($summary) || ($summary['status'] ?? '') !== 'success' || 1 !== (int) ($summary['processed'] ?? 0)) {
+                return new WP_Error('webhook_save_failed', 'The booking could not be refreshed.');
+            }
+            bokun_record_import_run($context, 'success', 'webhook', 'One notified booking refreshed from Bókun.', $summary);
+            $matched = true;
+        }
+        return $matched ? true : new WP_Error('webhook_booking_not_found', 'No configured API could retrieve the notified booking.');
+    } finally {
+        bokun_webhook_release_import_lock($lock);
+    }
+}
+
 function bokun_run_import_for_all_contexts($trigger = 'scheduled') {
     $trigger = in_array($trigger, array('manual', 'scheduled', 'webhook'), true) ? $trigger : 'scheduled';
     $configured_credentials = bokun_get_configured_api_credentials();
@@ -922,7 +1031,7 @@ function bokun_dedupe_booking_posts($post_ids) {
     return $primary;
 }
 
-function bokun_save_bookings_as_posts($bookings, $context = 'default') {
+function bokun_save_bookings_as_posts($bookings, $context = 'default', $reconcile_missing = true) {
     $stats = array(
         'total'     => is_array($bookings) ? count($bookings) : 0,
         'processed' => 0,
@@ -1001,8 +1110,8 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
         'posts_per_page' => -1,
     ];
 
-    $query = new WP_Query($args);
-    if ($query->have_posts()) {
+    $query = $reconcile_missing ? new WP_Query($args) : null;
+    if ($query && $query->have_posts()) {
         foreach ($query->posts as $post_id) {
             $confirmation_code = get_post_meta($post_id, '_confirmation_code', true);
             if (!in_array($confirmation_code, $imported_confirmation_codes)) {
@@ -1146,7 +1255,7 @@ function bokun_save_bookings_as_posts($bookings, $context = 'default') {
 
     // Drop analytics rows whose creation date has aged out of the window; the
     // forward-looking import range never re-syncs past bookings on its own.
-    if (function_exists('bokun_analytics_prune_window')) {
+    if ($reconcile_missing && function_exists('bokun_analytics_prune_window')) {
         bokun_analytics_prune_window();
     }
 

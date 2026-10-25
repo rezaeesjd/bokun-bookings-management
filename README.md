@@ -42,6 +42,32 @@ Bokun Bookings Management is a WordPress plugin that lets tour and activity oper
 - **Accessibility-aware progress feedback** – Both the admin fetch button and `[bokun_fetch_button]` shortcode share ARIA-enabled progress bars and live regions so users know the import status. 【F:includes/bokun_shortcode.class.php†L15-L52】【F:includes/bokun_settings.view.php†L110-L150】
 - **GitHub auto-sync (self-updater)** – The plugin keeps itself in sync with its GitHub repository. It tracks the latest commit on a configured branch (default `main`) and, with auto-sync enabled by default, installs new commits automatically in the background using WordPress' native update pipeline. This replaces the separate "Github Plugin Installer and Updater" helper plugin, which is now merged into this one. 【F:includes/class-bokun-github-sync.php†L1-L120】
 
+## Live Bókun booking updates
+
+In the plugin settings, enable **Optional live booking updates**. In each Bókun
+account, create a JSON HTTP Booking notification for confirmed, updated and
+cancelled bookings. Use the receiver URL without its token query parameter and
+send the token in the custom `X-Bokun-Webhook-Token` header where supported.
+Keep the token private.
+
+The receiver requires a booking identifier in `X-Bokun-Booking-Id` (including
+Bókun's encoded `Booking:<id>` form) or the JSON `bookingId`, `id` or
+`confirmationCode` field. All other notification fields are ignored. Background
+workers retrieve authoritative booking details and perform an exact
+confirmation-code search before saving through the existing importer. They do
+not scan two years of history or demote other bookings during a targeted refresh.
+
+The durable queue coalesces repeated changes to the same booking, preserves
+distinct bookings and arrivals during a running import, and retries failures.
+Each worker takes at most three bookings with a bounded API time budget. Configure
+a real server cron to call WordPress cron every five minutes on quiet sites;
+the nightly full import remains the reconciliation backstop. Settings display
+the last receipt, notified identifier, pending count, last completed batch and
+retry reason. A receipt alone does not prove the booking import completed.
+
+See the official [Bókun webhook events](https://bokun.dev/webhooks/g3YWZ24sADsceKK5vqrMzZ/webhook-events/migR39DGTnTr3qaRryEr7k)
+and [REST API schema](https://api-docs.bokun.dev/rest-v1.yaml).
+
 ## GitHub auto-sync
 
 The plugin ships with an integrated self-updater that mirrors the tracked GitHub branch onto the installed site. It uses WordPress' own plugin-update mechanism, so updates appear on the **Plugins** and **Dashboard → Updates** screens and can install automatically in the background.

@@ -26,9 +26,10 @@ offline. Keep `--ignore-scripts`; no dependency lifecycle scripts are required.
   staff-only surface (import controls/status, Analytics and Messages tabs),
   staff-only direct analytics/business/history access, independent Messages
   visibility, empty booking inventories, noindex, and cache protection.
-- `booking-webhook.php`: 53 checks for explicit activation, secret authorization,
+- `booking-webhook.php`: 67 checks for explicit activation, secret authorization,
   request shape, durable pending markers, database lock ownership, scheduling,
-  retries, trailing work, and safe deactivation.
+  retries, trailing work, safe deactivation, bounded booking identifiers, distinct
+  queued bookings, interrupted-marker recovery and updates arriving during work.
 - `messages-ui.cjs`: 31 mocked-DOM checks for safe rendering, operator notes,
   unsaved edits, draft history, foreground locking, approval invalidation,
   analysis-only recommendations, and cross-business navigation. It asserts that
@@ -49,7 +50,9 @@ The WordPress runner requires Python 3.9+, PHP PDO SQLite, mbstring, OpenSSL
 and curl. It downloads checksum-pinned official WordPress 7.1.3 and SQLite
 Database Integration 3.1.0 into a disposable operating-system temporary directory,
 initializes a fresh synthetic installation, and executes 133 messaging checks,
-62 import checks and two asset-version checks. It never uses an existing database.
+73 import checks and two asset-version checks, including targeted API lookups,
+updates, cancellations and preservation of unrelated past bookings. It never
+uses an existing database.
 All external HTTP and actual mail are blocked; API transports are mocked.
 
 `BOKUN_TEST_PHP` selects the PHP executable; `BOKUN_TEST_PHP_ARGS` is a JSON
