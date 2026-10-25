@@ -40,10 +40,14 @@ jobs:
       - name: Check disposable WordPress workflows and imports
         run: python tests/wordpress/run.py
   javascript:
-    name: Messages operator workflow
+    name: Messages and Analytics workflows
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

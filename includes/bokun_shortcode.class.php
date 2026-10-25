@@ -3266,6 +3266,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'week'         => __( 'Week of', 'BOKUN_txt_domain' ),
                 'mixedCur'     => __( 'mixed currencies', 'BOKUN_txt_domain' ),
                 'all'          => __( 'All', 'BOKUN_txt_domain' ),
+                'filterBy'     => __( 'Filter by', 'BOKUN_txt_domain' ),
                 'bizResults'   => __( 'Business Results', 'BOKUN_txt_domain' ),
                 'backToAna'    => __( '← Back to analytics', 'BOKUN_txt_domain' ),
             );
@@ -3297,6 +3298,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             <div class="bokun-andash__side-row">
                                 <input type="search" class="bokun-andash__search" data-f-search placeholder="<?php esc_attr_e( 'Search…', 'BOKUN_txt_domain' ); ?>" />
                             </div>
+                            <p class="bokun-andash__insight-sub"><?php esc_html_e( 'Counts reflect all other filters. Select multiple items to include any of them.', 'BOKUN_txt_domain' ); ?></p>
                             <div class="bokun-andash__side-row bokun-andash__quick">
                                 <button type="button" class="bokun-andash__quickbtn" data-quick="viator-confirmed-resulted" aria-pressed="false" title="<?php esc_attr_e( 'Toggle: confirmed Viator.com bookings that already have a result selected', 'BOKUN_txt_domain' ); ?>"><?php esc_html_e( 'Viator · Confirmed · with result', 'BOKUN_txt_domain' ); ?></button>
                             </div>
@@ -3355,6 +3357,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             </div>
 
                             <div data-analytics-view>
+                            <p class="bokun-andash__insight-sub" data-filter-summary role="status" aria-live="polite" aria-atomic="true"></p>
                             <div class="bokun-andash__insights" data-insights></div>
                             <div class="bokun-andash__kpis" data-kpis></div>
 
@@ -3453,8 +3456,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash__facet[hidden] { display:none; }
                 .bokun-andash__facet h4 { margin:0 0 6px; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--an-ink-2); }
                 .bokun-andash__facet-items { display:flex; flex-direction:column; gap:3px; max-height:180px; overflow:auto; }
-                .bokun-andash__item { display:flex; justify-content:space-between; gap:8px; align-items:center; padding:4px 8px; border-radius:6px; font-size:13px; cursor:pointer; border:1px solid transparent; }
+                .bokun-andash__item { appearance:none; width:100%; background:transparent; color:inherit; font-family:inherit; text-align:left; display:flex; justify-content:space-between; gap:8px; align-items:center; padding:4px 8px; border-radius:6px; font-size:13px; cursor:pointer; border:1px solid transparent; }
                 .bokun-andash__item:hover { background:var(--an-blue-soft); }
+                .bokun-andash__item:disabled { opacity:.45; cursor:default; background:transparent; }
+                .bokun-andash__item:focus-visible, .bokun-andash__drill:focus-visible { outline:2px solid var(--an-blue); outline-offset:2px; }
+                .bokun-andash__drill { appearance:none; width:100%; background:transparent; border:0; padding:4px; color:inherit; font-family:inherit; text-align:left; cursor:pointer; border-radius:4px; }
+                .bokun-andash__drill:hover, .bokun-andash__drill[aria-pressed="true"] { background:var(--an-blue-soft); }
+                .bokun-andash__drill:disabled { opacity:.45; cursor:default; background:transparent; }
                 .bokun-andash__item.is-on { background:var(--an-blue); color:#fff; }
                 .bokun-andash__item .lab { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
                 .bokun-andash__item .cnt { font-variant-numeric:tabular-nums; opacity:.7; font-size:12px; }
@@ -3496,6 +3504,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash__seg-bar { display:flex; height:16px; border-radius:4px; overflow:hidden; background:var(--an-line); }
                 .bokun-andash__legend { display:flex; flex-wrap:wrap; gap:10px 16px; margin-top:10px; font-size:12px; color:var(--an-ink-2); }
                 .bokun-andash__legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:middle; }
+                .bokun-andash__legend .bokun-andash__drill { width:auto; font-size:inherit; }
                 .bokun-andash table { width:100%; border-collapse:collapse; font-size:13px; }
                 .bokun-andash th, .bokun-andash td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--an-line); white-space:nowrap; }
                 .bokun-andash th { color:var(--an-ink-2); font-size:12px; text-transform:uppercase; letter-spacing:.03em; }
@@ -3659,10 +3668,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 function metricLabelFull() { var lbl = metricLabel(); if ( isMoney() ) { var cur = ( metric === 'netrev' ) ? netRevCur : revCur; var multi = ( metric === 'netrev' ) ? netRevMulti : revMulti; if ( cur ) { lbl += ' (' + cur + ( multi ? ', ' + L.mixedCur : '' ) + ')'; } } return lbl; }
 
                 // ---- facet filter state (multi-select) ----
-                var facetSel = {}; FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = {}; } );
+                var facetSel = {}; FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = Object.create( null ); } );
 
                 function uniqueCounts( key ) {
-                    var m = {};
+                    var m = Object.create( null );
                     ROWS.forEach( function ( r ) { var v = r[ key ]; if ( v !== null && v !== undefined && v !== '' ) { v = String( v ); m[ v ] = ( m[ v ] || 0 ) + 1; } } );
                     return Object.keys( m ).map( function ( v ) { return { v: v, n: m[ v ] }; } ).sort( function ( a, b ) { return b.n - a.n || a.v.localeCompare( b.v ); } );
                 }
@@ -3689,13 +3698,16 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     if ( ! values.length ) { facetEl.hidden = true; return; }
                     values.forEach( function ( o ) {
                         var disp = o.label || o.v;
-                        var el = document.createElement( 'div' );
+                        var el = document.createElement( 'button' );
+                        el.type = 'button';
+                        el.setAttribute( 'aria-pressed', 'false' );
                         el.className = 'bokun-andash__item';
                         el.setAttribute( 'data-val', o.v );
                         el.innerHTML = '<span class="lab" title="' + escHtml( disp ) + '">' + escHtml( disp ) + '</span><span class="cnt">' + fmtInt( o.n ) + '</span>';
                         el.addEventListener( 'click', function () {
-                            if ( facetSel[ key ][ o.v ] ) { delete facetSel[ key ][ o.v ]; el.classList.remove( 'is-on' ); }
-                            else { facetSel[ key ][ o.v ] = 1; el.classList.add( 'is-on' ); }
+                            if ( facetSel[ key ][ o.v ] ) { delete facetSel[ key ][ o.v ]; }
+                            else { facetSel[ key ][ o.v ] = 1; }
+                            setQuickActive( false );
                             recompute();
                         } );
                         wrap.appendChild( el );
@@ -3717,6 +3729,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         facetEl.querySelectorAll( '.bokun-andash__item' ).forEach( function ( el ) {
                             var v = el.getAttribute( 'data-val' );
                             el.classList.toggle( 'is-on', !! ( facetSel[ key ] && facetSel[ key ][ v ] ) );
+                            el.setAttribute( 'aria-pressed', facetSel[ key ] && facetSel[ key ][ v ] ? 'true' : 'false' );
                         } );
                     } );
                 }
@@ -3752,7 +3765,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     if ( btn ) { btn.classList.toggle( 'is-active', on ); btn.setAttribute( 'aria-pressed', on ? 'true' : 'false' ); }
                 }
                 function applyQuick() {
-                    FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = {}; } );
+                    FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = Object.create( null ); } );
                     setQuickDim( 'pb_status', distinctMatch( 'pb_status', /confirm/i ) );
                     setQuickDim( 'channel_title', distinctMatch( 'channel_title', /viator/i ) );
                     setQuickDim( 'result', distinctMatch( 'result', /\S/ ) );
@@ -3761,7 +3774,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     recompute();
                 }
                 function clearQuick() {
-                    FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = {}; } );
+                    FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = Object.create( null ); } );
                     setQuickActive( false );
                     syncFacetItemClasses();
                     recompute();
@@ -3777,16 +3790,73 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     root.querySelectorAll( '[data-f-date]' ).forEach( function ( el ) { if ( el.value ) { f.dates[ el.getAttribute( 'data-f-date' ) ] = el.value; } } );
                     return f;
                 }
-                function matches( r, f ) {
-                    for ( var key in f.dims ) { if ( f.dims[ key ].indexOf( String( r[ key ] === null || r[ key ] === undefined ? '' : r[ key ] ) ) === -1 ) { return false; } }
+                function matches( r, f, exceptKey ) {
+                    for ( var key in f.dims ) { if ( key !== exceptKey && f.dims[ key ].indexOf( esc( r[ key ] ) ) === -1 ) { return false; } }
                     var cd = dayStr( r.created_datetime ), td = dayStr( r.travel_datetime );
-                    if ( f.dates.created_from && cd && cd < f.dates.created_from ) { return false; }
-                    if ( f.dates.created_to && cd && cd > f.dates.created_to ) { return false; }
-                    if ( f.dates.travel_from && td && td < f.dates.travel_from ) { return false; }
-                    if ( f.dates.travel_to && td && td > f.dates.travel_to ) { return false; }
+                    if ( f.dates.created_from && ( ! cd || cd < f.dates.created_from ) ) { return false; }
+                    if ( f.dates.created_to && ( ! cd || cd > f.dates.created_to ) ) { return false; }
+                    if ( f.dates.travel_from && ( ! td || td < f.dates.travel_from ) ) { return false; }
+                    if ( f.dates.travel_to && ( ! td || td > f.dates.travel_to ) ) { return false; }
                     if ( f.search ) { var hay = ''; for ( var k in r ) { if ( k.charAt( 0 ) !== '_' ) { hay += ' ' + esc( r[ k ] ).toLowerCase(); } } if ( hay.indexOf( f.search ) === -1 ) { return false; } }
                     return true;
                 }
+
+                // Ignore a dimension's own selection when counting its options:
+                // OR within that dimension, AND across dimensions. Keep the DOM
+                // order and selections stable, including selected zero-count items.
+                function updateFilterCounts( f ) {
+                    // Search/date scope is shared by every facet; evaluate it
+                    // once so typing does not rescan every field per dimension.
+                    var scopedRows = ROWS.filter( function ( r ) { return matches( r, { dims: {}, dates: f.dates, search: f.search } ); } );
+                    var dimensions = { dims: f.dims, dates: {}, search: '' };
+                    FACET_KEYS.concat( MORE_KEYS ).forEach( function ( key ) {
+                        var counts = Object.create( null );
+                        scopedRows.forEach( function ( r ) {
+                            if ( matches( r, dimensions, key ) ) { var v = esc( r[ key ] ); counts[ v ] = ( counts[ v ] || 0 ) + 1; }
+                        } );
+                        var facet = root.querySelector( '[data-facet="' + key + '"]' );
+                        if ( facet ) {
+                            facet.querySelectorAll( '.bokun-andash__item' ).forEach( function ( el ) {
+                                var v = el.getAttribute( 'data-val' ), n = counts[ v ] || 0;
+                                el.querySelector( '.cnt' ).textContent = fmtInt( n );
+                                el.disabled = ! n && ! facetSel[ key ][ v ];
+                            } );
+                        }
+                        var sel = root.querySelector( '[data-f-dim="' + key + '"]' );
+                        if ( sel ) {
+                            Array.from( sel.options ).forEach( function ( opt ) {
+                                if ( ! opt.value ) { return; }
+                                var n = counts[ opt.value ] || 0;
+                                opt.textContent = opt.value + ' (' + fmtInt( n ) + ')';
+                                opt.disabled = ! n && sel.value !== opt.value;
+                            } );
+                        }
+                    } );
+                    syncFacetItemClasses();
+                }
+
+                function drillAttrs( key, value ) {
+                    return ' data-filter-dim="' + escHtml( key ) + '" data-filter-value="' + escHtml( value ) + '" aria-pressed="' + ( facetSel[ key ][ value ] ? 'true' : 'false' ) + '" title="' + escHtml( L.filterBy + ': ' + FACETS[ key ] + ' · ' + value ) + '"';
+                }
+                root.addEventListener( 'click', function ( e ) {
+                    var btn = e.target.closest( '[data-filter-dim]' );
+                    if ( ! btn || ! root.contains( btn ) ) { return; }
+                    var key = btn.getAttribute( 'data-filter-dim' ), value = btn.getAttribute( 'data-filter-value' );
+                    if ( FACET_KEYS.indexOf( key ) === -1 ) { return; }
+                    var chart = btn.closest( '[data-topproducts], [data-topchannels], [data-resultmix], [data-paymentmix]' );
+                    var onlySelected = facetSel[ key ][ value ] && Object.keys( facetSel[ key ] ).length === 1;
+                    facetSel[ key ] = Object.create( null );
+                    if ( ! onlySelected ) { facetSel[ key ][ value ] = 1; }
+                    setQuickActive( false );
+                    recompute();
+                    // Rendering replaces chart buttons; retain keyboard focus.
+                    if ( chart ) {
+                        var next = Array.from( chart.querySelectorAll( '[data-filter-dim]' ) ).find( function ( el ) {
+                            return el.getAttribute( 'data-filter-dim' ) === key && el.getAttribute( 'data-filter-value' ) === value;
+                        } );
+                        if ( next ) { next.focus(); }
+                    }
+                } );
 
                 function groupSum( data, keyFn ) {
                     var g = {};
@@ -3809,23 +3879,25 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 // ABSOLUTE metric so negative values (e.g. loss-making net
                 // revenue) size by magnitude and are coloured red rather than
                 // clamped to a tiny positive bar.
-                function barList( items, max, colorFn, valFn ) {
+                function barList( items, max, colorFn, valFn, filterKey ) {
                     if ( ! items.length ) { return '<p class="bokun-andash__insight-sub">' + escHtml( L.noData ) + '</p>'; }
                     return '<div class="bokun-andash__barlist">' + items.map( function ( g ) {
                         var w = max ? Math.max( 2, Math.round( ( Math.abs( g.metric ) / max ) * 100 ) ) : 2;
                         var color = colorFn ? colorFn( g ) : ( g.metric < 0 ? 'var(--an-crit)' : 'var(--an-blue)' );
-                        return '<div class="bokun-andash__barrow"><span class="lab" title="' + escHtml( g.label ) + '">' + escHtml( g.label ) +
+                        var tag = filterKey && ! g._other ? 'button' : 'div';
+                        var attrs = tag === 'button' ? ' type="button"' + drillAttrs( filterKey, g.label ) : '';
+                        return '<' + tag + attrs + ' class="bokun-andash__barrow' + ( tag === 'button' ? ' bokun-andash__drill' : '' ) + '"><span class="lab" title="' + escHtml( g.label ) + '">' + escHtml( g.label ) +
                             '</span><span class="val">' + ( valFn ? valFn( g ) : fmtMetric( g.metric ) ) + '</span>' +
-                            '<span class="bokun-andash__track"><span class="bokun-andash__fill" style="width:' + w + '%;background:' + color + '"></span></span></div>';
+                            '<span class="bokun-andash__track"><span class="bokun-andash__fill" style="width:' + w + '%;background:' + color + '"></span></span></' + tag + '>';
                     } ).join( '' ) + '</div>';
                 }
                 function topDimension( data, key, el ) {
                     var list = groupSum( data, function ( r ) { return esc( r[ key ] ); } ).filter( function ( g ) { return g.label !== '—'; } );
                     list.sort( function ( a, b ) { return b.metric - a.metric; } );
                     var top = list.slice( 0, 8 );
-                    if ( list.length > 8 ) { top.push( { label: L.other, metric: list.slice( 8 ).reduce( function ( s, g ) { return s + g.metric; }, 0 ) } ); }
+                    if ( list.length > 8 ) { top.push( { label: L.other, _other: true, metric: list.slice( 8 ).reduce( function ( s, g ) { return s + g.metric; }, 0 ) } ); }
                     var max = top.reduce( function ( m, g ) { return Math.max( m, Math.abs( g.metric ) ); }, 0 );
-                    root.querySelector( el ).innerHTML = barList( top, max, null, null );
+                    root.querySelector( el ).innerHTML = barList( top, max, null, null, key );
                 }
 
                 function sumNetRev( data ) { var s = 0, any = false; data.forEach( function ( r ) { if ( r._net_revenue !== null && esc( r.currency ) === netRevCur ) { s += r._net_revenue; any = true; } } ); return any ? s : null; }
@@ -3938,7 +4010,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     data.forEach( function ( r ) { var res = esc( r.result ); if ( counts[ res ] !== undefined ) { counts[ res ]++; total++; } } );
                     total = total || 1;
                     var seg = map.map( function ( m ) { var w = ( counts[ m[ 0 ] ] / total ) * 100; return w > 0 ? '<span style="width:' + w + '%;background:' + m[ 2 ] + '" title="' + m[ 1 ] + ': ' + counts[ m[ 0 ] ] + '"></span>' : ''; } ).join( '' );
-                    var legend = map.map( function ( m ) { return '<span><i style="background:' + m[ 2 ] + '"></i>' + m[ 1 ] + ' ' + fmtInt( counts[ m[ 0 ] ] ) + ' (' + Math.round( ( counts[ m[ 0 ] ] / total ) * 100 ) + '%)</span>'; } ).join( '' );
+                    var legend = map.map( function ( m ) { return '<button type="button" class="bokun-andash__drill"' + drillAttrs( 'result', m[ 0 ] ) + ( ! counts[ m[ 0 ] ] && ! facetSel.result[ m[ 0 ] ] ? ' disabled' : '' ) + '><i style="background:' + m[ 2 ] + '"></i>' + m[ 1 ] + ' ' + fmtInt( counts[ m[ 0 ] ] ) + ' (' + Math.round( ( counts[ m[ 0 ] ] / total ) * 100 ) + '%)</button>'; } ).join( '' );
                     root.querySelector( '[data-resultmix]' ).innerHTML = '<div class="bokun-andash__seg-bar">' + seg + '</div><div class="bokun-andash__legend">' + legend + '</div>';
                 }
                 function renderPaymentMix( data ) {
@@ -3947,7 +4019,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var cols = [ 'var(--an-c1)', 'var(--an-c2)', 'var(--an-c3)', 'var(--an-c4)', 'var(--an-c5)', 'var(--an-c6)' ];
                     var max = list.reduce( function ( m, g ) { return Math.max( m, g.count ); }, 0 );
                     var items = list.map( function ( g, idx ) { g._c = cols[ idx % cols.length ]; g.metric = g.count; return g; } );
-                    root.querySelector( '[data-paymentmix]' ).innerHTML = barList( items, max, function ( g ) { return g._c; }, function ( g ) { return fmtInt( g.count ); } );
+                    root.querySelector( '[data-paymentmix]' ).innerHTML = barList( items, max, function ( g ) { return g._c; }, function ( g ) { return fmtInt( g.count ); }, 'payment_method' );
                 }
 
                 var DETAIL_COLS = [
@@ -4112,6 +4184,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 function recompute() {
                     var f = currentFilters();
                     lastFiltered = ROWS.filter( function ( r ) { return matches( r, f ); } );
+                    updateFilterCounts( f );
+                    root.querySelector( '[data-filter-summary]' ).textContent = L.bookings + ': ' + fmtInt( lastFiltered.length ) + ' / ' + fmtInt( ROWS.length );
                     var pc = primaryCurrency( lastFiltered ); revCur = pc.cur; revMulti = pc.multi;
                     var npc = primaryCurrency( lastFiltered.filter( function ( r ) { return r._net_revenue !== null; } ) ); netRevCur = npc.cur; netRevMulti = npc.multi;
                     renderMetricTitles();
@@ -4127,14 +4201,20 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
 
                 root.querySelector( '[data-f-search]' ).addEventListener( 'input', recompute );
-                root.querySelectorAll( '[data-f-dim], [data-f-date]' ).forEach( function ( el ) { el.addEventListener( 'change', recompute ); } );
+                root.querySelectorAll( '[data-f-dim], [data-f-date]' ).forEach( function ( el ) { el.addEventListener( 'change', function () {
+                    if ( el.hasAttribute( 'data-f-dim' ) ) { setQuickActive( false ); }
+                    if ( ( el.getAttribute( 'data-f-date' ) || '' ).indexOf( 'created_' ) === 0 ) {
+                        root.querySelectorAll( '[data-preset]' ).forEach( function ( b ) { b.classList.remove( 'is-active' ); } );
+                    }
+                    recompute();
+                } ); } );
                 root.querySelector( '[data-groupby]' ).addEventListener( 'change', function () { renderBreakdown( lastFiltered ); } );
                 root.querySelectorAll( '[data-metric]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { metric = btn.getAttribute( 'data-metric' ); root.querySelectorAll( '[data-metric]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } ); recompute(); } ); } );
                 root.querySelectorAll( '[data-preset]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { root.querySelectorAll( '[data-preset]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } ); var days = +btn.getAttribute( 'data-preset' ); var from = root.querySelector( '[data-f-date="created_from"]' ), to = root.querySelector( '[data-f-date="created_to"]' ); if ( ! days ) { from.value = ''; to.value = ''; } else { var d = new Date(); var f2 = new Date(); f2.setDate( d.getDate() - days ); from.value = f2.toISOString().slice( 0, 10 ); to.value = ''; } recompute(); } ); } );
                 var quickBtn = root.querySelector( '[data-quick]' );
                 if ( quickBtn ) { quickBtn.addEventListener( 'click', toggleQuick ); }
                 root.querySelector( '[data-reset]' ).addEventListener( 'click', function () {
-                    FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = {}; } );
+                    FACET_KEYS.forEach( function ( k ) { facetSel[ k ] = Object.create( null ); } );
                     setQuickActive( false );
                     root.querySelectorAll( '.bokun-andash__item.is-on' ).forEach( function ( el ) { el.classList.remove( 'is-on' ); } );
                     root.querySelectorAll( '[data-f-dim]' ).forEach( function ( el ) { el.value = ''; } );

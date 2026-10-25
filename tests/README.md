@@ -1,4 +1,4 @@
-# Booking Messages regression checks
+# Booking dashboard regression checks
 
 These tests run against the checked-out plugin source. They use synthetic data,
 WordPress test doubles, an in-memory advisory-lock model, and a mocked browser
@@ -35,9 +35,16 @@ offline. Keep `--ignore-scripts`; no dependency lifecycle scripts are required.
   no send request occurs.
 - `github-sync-security.php`: isolated GitHub updater secret-handling and
   authenticated download checks.
+- `analytics-ui.cjs`: renders the real PHP Analytics panel with synthetic rows
+  and checks linked counts, OR/AND selections, search, dates, dropdowns,
+  zero-result recovery, quick filters, chart drilldowns, metric changes, reset,
+  and filtered CSV export. Counts use all other dimensions' active filters and
+  remain booking counts regardless of the selected chart metric.
 
 GitHub Actions runs the PHP suites on PHP 8.2 and 8.4, syntax-checks the plugin,
 and runs the JavaScript suite on Node.js 22. The npm dependency tree is locked.
+The Analytics JavaScript suite also requires PHP to render the panel;
+`BOKUN_TEST_PHP` and `BOKUN_TEST_PHP_ARGS` can select a local PHP runtime.
 The WordPress runner requires Python 3.9+, PHP PDO SQLite, mbstring, OpenSSL
 and curl. It downloads checksum-pinned official WordPress 7.1.3 and SQLite
 Database Integration 3.1.0 into a disposable operating-system temporary directory,
