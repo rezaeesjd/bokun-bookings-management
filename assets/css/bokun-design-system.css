@@ -42,6 +42,14 @@
 	--bk-info:         var(--bk-brand-600);
 	--bk-info-bg:      var(--bk-brand-50);
 
+	/* Per-business identity accents, so a booking card's business reads at a
+	   glance: Via Florence (and any default) stays wine; Florence Adventures is
+	   a distinct teal. */
+	--bk-vendor-accent:         var(--bk-brand-600);
+	--bk-vendor-accent-dark:    var(--bk-brand-700);
+	--bk-vendor-highlight:      #0f766e;
+	--bk-vendor-highlight-dark: #115e59;
+
 	/* Surfaces & text roles. */
 	--bk-surface:        var(--bk-neutral-0);
 	--bk-surface-sunken: var(--bk-neutral-50);
