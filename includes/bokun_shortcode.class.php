@@ -3181,12 +3181,20 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         } );
                     } );
 
+                    // The current tab from the hash, defaulting an empty hash to
+                    // Bookings so navigating back to the bare URL (and a refresh
+                    // of it) agree on the default tab. An unknown non-empty hash
+                    // is left to the page (activate ignores it).
+                    function targetFromHash() {
+                        return window.location.hash.replace( /^#/, '' ) || 'bookings';
+                    }
+
                     window.addEventListener( 'hashchange', function () {
-                        activate( window.location.hash.replace( /^#/, '' ), false );
+                        activate( targetFromHash(), false );
                     } );
 
                     // Restore the selected tab from the URL hash on load.
-                    activate( window.location.hash.replace( /^#/, '' ), false );
+                    activate( targetFromHash(), false );
                 } )();
             </script>
             <?php
