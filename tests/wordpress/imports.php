@@ -258,8 +258,17 @@ verify_import_case('publish' === get_post_status($unrelated), 'a one-booking web
 verify_import_case('webhook' === bokun_get_import_last_runs()['api_1']['last_success_trigger'], 'completed targeted refreshes record the webhook trigger on the dashboard');
 $booking['externalBookingReference'] = 'API-UPDATED';
 $booking['productBookings'][0]['status'] = 'CANCELLED';
+bokun_assign_tag_to_post($posts[0], 'Refunded by Partner', 'booking_status');
 import_fixture(array(import_http_response(array('items' => array($booking)))));
 verify_import_case(true === bokun_import_webhook_booking('TEST-123', microtime(true) + 40) && 'API-UPDATED' === get_post_meta($posts[0], '_external_booking_reference', true) && 'CANCELLED' === get_post_meta($posts[0], '_booking_status_origin', true), 'updates and cancellations refresh the existing booking rather than creating duplicates');
+verify_import_case(has_term('CANCELLED', 'booking_status', $posts[0]) && !has_term('CONFIRMED', 'booking_status', $posts[0]) && has_term('Refunded by Partner', 'booking_status', $posts[0]), 'a cancellation replaces the stale API status and preserves operator workflow labels');
+$booking['productBookings'][0]['status'] = 'CONFIRMED';
+import_fixture(array(import_http_response(array('items' => array($booking)))));
+verify_import_case(true === bokun_import_webhook_booking('TEST-123', microtime(true) + 40) && has_term('CONFIRMED', 'booking_status', $posts[0]) && !has_term('CANCELLED', 'booking_status', $posts[0]), 'an authoritative reinstatement removes the old cancellation label');
+update_post_meta($posts[0], '_user_channel_refunded', 1);
+import_fixture(array(import_http_response(array('items' => array($booking)))));
+verify_import_case(true === bokun_import_webhook_booking('TEST-123', microtime(true) + 40) && has_term('Refunded', 'booking_status', $posts[0]) && !has_term('CONFIRMED', 'booking_status', $posts[0]) && 'REFUNDED' === get_post_meta($posts[0], '_booking_effective_status', true), 'a manual channel refund still overrides an API confirmation');
+delete_post_meta($posts[0], '_user_channel_refunded');
 import_fixture(array(import_http_response(array('bookingId' => 999, 'confirmationCode' => 'OTHER-999'))));
 verify_import_case(is_wp_error(bokun_import_webhook_booking('123', microtime(true) + 40)) && 1 === count($import_test['requests']), 'a mismatched booking identity cannot reach persistence');
 import_fixture(array(import_http_response(array('items' => array($booking)), 500)));
