@@ -60,7 +60,7 @@ function bokun_access_role_caps($role) {
 function bokun_access_role_labels() {
     return array(
         'admin'   => __('Admin — full access', 'BOKUN_txt_domain'),
-        'booking' => __('Booking manager — everything except Analytics', 'BOKUN_txt_domain'),
+        'booking' => __('Booking manager — All Booking data and actions', 'BOKUN_txt_domain'),
         'generic' => __('Generic — read-only Bookings', 'BOKUN_txt_domain'),
     );
 }

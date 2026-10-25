@@ -129,7 +129,7 @@ verify_dashboard_case(!str_contains($generic, 'STAFF_IMPORT_STATUS') && !str_con
 verify_dashboard_case('' === $shortcodes->function_bokun_fetch_button() && '' === $shortcodes->render_analytics_panel(), 'the generic key cannot import or view analytics');
 verify_dashboard_case(str_contains($generic, 'Sign out'), 'the generic key gets a sign-out control');
 
-// --- Booking key (Johnna): everything except Analytics. -------------------
+// --- Booking key (Johnna): All Booking data and actions (no Analytics). ----
 set_actor('johnna');
 $before_messages = $access['message_renders'];
 $booking = $shortcodes->render_booking_dashboard();
