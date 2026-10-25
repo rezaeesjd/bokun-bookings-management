@@ -241,9 +241,12 @@ verify_import_case('scheduled' === bokun_get_import_last_runs()['api_1']['last_r
 verify_import_case(!has_action('wp_ajax_nopriv_bokun_save_api_credentials'), 'anonymous API-credential mutation action remains unregistered');
 
 register_post_type('bokun_booking', array('public' => true));
+foreach (array('booking_status', 'product_tags', 'alarm_status', 'team_member') as $taxonomy) {
+    register_taxonomy($taxonomy, 'bokun_booking');
+}
 $unrelated = wp_insert_post(array('post_type' => 'bokun_booking', 'post_title' => 'UNRELATED-PAST', 'post_status' => 'publish', 'post_date' => '2025-01-01 12:00:00'));
 update_post_meta($unrelated, '_confirmation_code', 'UNRELATED-PAST');
-$booking = array('id' => 123, 'confirmationCode' => 'TEST-123', 'creationDate' => '2026-10-25T12:00:00Z', 'externalBookingReference' => 'API-AUTHORITATIVE', 'customer' => array('firstName' => 'Synthetic', 'lastName' => 'Webhook'), 'productBookings' => array(array('id' => 456, 'confirmationCode' => 'TEST-T456', 'parentBookingId' => 123, 'startDateTime' => 1793442600000, 'status' => 'CONFIRMED', 'product' => array('id' => 0, 'title' => 'Synthetic webhook tour'))));
+$booking = array('id' => 123, 'confirmationCode' => 'TEST-123', 'creationDate' => '2026-10-25T12:00:00Z', 'externalBookingReference' => 'API-AUTHORITATIVE', 'customer' => array('firstName' => 'Synthetic', 'lastName' => 'Webhook'), 'productBookings' => array(array('id' => 456, 'confirmationCode' => 'TEST-T456', 'parentBookingId' => 123, 'startDate' => 1793442600000, 'startDateTime' => 1793442600000, 'status' => 'CONFIRMED', 'product' => array('id' => 0, 'title' => 'Synthetic webhook tour'))));
 import_fixture(array(import_http_response(array('bookingId' => 123, 'confirmationCode' => 'TEST-123')), import_http_response(array('items' => array($booking)))));
 $result = bokun_import_webhook_booking('123', microtime(true) + 40);
 verify_import_case(true === $result && 2 === count($import_test['requests']), 'one webhook uses a bounded identity lookup and exact confirmation-code search');
