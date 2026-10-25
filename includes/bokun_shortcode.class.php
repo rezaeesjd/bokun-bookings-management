@@ -14,7 +14,21 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
         }
 
         private function can_view_staff_data() {
+            // Staff booking controls (result/payment toggles, message composer,
+            // tag editor, import). Granted to the booking and admin roles — or,
+            // as a failsafe, any logged-in WordPress staff account.
+            if (function_exists('bokun_access_can')) {
+                return bokun_access_can('manage_bookings');
+            }
             return is_user_logged_in() && (current_user_can('manage_options') || current_user_can('edit_others_posts'));
+        }
+
+        private function can_view_analytics() {
+            // The Analytics and Business Results tabs are admin-only.
+            if (function_exists('bokun_access_can')) {
+                return bokun_access_can('view_analytics');
+            }
+            return is_user_logged_in() && current_user_can('manage_options');
         }
 
         private function prevent_private_cache() {
@@ -688,11 +702,15 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
         public function render_booking_dashboard($atts = []) {
             $this->prevent_private_cache();
-            // The Bookings view is intentionally public (de-indexed + no-cache).
-            // Staff-only surfaces inside it — the Fetch/import control, the
-            // Analytics tab, and the per-booking message composer — are gated
-            // individually below and server-side, so opening the view does not
-            // expose any admin action to anonymous visitors.
+            // The whole dashboard is private: a visitor must resolve to an actor
+            // (a key session, or a logged-in WordPress staff account) to see any
+            // of it. The public gets the key login screen instead. Role-specific
+            // surfaces inside — the Fetch/import control, the Analytics tab, the
+            // per-booking message composer — are gated individually below.
+            if (function_exists('bokun_access_can') && !bokun_access_can('view_bookings')) {
+                return function_exists('bokun_access_login_form') ? bokun_access_login_form() : '';
+            }
+            $account_bar = function_exists('bokun_access_account_bar') ? bokun_access_account_bar() : '';
             $can_view_staff_data = $this->can_view_staff_data();
             if (!post_type_exists('bokun_booking')) {
                 return '';
@@ -768,7 +786,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     $empty_message .= bokun_render_fetch_status_note();
                 }
 
-                return $this->wrap_dashboard_tabs($empty_message, $this->render_analytics_panel());
+                return $account_bar . $this->wrap_dashboard_tabs($empty_message, $this->render_analytics_panel());
             }
 
             $color_priority_map = [
@@ -2991,7 +3009,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             // (a toolbar toggle next to Export CSV), not a separate top-level tab.
             $analytics_html = $this->render_analytics_panel();
 
-            return $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html );
+            return $account_bar . $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html );
         }
 
         /**
@@ -3004,7 +3022,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
          * @return string
          */
         private function wrap_dashboard_tabs( $bookings_html, $analytics_html ) {
-            $analytics_html = $this->can_view_staff_data() ? $analytics_html : '';
+            $analytics_html = $this->can_view_analytics() ? $analytics_html : '';
             $messages_html = class_exists('BOKUN_Messages') && BOKUN_Messages::can_manage() ? BOKUN_Messages::render() : '';
             if ('' === trim((string) $analytics_html) && '' === trim((string) $messages_html)) {
                 return $bookings_html;
@@ -3162,7 +3180,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
          */
         public function render_analytics_panel() {
             $this->prevent_private_cache();
-            if (!$this->can_view_staff_data()) {
+            if (!$this->can_view_analytics()) {
                 return '';
             }
             if ( ! function_exists( 'bokun_analytics_get_rows' ) ) {
@@ -4166,7 +4184,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
          */
         public function render_business_panel() {
             $this->prevent_private_cache();
-            if (!$this->can_view_staff_data()) {
+            if (!$this->can_view_analytics()) {
                 return '';
             }
             if ( ! function_exists( 'bokun_analytics_get_rows' ) || ! function_exists( 'bokun_business_get_expenses' ) ) {

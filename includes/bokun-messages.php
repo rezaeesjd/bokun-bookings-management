@@ -158,6 +158,11 @@ class BOKUN_Messages {
     }
 
     public static function can_manage() {
+        // Messages inbox view + actions: booking and admin roles, or — as a
+        // failsafe — a logged-in WordPress administrator.
+        if (function_exists('bokun_access_can')) {
+            return bokun_access_can('manage_messages');
+        }
         return is_user_logged_in() && current_user_can('manage_options');
     }
 
