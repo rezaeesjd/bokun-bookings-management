@@ -728,11 +728,23 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             $days    = max(1, absint($atts['days']));
             $columns = max(1, min(6, absint($atts['columns'])));
 
-            $current_user      = wp_get_current_user();
+            // The "Current user" shown in the footer must match the identity that
+            // the booking-history action log records, so key-session users
+            // (booking/admin) read as themselves rather than "Guest user".
             $user_display_name = '';
 
-            if ($current_user instanceof WP_User && $current_user->exists()) {
-                $user_display_name = $current_user->display_name ?: $current_user->user_login;
+            if (function_exists('bokun_access_current')) {
+                $access_actor = bokun_access_current();
+                if (is_array($access_actor) && !empty($access_actor['name'])) {
+                    $user_display_name = $access_actor['name'];
+                }
+            }
+
+            if ('' === $user_display_name) {
+                $current_user = wp_get_current_user();
+                if ($current_user instanceof WP_User && $current_user->exists()) {
+                    $user_display_name = $current_user->display_name ?: $current_user->user_login;
+                }
             }
 
             if ('' === $user_display_name) {
@@ -786,7 +798,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     $empty_message .= bokun_render_fetch_status_note();
                 }
 
-                return $account_bar . $this->wrap_dashboard_tabs($empty_message, $this->render_analytics_panel());
+                return $this->wrap_dashboard_tabs($empty_message, $this->render_analytics_panel()) . $account_bar;
             }
 
             $color_priority_map = [
@@ -1504,23 +1516,27 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 </ul>
                             <?php endif; ?>
 
-                            <?php if (!empty($tag_editor_link)) : ?>
-                                <a href="<?php echo esc_url($tag_editor_link); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link bokun-booking-dashboard__tag-editor-link">
-                                    <?php esc_html_e('Tag Editor', 'BOKUN_txt_domain'); ?>
-                                </a>
-                            <?php endif; ?>
-
-                            <?php if (!empty($viator_url) || !empty($bokun_url)) : ?>
-                                <div class="bokun-booking-dashboard__reference-links">
-                                    <?php if (!empty($viator_url)) : ?>
-                                        <a href="<?php echo esc_url($viator_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
-                                            <?php esc_html_e('Viator link', 'BOKUN_txt_domain'); ?>
+                            <?php if (!empty($tag_editor_link) || !empty($viator_url) || !empty($bokun_url)) : ?>
+                                <div class="bokun-booking-dashboard__link-row">
+                                    <?php if (!empty($tag_editor_link)) : ?>
+                                        <a href="<?php echo esc_url($tag_editor_link); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link bokun-booking-dashboard__tag-editor-link">
+                                            <?php esc_html_e('Tag Editor', 'BOKUN_txt_domain'); ?>
                                         </a>
                                     <?php endif; ?>
-                                    <?php if (!empty($bokun_url)) : ?>
-                                        <a href="<?php echo esc_url($bokun_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
-                                            <?php esc_html_e('Bokun link', 'BOKUN_txt_domain'); ?>
-                                        </a>
+
+                                    <?php if (!empty($viator_url) || !empty($bokun_url)) : ?>
+                                        <div class="bokun-booking-dashboard__reference-links">
+                                            <?php if (!empty($viator_url)) : ?>
+                                                <a href="<?php echo esc_url($viator_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
+                                                    <?php esc_html_e('Viator link', 'BOKUN_txt_domain'); ?>
+                                                </a>
+                                            <?php endif; ?>
+                                            <?php if (!empty($bokun_url)) : ?>
+                                                <a href="<?php echo esc_url($bokun_url); ?>" target="_blank" rel="noopener noreferrer" class="bokun-booking-dashboard__reference-link">
+                                                    <?php esc_html_e('Bokun link', 'BOKUN_txt_domain'); ?>
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
                                     <?php endif; ?>
                                 </div>
                             <?php endif; ?>
@@ -3009,7 +3025,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             // (a toolbar toggle next to Export CSV), not a separate top-level tab.
             $analytics_html = $this->render_analytics_panel();
 
-            return $account_bar . $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html );
+            return $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html ) . $account_bar;
         }
 
         /**
