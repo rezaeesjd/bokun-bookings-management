@@ -3,7 +3,7 @@
 Plugin Name: Bokun Bookings Management
 Plugin URI: #
 Description:  Manage Bokun bookings and notifications.
-Version: 1.3.2
+Version: 1.3.3
 Author: Hitesh (HWT)
 Author URI: #
 Domain Path: /languages
@@ -99,7 +99,7 @@ function bokun_polish_common_conversation_copy($translated_text, $text, $domain)
 add_filter('gettext', 'bokun_polish_common_conversation_copy', 10, 3);
 
 global $bokun_version;
-$bokun_version = '1.3.2';
+$bokun_version = '1.3.3';
 
 class BokunBookingManagement {
     var $bokun_settings = '';

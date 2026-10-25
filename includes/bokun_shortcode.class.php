@@ -798,7 +798,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     $empty_message .= bokun_render_fetch_status_note();
                 }
 
-                return $account_bar . $this->wrap_dashboard_tabs($empty_message, $this->render_analytics_panel());
+                return $this->wrap_dashboard_tabs($empty_message, $this->render_analytics_panel()) . $account_bar;
             }
 
             $color_priority_map = [
@@ -3025,7 +3025,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             // (a toolbar toggle next to Export CSV), not a separate top-level tab.
             $analytics_html = $this->render_analytics_panel();
 
-            return $account_bar . $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html );
+            return $this->wrap_dashboard_tabs( $dashboard_html, $analytics_html ) . $account_bar;
         }
 
         /**

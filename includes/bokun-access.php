@@ -56,12 +56,21 @@ function bokun_access_role_caps($role) {
     return isset($map[$role]) ? $map[$role] : array();
 }
 
-/** Human labels for the roles (admin settings UI + account bar). */
+/** Descriptive role labels (admin settings UI). */
 function bokun_access_role_labels() {
     return array(
         'admin'   => __('Admin — full access', 'BOKUN_txt_domain'),
         'booking' => __('Booking manager — everything except Analytics', 'BOKUN_txt_domain'),
         'generic' => __('Generic — read-only Bookings', 'BOKUN_txt_domain'),
+    );
+}
+
+/** Short role labels (account bar), without the descriptive suffix. */
+function bokun_access_role_short_labels() {
+    return array(
+        'admin'   => __('Admin', 'BOKUN_txt_domain'),
+        'booking' => __('Booking manager', 'BOKUN_txt_domain'),
+        'generic' => __('Generic', 'BOKUN_txt_domain'),
     );
 }
 
@@ -384,7 +393,7 @@ function bokun_access_account_bar() {
     if (!$actor) {
         return '';
     }
-    $labels = bokun_access_role_labels();
+    $labels = bokun_access_role_short_labels();
     $role_label = isset($labels[$actor['role']]) ? $labels[$actor['role']] : $actor['role'];
     $action = esc_url(remove_query_arg(array('bokun_login'), bokun_access_current_url()));
 
@@ -408,7 +417,7 @@ function bokun_access_account_bar() {
     </div>
     <style>
         .bokun-access-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
-            margin:0 0 14px;padding:8px 14px;font-family:var(--bk-font,system-ui,sans-serif);font-size:.8125rem;
+            margin:22px 0 0;padding:8px 14px;font-family:var(--bk-font,system-ui,sans-serif);font-size:.8125rem;
             background:var(--bk-surface-sunken,#f8fafc);border:1px solid var(--bk-border,#e2e8f0);border-radius:var(--bk-radius-pill,999px);}
         .bokun-access-bar__who{color:var(--bk-text,#0f172a);font-weight:600;}
         .bokun-access-bar__note{color:var(--bk-text-muted,#64748b);}
