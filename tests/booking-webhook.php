@@ -300,5 +300,15 @@ bokun_webhook_handle_request(new Webhook_Test_Request('POST', array('token' => s
 unset($test_options[BOKUN_WEBHOOK_PENDING_OPTION]);
 $fail_options = array();
 verify_webhook(true === bokun_webhook_run_sync() && !bokun_webhook_jobs(), 'queued bookings recover even when the coalescing-marker write failed');
+ready_webhook(static function () { return '123' === end($GLOBALS['import_references']) ? new WP_Error('missing_booking', 'Synthetic missing booking') : true; });
+bokun_webhook_handle_request(new Webhook_Test_Request('POST', array('token' => str_repeat('a', 48)), array(), array('id' => 456, 'confirmationCode' => 'TEST-456')));
+$result = bokun_webhook_run_sync();
+$jobs = bokun_webhook_jobs();
+verify_webhook(is_wp_error($result) && 1 === count($jobs) && isset($jobs[hash('sha256', '123')]['retry_at']) && !isset($jobs[hash('sha256', '456')]), 'one missing booking backs off independently while another booking completes');
+$jobs[hash('sha256', '123')]['retry_at'] = time() + 3600;
+update_option(BOKUN_WEBHOOK_JOBS_OPTION, $jobs, false);
+$test_cron[BOKUN_WEBHOOK_SYNC_HOOK] = time() + 3600;
+bokun_webhook_handle_request(new Webhook_Test_Request('POST', array('token' => str_repeat('a', 48)), array(), array('id' => 789, 'confirmationCode' => 'TEST-789')));
+verify_webhook($test_cron[BOKUN_WEBHOOK_SYNC_HOOK] < time() + 120 && 'TEST-789' === bokun_webhook_jobs()[hash('sha256', '789')]['confirmation_code'], 'a fresh notification brings a distant retry forward and retains only its lookup code');
 
 echo "Completed $checks isolated booking webhook checks without network access.\n";

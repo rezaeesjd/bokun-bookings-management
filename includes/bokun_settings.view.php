@@ -238,6 +238,7 @@ $dashboard_page_dropdown = wp_dropdown_pages(
                     <?php if (is_array($webhook_result) && !empty($webhook_result['time'])) : ?>
                         <p><?php echo esc_html((!empty($webhook_result['ok']) ? 'Last import completed: ' : 'Last import incomplete; pending changes retained: ') . wp_date('Y-m-d H:i:s T', (int) $webhook_result['time'])); ?></p>
                         <?php if (empty($webhook_result['ok']) && !empty($webhook_result['error_code'])) : ?><p><?php echo esc_html('Retry reason: ' . $webhook_result['error_code']); ?></p><?php endif; ?>
+                        <?php if (empty($webhook_result['ok']) && !empty($webhook_result['lookup_trace'])) : ?><p><?php echo esc_html('Lookup status: ' . implode(', ', $webhook_result['lookup_trace'])); ?></p><?php endif; ?>
                     <?php endif; ?>
                     <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                         <input type="hidden" name="action" value="bokun_regenerate_webhook_secret">

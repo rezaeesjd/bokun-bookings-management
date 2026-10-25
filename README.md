@@ -53,12 +53,14 @@ Keep the token private.
 The receiver requires a booking identifier in `X-Bokun-Booking-Id` (including
 Bókun's encoded `Booking:<id>` form) or the JSON `bookingId`, `id` or
 `confirmationCode` field. All other notification fields are ignored. Background
-workers retrieve authoritative booking details and perform an exact
-confirmation-code search before saving through the existing importer. They do
+workers use notification or locally verified confirmation-code hints, with
+bounded numeric-ID search recovery for credentials that cannot read the details
+endpoint. They verify the returned identity before saving through the existing importer. They do
 not scan two years of history or demote other bookings during a targeted refresh.
 
 The durable queue coalesces repeated changes to the same booking, preserves
 distinct bookings and arrivals during a running import, and retries failures.
+Retries back off per booking so one unavailable booking cannot block fresh events.
 Each worker takes at most three bookings with a bounded API time budget. Configure
 a real server cron to call WordPress cron every five minutes on quiet sites;
 the nightly full import remains the reconciliation backstop. Settings display
