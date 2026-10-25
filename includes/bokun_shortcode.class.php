@@ -3140,24 +3140,53 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var tabs = root.querySelectorAll( '.bokun-dash-tabs__tab' );
                     var panels = root.querySelectorAll( '.bokun-dash-tabs__panel' );
 
+                    function hasTarget( target ) {
+                        for ( var i = 0; i < tabs.length; i++ ) {
+                            if ( tabs[ i ].getAttribute( 'data-tab-target' ) === target ) { return true; }
+                        }
+                        return false;
+                    }
+
+                    // Switch to a tab. When updateHash is true the URL hash is
+                    // updated (so a refresh reopens this tab, and the tab is a
+                    // shareable link); on load/hashchange we honor the hash
+                    // without rewriting it.
+                    function activate( target, updateHash ) {
+                        if ( ! hasTarget( target ) ) { return; }
+                        tabs.forEach( function ( t ) {
+                            var active = t.getAttribute( 'data-tab-target' ) === target;
+                            t.classList.toggle( 'is-active', active );
+                            t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
+                        } );
+                        panels.forEach( function ( panel ) {
+                            var match = panel.getAttribute( 'data-tab-panel' ) === target;
+                            panel.classList.toggle( 'is-active', match );
+                            panel.hidden = ! match;
+                        } );
+                        if ( 'analytics' === target && root.bokunAnalyticsInit ) {
+                            root.bokunAnalyticsInit();
+                        }
+                        if ( updateHash ) {
+                            if ( window.history && window.history.replaceState ) {
+                                window.history.replaceState( null, '', '#' + target );
+                            } else {
+                                window.location.hash = target;
+                            }
+                        }
+                    }
+
                     tabs.forEach( function ( tab ) {
                         tab.addEventListener( 'click', function () {
-                            var target = tab.getAttribute( 'data-tab-target' );
-                            tabs.forEach( function ( t ) {
-                                var active = t === tab;
-                                t.classList.toggle( 'is-active', active );
-                                t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
-                            } );
-                            panels.forEach( function ( panel ) {
-                                var match = panel.getAttribute( 'data-tab-panel' ) === target;
-                                panel.classList.toggle( 'is-active', match );
-                                panel.hidden = ! match;
-                            } );
-                            if ( 'analytics' === target && root.bokunAnalyticsInit ) {
-                                root.bokunAnalyticsInit();
-                            }
+                            activate( tab.getAttribute( 'data-tab-target' ), true );
                         } );
                     } );
+
+                    window.addEventListener( 'hashchange', function () {
+                        activate( window.location.hash.replace( /^#/, '' ), false );
+                    } );
+
+                    // Restore the selected tab from the URL hash on load.
+                    activate( window.location.hash.replace( /^#/, '' ), false );
                 } )();
             </script>
             <?php
