@@ -611,8 +611,8 @@
 }
 
 .bokun-booking-dashboard__reserve-link--highlight {
-  --bokun-booking-dashboard-reserve-link-bg: var(--bk-brand-500);
-  --bokun-booking-dashboard-reserve-link-bg-hover: var(--bk-brand-700);
+  --bokun-booking-dashboard-reserve-link-bg: var(--bk-vendor-highlight);
+  --bokun-booking-dashboard-reserve-link-bg-hover: var(--bk-vendor-highlight-dark);
   --bokun-booking-dashboard-reserve-link-shadow: var(--bk-shadow-sm);
   --bokun-booking-dashboard-reserve-link-shadow-hover: var(--bk-shadow-md);
 }
@@ -633,11 +633,22 @@
 }
 
 .bokun-booking-dashboard__vendor--highlight {
-  color: var(--bk-brand-600);
+  color: var(--bk-vendor-highlight);
 }
 
 .bokun-booking-dashboard__vendor--accent {
-  color: var(--bokun-booking-dashboard-accent);
+  color: var(--bk-vendor-accent);
+}
+
+/* Business identity stripe: tint the card's left edge by its business so the
+   two operators (Via Florence = wine, Florence Adventures = teal) never get
+   confused in the grid. Keyed off the vendor label already in the card, so no
+   markup change; cards without a vendor keep the neutral border. */
+.bokun-booking-dashboard__card:has(.bokun-booking-dashboard__vendor--accent) {
+  border-left: 4px solid var(--bk-vendor-accent);
+}
+.bokun-booking-dashboard__card:has(.bokun-booking-dashboard__vendor--highlight) {
+  border-left: 4px solid var(--bk-vendor-highlight);
 }
 
 
