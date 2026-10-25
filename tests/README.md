@@ -26,7 +26,7 @@ offline. Keep `--ignore-scripts`; no dependency lifecycle scripts are required.
   staff-only surface (import controls/status, Analytics and Messages tabs),
   staff-only direct analytics/business/history access, independent Messages
   visibility, empty booking inventories, noindex, and cache protection.
-- `booking-webhook.php`: 67 checks for explicit activation, secret authorization,
+- `booking-webhook.php`: 69 checks for explicit activation, secret authorization,
   request shape, durable pending markers, database lock ownership, scheduling,
   retries, trailing work, safe deactivation, bounded booking identifiers, distinct
   queued bookings, interrupted-marker recovery and updates arriving during work.
@@ -50,7 +50,7 @@ The WordPress runner requires Python 3.9+, PHP PDO SQLite, mbstring, OpenSSL
 and curl. It downloads checksum-pinned official WordPress 7.1.3 and SQLite
 Database Integration 3.1.0 into a disposable operating-system temporary directory,
 initializes a fresh synthetic installation, and executes 133 messaging checks,
-73 import checks and two asset-version checks, including targeted API lookups,
+76 import checks and two asset-version checks, including targeted API lookups,
 updates, cancellations and preservation of unrelated past bookings. It never
 uses an existing database.
 All external HTTP and actual mail are blocked; API transports are mocked.

@@ -268,6 +268,17 @@ import_fixture(array());
 verify_import_case(is_wp_error(bokun_import_webhook_booking('123', microtime(true) - 1)) && !$import_test['requests'], 'an exhausted worker budget never starts an API request');
 import_fixture(array(import_http_response(array(), 404)));
 verify_import_case(is_wp_error(bokun_import_webhook_booking('123', microtime(true) + 40)), 'an invisible booking never acknowledges successful synchronization');
+$booking['id'] = 124;
+$booking['confirmationCode'] = 'TEST-124';
+import_fixture(array(import_http_response(array(), 403), import_http_response(array('items' => array($booking)))));
+verify_import_case(true === bokun_import_webhook_booking('124', microtime(true) + 40) && '124' === $import_test['requests'][1]['payload']['textFilter'], 'search-only credentials can resolve an exact numeric ID when the details endpoint is forbidden');
+$booking['id'] = 125;
+$booking['confirmationCode'] = 'TEST-125';
+import_fixture(array(import_http_response(array('items' => array($booking)))));
+verify_import_case(true === bokun_import_webhook_booking('125', microtime(true) + 40, 'TEST-125') && 1 === count($import_test['requests']) && 'TEST-125' === $import_test['requests'][0]['payload']['confirmationCode'], 'a notification confirmation-code hint avoids the restricted details endpoint and still verifies the numeric ID');
+$booking['id'] = 999;
+import_fixture(array(import_http_response(array('items' => array($booking))), import_http_response(array('items' => array($booking)))));
+verify_import_case(is_wp_error(bokun_import_webhook_booking('126', microtime(true) + 40, 'TEST-125')), 'a code hint cannot import another booking ID even when its code matches');
 
 foreach ($import_test['checks'] as $label) {
     echo (in_array($label, $import_test['failures'], true) ? 'FAIL ' : 'PASS ') . $label . "\n";

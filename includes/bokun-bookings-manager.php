@@ -790,9 +790,11 @@ function bokun_webhook_api_lookup($endpoint, $context, $deadline, $payload = nul
     }
     $response = wp_remote_request(BOKUN_API_BASE_URL . $endpoint, $arguments);
     if (is_wp_error($response)) {
+        $GLOBALS['bokun_webhook_lookup_trace'][] = $context . ':' . $method . ':network';
         return new WP_Error('webhook_api_unavailable', 'The booking API did not respond.');
     }
     $status = (int) wp_remote_retrieve_response_code($response);
+    $GLOBALS['bokun_webhook_lookup_trace'][] = $context . ':' . $method . ':' . $status;
     if (403 === $status || 404 === $status) {
         return null; // This credential cannot see the notified booking.
     }
@@ -803,7 +805,8 @@ function bokun_webhook_api_lookup($endpoint, $context, $deadline, $payload = nul
     return is_array($data) ? $data : new WP_Error('webhook_api_invalid', 'The booking API returned invalid data.');
 }
 
-function bokun_import_webhook_booking($reference, $deadline) {
+function bokun_import_webhook_booking($reference, $deadline, $code_hint = '') {
+    $GLOBALS['bokun_webhook_lookup_trace'] = array();
     $reference = bokun_webhook_booking_reference($reference);
     $credentials = bokun_get_configured_api_credentials();
     if ('' === $reference || !$credentials) {
@@ -814,26 +817,31 @@ function bokun_import_webhook_booking($reference, $deadline) {
         return $lock;
     }
     $matched = false;
+    $code_hint = bokun_webhook_booking_reference($code_hint);
+    if (ctype_digit($reference) && '' === $code_hint) {
+        $posts = get_posts(array('post_type' => 'bokun_booking', 'post_status' => 'any', 'meta_key' => 'id', 'meta_value' => $reference, 'fields' => 'ids', 'numberposts' => 2));
+        $codes = array_values(array_unique(array_filter(array_map(static function ($post_id) {
+            return bokun_webhook_booking_reference(get_post_meta($post_id, '_confirmation_code', true));
+        }, $posts))));
+        $code_hint = 1 === count($codes) ? $codes[0] : '';
+    }
     try {
         foreach ($credentials as $context => $config) {
-            $code = $reference;
-            if (ctype_digit($reference)) {
+            $code = ctype_digit($reference) ? $code_hint : $reference;
+            if (ctype_digit($reference) && '' === $code) {
                 $details = bokun_webhook_api_lookup('/booking.json/booking/' . rawurlencode($reference), $context, $deadline);
                 if (is_wp_error($details)) {
                     return $details;
                 }
-                if (null === $details) {
-                    continue;
-                }
-                if ((string) ($details['bookingId'] ?? $details['id'] ?? '') !== $reference || empty($details['confirmationCode']) || !is_string($details['confirmationCode'])) {
+                if (null !== $details && ((string) ($details['bookingId'] ?? $details['id'] ?? '') !== $reference || empty($details['confirmationCode']) || !is_string($details['confirmationCode']))) {
                     return new WP_Error('webhook_booking_mismatch', 'The booking lookup did not confirm the requested identity.');
                 }
-                $code = $details['confirmationCode'];
+                $code = null !== $details ? $details['confirmationCode'] : '';
             }
             // Search by authoritative confirmation code to reuse the existing
             // search-result schema, without a travel-date window or a full scan.
             $data = bokun_webhook_api_lookup('/booking.json/booking-search', $context, $deadline, array(
-                'confirmationCode' => $code,
+                ('' !== $code ? 'confirmationCode' : 'textFilter') => '' !== $code ? $code : $reference,
                 'page' => 1,
                 'pageSize' => 10,
                 'itemsPerPage' => 10,
@@ -848,9 +856,23 @@ function bokun_import_webhook_booking($reference, $deadline) {
                 return new WP_Error('webhook_api_invalid', 'The booking search returned invalid data.');
             }
             $bookings = array_values(array_filter($data['items'], static function ($booking) use ($code, $reference) {
-                return is_array($booking) && ($booking['confirmationCode'] ?? '') === $code
+                return is_array($booking) && is_string($booking['confirmationCode'] ?? null) && ('' === $code || $booking['confirmationCode'] === $code)
                     && (!ctype_digit($reference) || (string) ($booking['id'] ?? '') === $reference);
             }));
+            $GLOBALS['bokun_webhook_lookup_trace'][] = $context . ':search:' . count($data['items']) . ':matched:' . count($bookings);
+            if (!$bookings && '' !== $code) {
+                $data = bokun_webhook_api_lookup('/booking.json/booking-search', $context, $deadline, array('textFilter' => $code, 'page' => 1, 'pageSize' => 10, 'itemsPerPage' => 10));
+                if (is_wp_error($data)) {
+                    return $data;
+                }
+                if (is_array($data) && isset($data['items']) && is_array($data['items'])) {
+                    $bookings = array_values(array_filter($data['items'], static function ($booking) use ($code, $reference) {
+                        return is_array($booking) && ($booking['confirmationCode'] ?? '') === $code
+                            && (!ctype_digit($reference) || (string) ($booking['id'] ?? '') === $reference);
+                    }));
+                    $GLOBALS['bokun_webhook_lookup_trace'][] = $context . ':text:' . count($data['items']) . ':matched:' . count($bookings);
+                }
+            }
             if (!$bookings) {
                 continue;
             }
