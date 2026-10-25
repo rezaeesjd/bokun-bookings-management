@@ -1478,6 +1478,19 @@ function bokun_save_specific_fields($post_id, $booking, $context = 'default') {
 
         update_post_meta($post_id, '_booking_effective_status', $effective_status);
 
+        // Replace API lifecycle labels on refresh; keep operator workflow labels.
+        // Otherwise a confirmed booking remains labelled CONFIRMED after cancel.
+        $api_statuses = array('REQUESTED', 'RESERVED', 'CONFIRMED', 'TIMEOUT', 'ABORTED', 'CANCELLED', 'CANCELED', 'ERROR', 'ARRIVED', 'NO_SHOW', 'REJECTED', 'REFUNDED', 'DECLINED', 'EXPIRED', 'VOIDED', 'CHARGEBACK', 'CHARGED_BACK');
+        $status_terms = wp_get_object_terms($post_id, 'booking_status');
+        if (!is_wp_error($status_terms)) {
+            foreach ($status_terms as $status_term) {
+                $status_name = strtoupper($status_term->name);
+                if (in_array($status_name, $api_statuses, true) && $status_name !== strtoupper($effective_status)) {
+                    wp_remove_object_terms($post_id, (int) $status_term->term_id, 'booking_status');
+                }
+            }
+        }
+
         if (!empty($effective_status)) {
             bokun_assign_tag_to_post($post_id, $effective_status, 'booking_status');
         } else {
