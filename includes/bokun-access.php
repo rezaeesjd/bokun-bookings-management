@@ -267,9 +267,17 @@ function bokun_access_clear_cookie() {
     bokun_access_flush();
 }
 
-/** The current front-end URL, used for the post/redirect/get after login. */
+/**
+ * The current request path+query, used for the post/redirect/get after login.
+ *
+ * add_query_arg(array()) already returns the full REQUEST_URI (including any
+ * subdirectory in the home URL), so it is used as-is: wrapping it in home_url()
+ * would prepend the home path a second time and break login/logout on
+ * subdirectory installs. A server-relative target is valid for both a form
+ * action and wp_safe_redirect().
+ */
 function bokun_access_current_url() {
-    return home_url(add_query_arg(array()));
+    return add_query_arg(array());
 }
 
 /**

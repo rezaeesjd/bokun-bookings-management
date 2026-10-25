@@ -3433,6 +3433,19 @@ function bokun_get_booking_history_actor_details() {
         ];
     }
 
+    // A key session (booking/admin role) authorizes the write without a
+    // WordPress user, so record the key holder's name rather than "Guest".
+    if (function_exists('bokun_access_current')) {
+        $access_actor = bokun_access_current();
+        if (is_array($access_actor) && isset($access_actor['via']) && 'key' === $access_actor['via']) {
+            return [
+                'user_id'      => 0,
+                'user_name'    => sanitize_text_field($access_actor['name']),
+                'actor_source' => 'access_key',
+            ];
+        }
+    }
+
     $team_member_name = bokun_get_team_member_name_from_cookies();
 
     if (!empty($team_member_name)) {
