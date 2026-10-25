@@ -3,7 +3,7 @@
 Plugin Name: Bokun Bookings Management
 Plugin URI: #
 Description:  Manage Bokun bookings and notifications.
-Version: 1.2.4
+Version: 1.2.5
 Author: Hitesh (HWT)
 Author URI: #
 Domain Path: /languages
@@ -99,7 +99,7 @@ function bokun_polish_common_conversation_copy($translated_text, $text, $domain)
 add_filter('gettext', 'bokun_polish_common_conversation_copy', 10, 3);
 
 global $bokun_version;
-$bokun_version = '1.2.4';
+$bokun_version = '1.2.5';
 
 class BokunBookingManagement {
     var $bokun_settings = '';
@@ -481,10 +481,19 @@ class BokunBookingManagement {
         // need to check here if its front section than enqueue script
         /*********** register and enqueue styles ***************/
 
+            // Shared design-system tokens + base typography. Registered first so
+            // the dashboard stylesheet can consume the --bk-* custom properties.
+            wp_register_style(
+                'bokun_design_system',
+                BOKUN_CSS_URL.'bokun-design-system.css',
+                false,
+                $bokun_version
+            );
+
             wp_register_style(
                 'bokun_front_css',
                 BOKUN_CSS_URL.'bokun_front.css?rand='.rand(1,999),
-                false,
+                array( 'bokun_design_system' ),
                 $bokun_version
             );
 

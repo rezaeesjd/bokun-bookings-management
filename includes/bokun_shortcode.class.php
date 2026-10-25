@@ -941,11 +941,13 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 $status_terms = get_the_terms($post_id, 'booking_status');
                 $status_labels = [];
                 $status_values = [];
+                $status_label_slugs = [];
                 $is_cancelled = false;
 
                 if ($status_terms && !is_wp_error($status_terms)) {
                     foreach ($status_terms as $term) {
                         $status_labels[] = $term->name;
+                        $status_label_slugs[] = sanitize_title($term->name);
 
                         $sanitized_status = sanitize_title($term->name);
                         if ('' !== $sanitized_status) {
@@ -1476,8 +1478,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
                             <?php if (!empty($status_labels)) : ?>
                                 <ul class="bokun-booking-dashboard__status-list">
-                                    <?php foreach ($status_labels as $status_label) : ?>
-                                        <li class="bokun-booking-dashboard__status-item"><?php echo esc_html($status_label); ?></li>
+                                    <?php foreach ($status_labels as $status_index => $status_label) :
+                                        $status_slug = isset($status_label_slugs[$status_index]) ? $status_label_slugs[$status_index] : sanitize_title($status_label);
+                                    ?>
+                                        <li class="bokun-booking-dashboard__status-item bokun-booking-dashboard__status-item--<?php echo esc_attr($status_slug); ?>"><?php echo esc_html($status_label); ?></li>
                                     <?php endforeach; ?>
                                 </ul>
                             <?php endif; ?>
@@ -3339,9 +3343,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             </div>
 
             <style>
-                .bokun-andash { --an-surface:#fff; --an-ink:#1d2327; --an-ink-2:#646970; --an-line:#e2e4e7; --an-blue:#2a78d6; --an-blue-soft:rgba(42,120,214,.14); --an-good:#008300; --an-warn:#eda100; --an-crit:#e34948; --an-c1:#2a78d6; --an-c2:#eb6834; --an-c3:#1baf7a; --an-c4:#eda100; --an-c5:#e87ba4; --an-c6:#4a3aa7; color:var(--an-ink); }
+                .bokun-andash { --an-surface:#fff; --an-ink:#1d2327; --an-ink-2:#646970; --an-line:#e2e4e7; --an-blue:#7b1e3a; --an-blue-soft:rgba(123,30,58,.14); --an-good:#008300; --an-warn:#eda100; --an-crit:#e34948; --an-c1:#2a78d6; --an-c2:#eb6834; --an-c3:#1baf7a; --an-c4:#eda100; --an-c5:#e87ba4; --an-c6:#4a3aa7; color:var(--an-ink); }
                 @media (prefers-color-scheme: dark) {
-                    .bokun-andash { --an-surface:#1f1f1e; --an-ink:#f2f2f0; --an-ink-2:#b5b5ad; --an-line:#3a3a38; --an-blue:#3987e5; --an-blue-soft:rgba(57,135,229,.20); --an-good:#2faa4a; --an-warn:#c98500; --an-crit:#e66767; --an-c1:#3987e5; --an-c2:#d95926; --an-c3:#199e70; --an-c4:#c98500; --an-c5:#d55181; --an-c6:#9085e9; }
+                    .bokun-andash { --an-surface:#1f1f1e; --an-ink:#f2f2f0; --an-ink-2:#b5b5ad; --an-line:#3a3a38; --an-blue:#d76b86; --an-blue-soft:rgba(215,107,134,.22); --an-good:#2faa4a; --an-warn:#c98500; --an-crit:#e66767; --an-c1:#3987e5; --an-c2:#d95926; --an-c3:#199e70; --an-c4:#c98500; --an-c5:#d55181; --an-c6:#9085e9; }
                 }
                 .bokun-andash__head { margin-bottom:12px; }
                 .bokun-andash__title { margin:0; font-size:20px; }
@@ -4275,9 +4279,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             </div>
 
             <style>
-                .bokun-bizdash { --an-surface:#fff; --an-ink:#1d2327; --an-ink-2:#646970; --an-line:#e2e4e7; --an-blue:#2a78d6; --an-blue-soft:rgba(42,120,214,.14); --an-good:#008300; --an-warn:#eda100; --an-crit:#e34948; --an-c1:#2a78d6; --an-c2:#eb6834; --an-c3:#1baf7a; --an-c4:#eda100; --an-c5:#e87ba4; --an-c6:#4a3aa7; color:var(--an-ink); }
+                .bokun-bizdash { --an-surface:#fff; --an-ink:#1d2327; --an-ink-2:#646970; --an-line:#e2e4e7; --an-blue:#7b1e3a; --an-blue-soft:rgba(123,30,58,.14); --an-good:#008300; --an-warn:#eda100; --an-crit:#e34948; --an-c1:#2a78d6; --an-c2:#eb6834; --an-c3:#1baf7a; --an-c4:#eda100; --an-c5:#e87ba4; --an-c6:#4a3aa7; color:var(--an-ink); }
                 @media (prefers-color-scheme: dark) {
-                    .bokun-bizdash { --an-surface:#1f1f1e; --an-ink:#f2f2f0; --an-ink-2:#b5b5ad; --an-line:#3a3a38; --an-blue:#3987e5; --an-blue-soft:rgba(57,135,229,.20); --an-good:#2faa4a; --an-warn:#c98500; --an-crit:#e66767; --an-c1:#3987e5; --an-c2:#d95926; --an-c3:#199e70; --an-c4:#c98500; --an-c5:#d55181; --an-c6:#9085e9; }
+                    .bokun-bizdash { --an-surface:#1f1f1e; --an-ink:#f2f2f0; --an-ink-2:#b5b5ad; --an-line:#3a3a38; --an-blue:#d76b86; --an-blue-soft:rgba(215,107,134,.22); --an-good:#2faa4a; --an-warn:#c98500; --an-crit:#e66767; --an-c1:#3987e5; --an-c2:#d95926; --an-c3:#199e70; --an-c4:#c98500; --an-c5:#d55181; --an-c6:#9085e9; }
                 }
                 .bokun-bizdash__notice { background:var(--an-blue-soft); border:1px solid var(--an-line); border-radius:10px; padding:12px 14px; margin-bottom:16px; font-size:13px; }
                 .bokun-bizdash__cardhead { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:6px; }

@@ -719,7 +719,8 @@ class BOKUN_Messages {
         }
         nocache_headers();
         global $bokun_version;
-        wp_enqueue_style('bokun-messages', BOKUN_CSS_URL . 'bokun-messages.css', array(), $bokun_version);
+        wp_enqueue_style('bokun-design-system', BOKUN_CSS_URL . 'bokun-design-system.css', array(), $bokun_version);
+        wp_enqueue_style('bokun-messages', BOKUN_CSS_URL . 'bokun-messages.css', array('bokun-design-system'), $bokun_version);
         wp_enqueue_script('bokun-messages', BOKUN_JS_URL . 'bokun-messages.js', array(), $bokun_version, true);
         ob_start();
         include __DIR__ . '/bokun-messages.view.php';
