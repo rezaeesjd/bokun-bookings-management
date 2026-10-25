@@ -3140,24 +3140,61 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var tabs = root.querySelectorAll( '.bokun-dash-tabs__tab' );
                     var panels = root.querySelectorAll( '.bokun-dash-tabs__panel' );
 
+                    function hasTarget( target ) {
+                        for ( var i = 0; i < tabs.length; i++ ) {
+                            if ( tabs[ i ].getAttribute( 'data-tab-target' ) === target ) { return true; }
+                        }
+                        return false;
+                    }
+
+                    // Switch to a tab. When updateHash is true the URL hash is
+                    // updated (so a refresh reopens this tab, and the tab is a
+                    // shareable link); on load/hashchange we honor the hash
+                    // without rewriting it.
+                    function activate( target, updateHash ) {
+                        if ( ! hasTarget( target ) ) { return; }
+                        tabs.forEach( function ( t ) {
+                            var active = t.getAttribute( 'data-tab-target' ) === target;
+                            t.classList.toggle( 'is-active', active );
+                            t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
+                        } );
+                        panels.forEach( function ( panel ) {
+                            var match = panel.getAttribute( 'data-tab-panel' ) === target;
+                            panel.classList.toggle( 'is-active', match );
+                            panel.hidden = ! match;
+                        } );
+                        if ( 'analytics' === target && root.bokunAnalyticsInit ) {
+                            root.bokunAnalyticsInit();
+                        }
+                        if ( updateHash ) {
+                            if ( window.history && window.history.replaceState ) {
+                                window.history.replaceState( null, '', '#' + target );
+                            } else {
+                                window.location.hash = target;
+                            }
+                        }
+                    }
+
                     tabs.forEach( function ( tab ) {
                         tab.addEventListener( 'click', function () {
-                            var target = tab.getAttribute( 'data-tab-target' );
-                            tabs.forEach( function ( t ) {
-                                var active = t === tab;
-                                t.classList.toggle( 'is-active', active );
-                                t.setAttribute( 'aria-selected', active ? 'true' : 'false' );
-                            } );
-                            panels.forEach( function ( panel ) {
-                                var match = panel.getAttribute( 'data-tab-panel' ) === target;
-                                panel.classList.toggle( 'is-active', match );
-                                panel.hidden = ! match;
-                            } );
-                            if ( 'analytics' === target && root.bokunAnalyticsInit ) {
-                                root.bokunAnalyticsInit();
-                            }
+                            activate( tab.getAttribute( 'data-tab-target' ), true );
                         } );
                     } );
+
+                    // The current tab from the hash, defaulting an empty hash to
+                    // Bookings so navigating back to the bare URL (and a refresh
+                    // of it) agree on the default tab. An unknown non-empty hash
+                    // is left to the page (activate ignores it).
+                    function targetFromHash() {
+                        return window.location.hash.replace( /^#/, '' ) || 'bookings';
+                    }
+
+                    window.addEventListener( 'hashchange', function () {
+                        activate( targetFromHash(), false );
+                    } );
+
+                    // Restore the selected tab from the URL hash on load.
+                    activate( targetFromHash(), false );
                 } )();
             </script>
             <?php
@@ -3207,6 +3244,37 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             $partners = function_exists( 'bokun_partners_products_get_map' ) ? bokun_partners_products_get_map() : array();
             $months   = function_exists( 'bokun_analytics_get_window_months' ) ? (int) bokun_analytics_get_window_months() : 3;
             $uid      = 'bokun-andash-' . wp_rand( 1000, 9999 );
+
+            // Enrich each record with the operational links shown in the Records
+            // table (single-booking page, WP edit screen, Viator conversation,
+            // Bokun sale) and the channel-refund marker state for the inline
+            // Refunded toggle. Derived here from the post the row already
+            // references rather than stored as source columns. Post caches are
+            // primed once so get_permalink()/get_post_meta() stay warm.
+            if ( ! empty( $rows ) ) {
+                $row_ids = array();
+                foreach ( $rows as $r ) {
+                    if ( ! empty( $r['post_id'] ) ) { $row_ids[] = (int) $r['post_id']; }
+                }
+                if ( $row_ids && function_exists( '_prime_post_caches' ) ) {
+                    _prime_post_caches( $row_ids, false, true );
+                }
+                foreach ( $rows as $i => $r ) {
+                    $pid = isset( $r['post_id'] ) ? (int) $r['post_id'] : 0;
+                    $rows[ $i ]['view_url'] = $pid ? (string) get_permalink( $pid ) : '';
+                    $rows[ $i ]['edit_url'] = $pid ? (string) get_edit_post_link( $pid, 'raw' ) : '';
+                    $ext = isset( $r['external_booking_reference'] ) ? (string) $r['external_booking_reference'] : '';
+                    $rows[ $i ]['viator_url'] = ( '' !== $ext )
+                        ? 'https://supplier.viator.com/messaging/conversation/booking/' . rawurlencode( $ext )
+                        : '';
+                    $parent = $pid ? get_post_meta( $pid, 'productBookings_0_parentBookingId', true ) : '';
+                    $parent = is_scalar( $parent ) ? (string) $parent : '';
+                    $rows[ $i ]['bokun_url'] = ( '' !== $parent )
+                        ? 'https://florenceadventuressrl.bokun.io/sales/' . rawurlencode( $parent )
+                        : '';
+                    $rows[ $i ]['channel_refunded'] = ( $pid && get_post_meta( $pid, '_user_channel_refunded', true ) ) ? 1 : 0;
+                }
+            }
 
             // Important dimensions shown as clickable item lists in the sidebar.
             // Status sits right under Channel in the sidebar: it is used a lot,
@@ -3269,6 +3337,14 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'filterBy'     => __( 'Filter by', 'BOKUN_txt_domain' ),
                 'bizResults'   => __( 'Business Results', 'BOKUN_txt_domain' ),
                 'backToAna'    => __( '← Back to analytics', 'BOKUN_txt_domain' ),
+                'links'        => __( 'Links', 'BOKUN_txt_domain' ),
+                'markRefund'   => __( 'Mark refunded', 'BOKUN_txt_domain' ),
+                'unmarkRefund' => __( 'Un-mark', 'BOKUN_txt_domain' ),
+                'savingRefund' => __( 'Saving…', 'BOKUN_txt_domain' ),
+                'refundError'  => __( 'Could not update the refund marker. Please try again.', 'BOKUN_txt_domain' ),
+                'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
+                'refundNonce'  => wp_create_nonce( 'bokun_analytics_channel_refund' ),
+                'canRefund'    => current_user_can( 'manage_options' ) ? 1 : 0,
             );
 
             ob_start();
@@ -3514,6 +3590,14 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash th.bokun-andash__sortable { cursor:pointer; user-select:none; white-space:nowrap; }
                 .bokun-andash th.bokun-andash__sortable:hover { color:var(--an-blue); }
                 .bokun-andash th.bokun-andash__sortable.is-sorted { color:var(--an-blue); }
+                .bokun-andash__links { white-space:nowrap; }
+                .bokun-andash__links a { color:var(--an-blue); text-decoration:none; }
+                .bokun-andash__links a:hover { text-decoration:underline; }
+                .bokun-andash__linksep { color:var(--an-ink-2); margin:0 2px; }
+                .bokun-andash__statuscell { white-space:nowrap; }
+                .bokun-andash__refundbtn { appearance:none; margin-left:8px; padding:2px 8px; font:inherit; font-size:11px; font-weight:600; line-height:1.4; cursor:pointer; color:var(--an-blue); background:transparent; border:1px solid var(--an-line); border-radius:999px; }
+                .bokun-andash__refundbtn:hover { border-color:var(--an-blue); }
+                .bokun-andash__refundbtn[disabled] { opacity:.6; cursor:default; }
                 .bokun-andash__table-wrap { overflow:auto; max-height:520px; margin-top:10px; }
                 .bokun-andash__trend svg { width:100%; height:auto; display:block; }
                 .bokun-andash__tip { position:absolute; pointer-events:none; background:var(--an-ink); color:var(--an-surface); font-size:12px; padding:5px 8px; border-radius:6px; white-space:nowrap; transform:translate(-50%,-120%); opacity:0; transition:opacity .08s; z-index:5; }
@@ -4027,9 +4111,67 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     [ 'external_booking_reference', 'Ext. ref' ],
                     [ 'product_title', 'Product' ], [ 'departure_city', 'City' ], [ 'partner_page_id', 'Partner' ],
                     [ '__parts', 'Pax' ], [ 'price_amount', 'Gross' ], [ 'net_price', 'Net price' ], [ '__net_revenue', 'Net revenue' ],
-                    [ 'currency', 'Cur' ], [ 'result', 'Result' ], [ 'payment_method', 'Payment' ], [ 'channel_title', 'Channel' ], [ 'pb_status', 'Status' ]
+                    [ 'currency', 'Cur' ], [ 'result', 'Result' ], [ 'payment_method', 'Payment' ], [ 'channel_title', 'Channel' ], [ 'pb_status', 'Status' ],
+                    [ '__links', L.links || 'Links' ]
                 ];
                 var DETAIL_CAP = 300;
+
+                // Minimal links cell: Viator · Bokun · WP · Booking, each a link
+                // when its URL is present (Viator/Bokun depend on the booking's
+                // channel ref / parent id; WP-edit and the single page are always
+                // available). Built as raw HTML, so every URL goes through escHtml.
+                function recLink( url, label ) {
+                    return '<a href="' + escHtml( url ) + '" target="_blank" rel="noopener noreferrer">' + escHtml( label ) + '</a>';
+                }
+                function linksCell( r ) {
+                    var out = [];
+                    if ( r.viator_url ) { out.push( recLink( r.viator_url, 'Viator' ) ); }
+                    if ( r.bokun_url ) { out.push( recLink( r.bokun_url, 'Bokun' ) ); }
+                    if ( r.edit_url ) { out.push( recLink( r.edit_url, 'WP' ) ); }
+                    if ( r.view_url ) { out.push( recLink( r.view_url, 'Booking' ) ); }
+                    return out.length ? out.join( ' <span class="bokun-andash__linksep">·</span> ' ) : '—';
+                }
+                // Status cell: the current status plus an inline Refunded toggle.
+                // It drives the existing durable channel-refund marker (the one
+                // Bokun re-imports preserve), used when a channel refund never
+                // reached Bokun. Only rendered when the viewer may change it.
+                var REFUND_ENABLED = !! ( L.canRefund && L.ajaxUrl && L.refundNonce );
+                function statusCell( r ) {
+                    var label = escHtml( esc( r.pb_status ) || '—' );
+                    var code = esc( r.confirmation_code );
+                    if ( ! REFUND_ENABLED || ! code ) { return '<span class="bokun-andash__statuslabel">' + label + '</span>'; }
+                    var refunded = !! r.channel_refunded;
+                    var btnLabel = refunded ? ( L.unmarkRefund || 'Un-mark' ) : ( L.markRefund || 'Mark refunded' );
+                    return '<span class="bokun-andash__statuslabel">' + label + '</span>' +
+                        '<button type="button" class="bokun-andash__refundbtn" data-refund-code="' + escHtml( code ) +
+                        '" data-refunded="' + ( refunded ? '1' : '0' ) + '">' + escHtml( btnLabel ) + '</button>';
+                }
+                // Apply (or clear) the channel-refund marker, then reload so the
+                // records, totals and all revenue metrics reflect the re-synced
+                // row. The #analytics hash keeps the reload on this tab.
+                function refundToggle( btn ) {
+                    if ( ! REFUND_ENABLED ) { return; }
+                    var code = btn.getAttribute( 'data-refund-code' );
+                    var next = btn.getAttribute( 'data-refunded' ) === '1' ? '0' : '1';
+                    btn.disabled = true;
+                    btn.textContent = L.savingRefund || 'Saving…';
+                    fetch( L.ajaxUrl, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: 'action=bokun_set_channel_refund&nonce=' + encodeURIComponent( L.refundNonce ) +
+                            '&code=' + encodeURIComponent( code ) + '&refunded=' + next
+                    } ).then( function ( resp ) { return resp.json(); } ).then( function ( res ) {
+                        if ( res && res.success ) { window.location.reload(); return; }
+                        btn.disabled = false;
+                        btn.textContent = btn.getAttribute( 'data-refunded' ) === '1' ? ( L.unmarkRefund || 'Un-mark' ) : ( L.markRefund || 'Mark refunded' );
+                        window.alert( ( res && res.data && res.data.message ) || L.refundError || 'Error' );
+                    } ).catch( function () {
+                        btn.disabled = false;
+                        btn.textContent = btn.getAttribute( 'data-refunded' ) === '1' ? ( L.unmarkRefund || 'Un-mark' ) : ( L.markRefund || 'Mark refunded' );
+                        window.alert( L.refundError || 'Error' );
+                    } );
+                }
                 function cell( r, key ) {
                     if ( key === '__parts' ) { return fmtInt( parts( r ) ); }
                     if ( key === 'price_amount' ) { var a = num( r.price_amount ); return a ? fmtMoney( a ) : ''; }
@@ -4063,6 +4205,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         if ( key === '__net_revenue' ) { return '<td class="bokun-andash__num' + ( netAny && sumNet < 0 ? ' bokun-andash__neg' : '' ) + '">' + ( netAny ? fmtMoney( sumNet ) + curNet : '' ) + '</td>'; }
                         // net_price is a per-person rate, not an additive amount, so it has no total.
                         if ( key === 'net_price' ) { return '<td class="bokun-andash__num"></td>'; }
+                        if ( key === '__links' ) { return '<td></td>'; }
                         return '<td>' + fmtInt( counts[ key ] || 0 ) + '</td>';
                     } ).join( '' );
                     return '<tfoot><tr>' + cells + '</tr></tfoot>';
@@ -4100,6 +4243,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var rows = data;
                     if ( detailSort.key ) { rows = data.slice().sort( function ( a, b ) { return detailCmp( a, b, detailSort.key, detailSort.dir ); } ); }
                     var head = '<thead><tr>' + DETAIL_COLS.map( function ( c ) {
+                        // The Links column carries actions, not sortable data.
+                        if ( c[ 0 ] === '__links' ) { return '<th>' + escHtml( c[ 1 ] ) + '</th>'; }
                         var active = ( detailSort.key === c[ 0 ] );
                         var caret = active ? ( detailSort.dir > 0 ? ' ▲' : ' ▼' ) : '';
                         var cls = ( detailNumeric( c[ 0 ] ) ? 'bokun-andash__num ' : '' ) + 'bokun-andash__sortable' + ( active ? ' is-sorted' : '' );
@@ -4107,6 +4252,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     } ).join( '' ) + '</tr></thead>';
                     var body = rows.slice( 0, DETAIL_CAP ).map( function ( r ) {
                         return '<tr>' + DETAIL_COLS.map( function ( c ) {
+                            // Links and Status cells carry raw HTML (anchors / the
+                            // Refunded toggle); their internals are escaped inside
+                            // linksCell()/statusCell().
+                            if ( c[ 0 ] === '__links' ) { return '<td class="bokun-andash__links">' + linksCell( r ) + '</td>'; }
+                            if ( c[ 0 ] === 'pb_status' ) { return '<td class="bokun-andash__statuscell">' + statusCell( r ) + '</td>'; }
                             var cls = detailNumeric( c[ 0 ] ) ? 'bokun-andash__num' : '';
                             if ( c[ 0 ] === '__net_revenue' && r._net_revenue !== null && r._net_revenue < 0 ) { cls += ' bokun-andash__neg'; }
                             return '<td' + ( cls ? ' class="' + cls.trim() + '"' : '' ) + '>' + escHtml( cell( r, c[ 0 ] ) ) + '</td>';
@@ -4118,6 +4268,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     wrap.querySelectorAll( 'thead th[data-sort-key]' ).forEach( function ( th ) {
                         th.addEventListener( 'click', function () { sortDetailBy( th.getAttribute( 'data-sort-key' ) ); } );
                         th.addEventListener( 'keydown', function ( e ) { if ( e.key === 'Enter' || e.key === ' ' ) { e.preventDefault(); sortDetailBy( th.getAttribute( 'data-sort-key' ) ); } } );
+                    } );
+                    wrap.querySelectorAll( '.bokun-andash__refundbtn' ).forEach( function ( btn ) {
+                        btn.addEventListener( 'click', function () { refundToggle( btn ); } );
                     } );
                 }
 
