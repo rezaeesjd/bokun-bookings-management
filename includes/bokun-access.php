@@ -123,15 +123,16 @@ function bokun_access_sign($id, $expires, $key) {
  * @return array{id:string,name:string,role:string,via:string}|null
  */
 function bokun_access_flush() {
+    // Retained for API stability (and so cookie changes have a clear hook).
+    // Resolution is no longer cached — see bokun_access_current().
     unset($GLOBALS['bokun_access_resolved'], $GLOBALS['bokun_access_actor']);
 }
 
 function bokun_access_current() {
-    if (!empty($GLOBALS['bokun_access_resolved'])) {
-        return isset($GLOBALS['bokun_access_actor']) ? $GLOBALS['bokun_access_actor'] : null;
-    }
-    $GLOBALS['bokun_access_resolved'] = true;
-    $GLOBALS['bokun_access_actor'] = null;
+    // Resolved fresh on every call rather than cached: resolution is cheap (one
+    // capability check, or a cookie HMAC check) and must always reflect the
+    // current WordPress auth state, which can change within a single request via
+    // wp_set_current_user() (the WordPress test fixture does exactly this).
 
     // Lockout failsafe: a logged-in WordPress administrator is always admin,
     // regardless of any key cookie. (Only manage_options — other WordPress
@@ -141,12 +142,10 @@ function bokun_access_current() {
         $name = ($wp_user instanceof WP_User && $wp_user->exists())
             ? ($wp_user->display_name ?: $wp_user->user_login)
             : __('WordPress admin', 'BOKUN_txt_domain');
-        $GLOBALS['bokun_access_actor'] = array('id' => 'wp:' . get_current_user_id(), 'name' => $name, 'role' => 'admin', 'via' => 'wp');
-        return $GLOBALS['bokun_access_actor'];
+        return array('id' => 'wp:' . get_current_user_id(), 'name' => $name, 'role' => 'admin', 'via' => 'wp');
     }
 
-    $GLOBALS['bokun_access_actor'] = bokun_access_actor_from_cookie();
-    return $GLOBALS['bokun_access_actor'];
+    return bokun_access_actor_from_cookie();
 }
 
 /**
