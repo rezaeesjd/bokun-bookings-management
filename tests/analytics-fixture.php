@@ -19,6 +19,11 @@ function esc_attr_e($value, $domain = '') { echo esc_html($value); }
 function esc_js($value) { return addslashes($value); }
 function wp_json_encode($value) { return json_encode($value, JSON_HEX_TAG | JSON_HEX_AMP); }
 function wp_rand($min, $max) { return $min; }
+function admin_url($path = '') { return 'https://analytics.example.test/wp-admin/' . ltrim((string) $path, '/'); }
+function wp_create_nonce($action = '') { return 'test-nonce'; }
+function get_permalink($id) { return 'https://analytics.example.test/bokun-booking/' . (int) $id . '/'; }
+function get_edit_post_link($id, $context = 'display') { return 'https://analytics.example.test/wp-admin/post.php?post=' . (int) $id . '&action=edit'; }
+function get_post_meta($id, $key = '', $single = false) { return ''; }
 function bokun_analytics_get_rows() { return $GLOBALS['fixture']['rows']; }
 function bokun_partners_products_get_map() { return $GLOBALS['fixture']['partners'] ?? array(); }
 require dirname(__DIR__) . '/includes/bokun_shortcode.class.php';
