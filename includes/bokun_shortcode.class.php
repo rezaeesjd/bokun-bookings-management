@@ -3381,6 +3381,15 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'bizOverheadLine' => __( 'Business-wide overhead (fixed; not affected by filters):', 'BOKUN_txt_domain' ),
                 'bizPerMonth'     => __( '/ month', 'BOKUN_txt_domain' ),
                 'bizViewPnl'      => __( 'View full overhead P&L →', 'BOKUN_txt_domain' ),
+                'bizOverhead'     => __( 'Overhead', 'BOKUN_txt_domain' ),
+                'bizOpProfit'     => __( 'Operating profit', 'BOKUN_txt_domain' ),
+                'bizMonthlyTitle' => __( 'Per month (run-rate)', 'BOKUN_txt_domain' ),
+                'bizMonthsCovered' => __( 'Months covered', 'BOKUN_txt_domain' ),
+                'bizMonthlyMargin' => __( 'Avg monthly margin', 'BOKUN_txt_domain' ),
+                'bizMonthlyOh'    => __( 'Monthly overhead', 'BOKUN_txt_domain' ),
+                'bizMonthlyProfit' => __( 'Monthly operating profit', 'BOKUN_txt_domain' ),
+                /* translators: 1: monthly overhead, 2: number of months in the filtered period. */
+                'bizPeriodOhNote' => __( 'Period overhead = %1$s × %2$s months (business-wide, not filtered).', 'BOKUN_txt_domain' ),
                 'links'        => __( 'Links', 'BOKUN_txt_domain' ),
                 'markRefund'   => __( 'Mark refunded', 'BOKUN_txt_domain' ),
                 'unmarkRefund' => __( 'Un-mark', 'BOKUN_txt_domain' ),
@@ -3622,6 +3631,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash__biz-wffill { position:absolute; left:0; top:0; bottom:0; border-radius:7px; }
                 .bokun-andash__biz-wfval { font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; }
                 .bokun-andash__biz-note { color:var(--an-ink-2); font-size:12px; margin-top:10px; }
+                .bokun-andash__biz-monthly { margin-top:16px; padding-top:14px; border-top:1px solid var(--an-line); }
+                .bokun-andash__biz-monthly h4 { margin:0 0 10px; font-size:13px; font-weight:600; color:var(--an-ink-2); text-transform:uppercase; letter-spacing:.04em; }
                 .bokun-andash__biz-overhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:14px; padding-top:12px; border-top:1px solid var(--an-line); font-size:13px; }
                 .bokun-andash__biz-overhead strong { font-variant-numeric:tabular-nums; }
                 .bokun-andash__insights { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:14px; }
@@ -4437,7 +4448,21 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var coverage = total ? Math.round( ( matched / total ) * 100 ) : 0;
                     var curSfx = cur ? ' ' + cur : '';
                     function money( n ) { return fmtMoney( n ) + curSfx; }
-                    var scaleMax = Math.max( gross, partnerCost, Math.abs( netMargin ), 1 );
+                    // Overhead is business-wide and fixed per month (not filtered),
+                    // so the operating profit here is the filtered set's margin
+                    // less overhead for the months that set covers. Count the
+                    // distinct creation months of the in-currency rows so the
+                    // run-rate and period overhead rest on the same basis as the
+                    // full P&L (one booking's month still counts as one month).
+                    var monthsSet = {};
+                    data.forEach( function ( r ) { if ( esc( r.currency ) !== cur ) { return; } var mk = dayStr( r.created_datetime ).slice( 0, 7 ); if ( mk ) { monthsSet[ mk ] = 1; } } );
+                    var nMonths = Object.keys( monthsSet ).length || 1;
+                    var monthlyOh = ( L.monthlyOverhead && L.monthlyOverhead > 0 ) ? L.monthlyOverhead : 0;
+                    var periodOverhead = monthlyOh * nMonths;
+                    var periodProfit = netMargin - periodOverhead;
+                    var avgMonthlyMargin = netMargin / nMonths;
+                    var monthlyProfit = avgMonthlyMargin - monthlyOh;
+                    var scaleMax = Math.max( gross, partnerCost, Math.abs( netMargin ), periodOverhead, Math.abs( periodProfit ), 1 );
                     function wfRow( label, value, color ) {
                         var pct = Math.min( 100, Math.round( ( Math.abs( value ) / scaleMax ) * 100 ) );
                         return '<div class="bokun-andash__biz-wfrow"><span class="bokun-andash__biz-wflabel">' + escHtml( label ) + '</span>' +
@@ -4451,22 +4476,38 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         { label: L.bizGrossEarned, value: netAny ? money( gross ) : '—' },
                         { label: L.bizPartnerCost, value: netAny ? money( partnerCost ) : '—' },
                         { label: L.bizNetMargin, value: netAny ? money( netMargin ) : '—' },
-                        { label: L.bizAvgMargin, value: marginCount ? money( netMargin / marginCount ) : '—' }
+                        { label: L.bizAvgMargin, value: marginCount ? money( netMargin / marginCount ) : '—' },
+                        { label: L.bizOpProfit, value: netAny ? money( periodProfit ) : '—', neg: netAny && periodProfit < 0 }
                     ];
                     var tilesHtml = '<div class="bokun-andash__kpis">' + tiles.map( function ( t ) {
-                        return '<div class="bokun-andash__kpi"><div class="bokun-andash__kpi-label">' + escHtml( t.label ) + '</div><div class="bokun-andash__kpi-value">' + escHtml( t.value ) + '</div></div>';
+                        return '<div class="bokun-andash__kpi"><div class="bokun-andash__kpi-label">' + escHtml( t.label ) + '</div><div class="bokun-andash__kpi-value' + ( t.neg ? ' bokun-andash__neg' : '' ) + '">' + escHtml( t.value ) + '</div></div>';
                     } ).join( '' ) + '</div>';
                     var wf = '<div class="bokun-andash__biz-wf">' +
                         wfRow( L.bizGrossEarned, gross, 'var(--an-blue)' ) +
                         wfRow( '− ' + L.bizPartnerCost, -partnerCost, 'var(--an-crit)' ) +
                         wfRow( '= ' + L.bizNetMargin, netMargin, netMargin < 0 ? 'var(--an-crit)' : 'var(--an-good)' ) +
+                        ( netAny ? (
+                            wfRow( '− ' + L.bizOverhead, -periodOverhead, 'var(--an-crit)' ) +
+                            wfRow( '= ' + L.bizOpProfit, periodProfit, periodProfit < 0 ? 'var(--an-crit)' : 'var(--an-good)' )
+                        ) : '' ) +
                         '</div>';
                     var unmatchedNote = unmatchedGross ? '<p class="bokun-andash__biz-note">' + escHtml( money( unmatchedGross ) + ' ' + L.bizUnmatched ) + '</p>' : '';
-                    var overheadInfo = ( L.monthlyOverhead && L.monthlyOverhead > 0 )
-                        ? '<span>' + escHtml( L.bizOverheadLine ) + '</span> <strong>' + escHtml( fmtMoney( L.monthlyOverhead ) + ' ' + ( L.bizCurrency || '' ) + ' ' + L.bizPerMonth ) + '</strong> '
+                    // Monthly run-rate strip: the "per month" numbers behind the
+                    // period figures above.
+                    var monthlyTiles = [
+                        { label: L.bizMonthsCovered, value: fmtInt( nMonths ) },
+                        { label: L.bizMonthlyMargin, value: netAny ? money( avgMonthlyMargin ) : '—' },
+                        { label: L.bizMonthlyOh, value: money( monthlyOh ) },
+                        { label: L.bizMonthlyProfit, value: netAny ? money( monthlyProfit ) : '—', neg: netAny && monthlyProfit < 0 }
+                    ];
+                    var monthlyHtml = netAny ? ( '<div class="bokun-andash__biz-monthly"><h4>' + escHtml( L.bizMonthlyTitle ) + '</h4><div class="bokun-andash__kpis">' + monthlyTiles.map( function ( t ) {
+                        return '<div class="bokun-andash__kpi"><div class="bokun-andash__kpi-label">' + escHtml( t.label ) + '</div><div class="bokun-andash__kpi-value' + ( t.neg ? ' bokun-andash__neg' : '' ) + '">' + escHtml( t.value ) + '</div></div>';
+                    } ).join( '' ) + '</div><p class="bokun-andash__biz-note">' + escHtml( L.bizPeriodOhNote.replace( '%1$s', fmtMoney( monthlyOh ) + ' ' + ( L.bizCurrency || '' ) + ' ' + L.bizPerMonth ).replace( '%2$s', fmtInt( nMonths ) ) ) + '</p></div>' ) : '';
+                    var overheadInfo = ( monthlyOh > 0 )
+                        ? '<span>' + escHtml( L.bizOverheadLine ) + '</span> <strong>' + escHtml( fmtMoney( monthlyOh ) + ' ' + ( L.bizCurrency || '' ) + ' ' + L.bizPerMonth ) + '</strong> '
                         : '';
                     var overhead = '<div class="bokun-andash__biz-overhead">' + overheadInfo + '<button type="button" class="button" data-open-biz>' + escHtml( L.bizViewPnl ) + '</button></div>';
-                    wrap.innerHTML = '<div class="bokun-andash__biz-card"><h3>' + escHtml( L.bizHow ) + '</h3><p class="bokun-andash__biz-sub">' + escHtml( L.bizIntro ) + '</p>' + tilesHtml + wf + unmatchedNote + overhead + '</div>';
+                    wrap.innerHTML = '<div class="bokun-andash__biz-card"><h3>' + escHtml( L.bizHow ) + '</h3><p class="bokun-andash__biz-sub">' + escHtml( L.bizIntro ) + '</p>' + tilesHtml + wf + unmatchedNote + monthlyHtml + overhead + '</div>';
                 }
 
                 function renderMetricTitles() {
