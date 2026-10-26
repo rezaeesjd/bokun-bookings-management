@@ -3242,7 +3242,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
 
             $rows     = bokun_analytics_get_rows();
             $partners = function_exists( 'bokun_partners_products_get_map' ) ? bokun_partners_products_get_map() : array();
-            $months   = function_exists( 'bokun_analytics_get_window_months' ) ? (int) bokun_analytics_get_window_months() : 3;
+            $months   = function_exists( 'bokun_analytics_get_window_months' ) ? (int) bokun_analytics_get_window_months() : 12;
+            $default_view_months = function_exists( 'bokun_analytics_get_default_view_months' ) ? (int) bokun_analytics_get_default_view_months() : 3;
             $uid      = 'bokun-andash-' . wp_rand( 1000, 9999 );
 
             // Enrich each record with the operational links shown in the Records
@@ -3337,6 +3338,21 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 'filterBy'     => __( 'Filter by', 'BOKUN_txt_domain' ),
                 'bizResults'   => __( 'Business Results', 'BOKUN_txt_domain' ),
                 'backToAna'    => __( '← Back to analytics', 'BOKUN_txt_domain' ),
+                'defaultViewMonths' => (int) $default_view_months,
+                'bizCurrency'     => function_exists( 'bokun_business_reporting_currency' ) ? bokun_business_reporting_currency() : 'EUR',
+                'monthlyOverhead' => function_exists( 'bokun_business_monthly_overhead' ) ? (float) bokun_business_monthly_overhead() : 0,
+                'bizHow'          => __( 'Business Results — how net revenue is calculated', 'BOKUN_txt_domain' ),
+                'bizIntro'        => __( 'For the bookings currently filtered (listed in Records below). Per booking: Net revenue = Gross − (net price × participants). Cancelled or partner-refunded bookings earn no gross. Figures are in the most common currency of the filtered set.', 'BOKUN_txt_domain' ),
+                'bizMatched'      => __( 'Catalog-matched', 'BOKUN_txt_domain' ),
+                'bizCoverage'     => __( 'Catalog coverage', 'BOKUN_txt_domain' ),
+                'bizGrossEarned'  => __( 'Gross earned', 'BOKUN_txt_domain' ),
+                'bizPartnerCost'  => __( 'Partner cost', 'BOKUN_txt_domain' ),
+                'bizNetMargin'    => __( 'Net margin', 'BOKUN_txt_domain' ),
+                'bizAvgMargin'    => __( 'Avg net margin / booking', 'BOKUN_txt_domain' ),
+                'bizUnmatched'    => __( 'gross from bookings not in the partners catalog (no net price — excluded from margin).', 'BOKUN_txt_domain' ),
+                'bizOverheadLine' => __( 'Business-wide overhead (fixed; not affected by filters):', 'BOKUN_txt_domain' ),
+                'bizPerMonth'     => __( '/ month', 'BOKUN_txt_domain' ),
+                'bizViewPnl'      => __( 'View full overhead P&L →', 'BOKUN_txt_domain' ),
                 'links'        => __( 'Links', 'BOKUN_txt_domain' ),
                 'markRefund'   => __( 'Mark refunded', 'BOKUN_txt_domain' ),
                 'unmarkRefund' => __( 'Un-mark', 'BOKUN_txt_domain' ),
@@ -3355,8 +3371,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     <p class="bokun-andash__sub">
                         <?php
                         printf(
-                            /* translators: %d: number of months. */
-                            esc_html__( 'Performance of bookings from the last %d months (by creation date), joined to the partners-products catalog for net revenue.', 'BOKUN_txt_domain' ),
+                            /* translators: 1: default view months, 2: retained months. */
+                            esc_html__( 'Showing the last %1$d months by default (by creation date); up to %2$d months are available — widen the date range to see more. Joined to the partners-products catalog for net revenue.', 'BOKUN_txt_domain' ),
+                            (int) $default_view_months,
                             (int) $months
                         );
                         ?>
@@ -3381,8 +3398,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             <div class="bokun-andash__side-row bokun-andash__presets" role="group" aria-label="<?php esc_attr_e( 'Date range', 'BOKUN_txt_domain' ); ?>">
                                 <button type="button" class="bokun-andash__chip" data-preset="7"><?php esc_html_e( '7d', 'BOKUN_txt_domain' ); ?></button>
                                 <button type="button" class="bokun-andash__chip" data-preset="30"><?php esc_html_e( '30d', 'BOKUN_txt_domain' ); ?></button>
-                                <button type="button" class="bokun-andash__chip" data-preset="90"><?php esc_html_e( '90d', 'BOKUN_txt_domain' ); ?></button>
-                                <button type="button" class="bokun-andash__chip is-active" data-preset="0"><?php esc_html_e( 'All', 'BOKUN_txt_domain' ); ?></button>
+                                <button type="button" class="bokun-andash__chip" data-preset-months="3"><?php esc_html_e( '3m', 'BOKUN_txt_domain' ); ?></button>
+                                <button type="button" class="bokun-andash__chip" data-preset-months="6"><?php esc_html_e( '6m', 'BOKUN_txt_domain' ); ?></button>
+                                <button type="button" class="bokun-andash__chip" data-preset="0"><?php esc_html_e( 'All', 'BOKUN_txt_domain' ); ?></button>
                             </div>
                             <div class="bokun-andash__side-row bokun-andash__dates">
                                 <div class="bokun-andash__daterow">
@@ -3425,10 +3443,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                     <button type="button" class="bokun-andash__seg" data-metric="participants"><?php esc_html_e( 'Participants', 'BOKUN_txt_domain' ); ?></button>
                                     <button type="button" class="bokun-andash__seg" data-metric="revenue"><?php esc_html_e( 'Revenue', 'BOKUN_txt_domain' ); ?></button>
                                     <button type="button" class="bokun-andash__seg" data-metric="netrev"><?php esc_html_e( 'Net revenue', 'BOKUN_txt_domain' ); ?></button>
+                                    <button type="button" class="bokun-andash__seg" data-metric="bizresults"><?php esc_html_e( 'Business Results', 'BOKUN_txt_domain' ); ?></button>
                                 </div>
                                 <div class="bokun-andash__toolbar-actions">
                                     <button type="button" class="button" data-export><?php esc_html_e( 'Export CSV', 'BOKUN_txt_domain' ); ?></button>
-                                    <button type="button" class="button button-primary" data-biz-toggle aria-pressed="false"><?php esc_html_e( 'Business Results', 'BOKUN_txt_domain' ); ?></button>
                                 </div>
                             </div>
 
@@ -3436,6 +3454,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             <p class="bokun-andash__insight-sub" data-filter-summary role="status" aria-live="polite" aria-atomic="true"></p>
                             <div class="bokun-andash__insights" data-insights></div>
                             <div class="bokun-andash__kpis" data-kpis></div>
+
+                            <div class="bokun-andash__bizresults" data-bizresults></div>
 
                             <div class="bokun-andash__charts">
                                 <div class="bokun-andash__card bokun-andash__card--wide">
@@ -3460,7 +3480,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                                 </div>
                             </div>
 
-                            <div class="bokun-andash__card">
+                            <div class="bokun-andash__card bokun-andash__card--breakdown">
                                 <div class="bokun-andash__breakdown-head">
                                     <h3><?php esc_html_e( 'Breakdown', 'BOKUN_txt_domain' ); ?></h3>
                                     <label>
@@ -3486,6 +3506,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             </div><!-- /[data-analytics-view] -->
 
                             <div data-biz-view hidden>
+                                <p><button type="button" class="button" data-back-biz><?php esc_html_e( '← Back to Business Results', 'BOKUN_txt_domain' ); ?></button></p>
                                 <?php echo $this->render_business_panel(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
                             </div>
                         </div>
@@ -3554,6 +3575,27 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash.is-biz .bokun-andash__side { display:none; }
                 .bokun-andash.is-biz .bokun-andash__layout { grid-template-columns:1fr; }
                 .bokun-andash.is-biz [data-metric-group], .bokun-andash.is-biz [data-export] { display:none; }
+                /* Business Results metric: replace the chart/breakdown area with a
+                   filter-driven margin breakdown; the sidebar filters and the
+                   Records table stay. */
+                .bokun-andash__bizresults { display:none; }
+                .bokun-andash.is-bizmetric [data-insights],
+                .bokun-andash.is-bizmetric [data-kpis],
+                .bokun-andash.is-bizmetric .bokun-andash__charts,
+                .bokun-andash.is-bizmetric .bokun-andash__card--breakdown { display:none; }
+                .bokun-andash.is-bizmetric .bokun-andash__bizresults { display:block; }
+                .bokun-andash__biz-card { background:var(--an-surface); border:1px solid var(--an-line); border-radius:10px; padding:16px; margin-bottom:12px; }
+                .bokun-andash__biz-card h3 { margin:0 0 4px; }
+                .bokun-andash__biz-sub { color:var(--an-ink-2); font-size:13px; margin:0 0 14px; }
+                .bokun-andash__biz-wf { display:flex; flex-direction:column; gap:8px; margin:6px 0 2px; }
+                .bokun-andash__biz-wfrow { display:grid; grid-template-columns:150px 1fr auto; gap:10px; align-items:center; font-size:13px; }
+                .bokun-andash__biz-wflabel { color:var(--an-ink-2); }
+                .bokun-andash__biz-wftrack { height:14px; border-radius:7px; background:var(--an-blue-soft); position:relative; overflow:hidden; }
+                .bokun-andash__biz-wffill { position:absolute; left:0; top:0; bottom:0; border-radius:7px; }
+                .bokun-andash__biz-wfval { font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap; }
+                .bokun-andash__biz-note { color:var(--an-ink-2); font-size:12px; margin-top:10px; }
+                .bokun-andash__biz-overhead { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:14px; padding-top:12px; border-top:1px solid var(--an-line); font-size:13px; }
+                .bokun-andash__biz-overhead strong { font-variant-numeric:tabular-nums; }
                 .bokun-andash__insights { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:14px; }
                 .bokun-andash__insight { background:var(--an-surface); border:1px solid var(--an-line); border-left:3px solid var(--an-blue); border-radius:10px; padding:12px 14px; }
                 .bokun-andash__insight-label { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--an-ink-2); }
@@ -4329,6 +4371,66 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
 
                 var lastFiltered = ROWS;
+
+                // Business Results metric: a filter-driven breakdown of how net
+                // revenue is produced for the currently shown bookings — the same
+                // margin chain the Net revenue metric and the Records table use,
+                // decomposed as Gross earned → − Partner cost → Net margin. Money
+                // is scoped to the net-revenue currency (never summed across
+                // currencies). Overhead is business-wide and shown as a fixed line
+                // that does not change with the filters.
+                function renderBizResults( data ) {
+                    var wrap = root.querySelector( '[data-bizresults]' );
+                    if ( ! wrap ) { return; }
+                    var cur = netRevCur;
+                    var total = data.length, matched = 0, gross = 0, partnerCost = 0, netMargin = 0, netAny = false, unmatchedGross = 0;
+                    data.forEach( function ( r ) {
+                        var isMatched = ( r.net_price !== null && r.net_price !== undefined );
+                        if ( isMatched ) { matched++; }
+                        if ( esc( r.currency ) !== cur ) { return; }
+                        if ( isMatched ) {
+                            gross += ( r._grossEarned || 0 );
+                            if ( r._net_cost !== null && r._net_cost !== undefined ) { partnerCost += r._net_cost; }
+                            if ( r._net_revenue !== null && r._net_revenue !== undefined ) { netMargin += r._net_revenue; netAny = true; }
+                        } else {
+                            unmatchedGross += ( r._grossEarned || 0 );
+                        }
+                    } );
+                    var coverage = total ? Math.round( ( matched / total ) * 100 ) : 0;
+                    var curSfx = cur ? ' ' + cur : '';
+                    function money( n ) { return fmtMoney( n ) + curSfx; }
+                    var scaleMax = Math.max( gross, partnerCost, Math.abs( netMargin ), 1 );
+                    function wfRow( label, value, color ) {
+                        var pct = Math.min( 100, Math.round( ( Math.abs( value ) / scaleMax ) * 100 ) );
+                        return '<div class="bokun-andash__biz-wfrow"><span class="bokun-andash__biz-wflabel">' + escHtml( label ) + '</span>' +
+                            '<div class="bokun-andash__biz-wftrack"><span class="bokun-andash__biz-wffill" style="width:' + pct + '%;background:' + color + ';"></span></div>' +
+                            '<span class="bokun-andash__biz-wfval' + ( value < 0 ? ' bokun-andash__neg' : '' ) + '">' + escHtml( money( value ) ) + '</span></div>';
+                    }
+                    var tiles = [
+                        { label: L.bookings, value: fmtInt( total ) },
+                        { label: L.bizMatched, value: fmtInt( matched ) },
+                        { label: L.bizCoverage, value: coverage + '%' },
+                        { label: L.bizGrossEarned, value: ( netAny || gross ) ? money( gross ) : '—' },
+                        { label: L.bizPartnerCost, value: money( partnerCost ) },
+                        { label: L.bizNetMargin, value: netAny ? money( netMargin ) : '—' },
+                        { label: L.bizAvgMargin, value: matched ? money( netMargin / matched ) : '—' }
+                    ];
+                    var tilesHtml = '<div class="bokun-andash__kpis">' + tiles.map( function ( t ) {
+                        return '<div class="bokun-andash__kpi"><div class="bokun-andash__kpi-label">' + escHtml( t.label ) + '</div><div class="bokun-andash__kpi-value">' + escHtml( t.value ) + '</div></div>';
+                    } ).join( '' ) + '</div>';
+                    var wf = '<div class="bokun-andash__biz-wf">' +
+                        wfRow( L.bizGrossEarned, gross, 'var(--an-blue)' ) +
+                        wfRow( '− ' + L.bizPartnerCost, -partnerCost, 'var(--an-crit)' ) +
+                        wfRow( '= ' + L.bizNetMargin, netMargin, netMargin < 0 ? 'var(--an-crit)' : 'var(--an-good)' ) +
+                        '</div>';
+                    var unmatchedNote = unmatchedGross ? '<p class="bokun-andash__biz-note">' + escHtml( money( unmatchedGross ) + ' ' + L.bizUnmatched ) + '</p>' : '';
+                    var overheadInfo = ( L.monthlyOverhead && L.monthlyOverhead > 0 )
+                        ? '<span>' + escHtml( L.bizOverheadLine ) + '</span> <strong>' + escHtml( fmtMoney( L.monthlyOverhead ) + ' ' + ( L.bizCurrency || '' ) + ' ' + L.bizPerMonth ) + '</strong> '
+                        : '';
+                    var overhead = '<div class="bokun-andash__biz-overhead">' + overheadInfo + '<button type="button" class="button" data-open-biz>' + escHtml( L.bizViewPnl ) + '</button></div>';
+                    wrap.innerHTML = '<div class="bokun-andash__biz-card"><h3>' + escHtml( L.bizHow ) + '</h3><p class="bokun-andash__biz-sub">' + escHtml( L.bizIntro ) + '</p>' + tilesHtml + wf + unmatchedNote + overhead + '</div>';
+                }
+
                 function renderMetricTitles() {
                     root.querySelector( '[data-trend-title]' ).textContent = L.trend + ' — ' + metricLabelFull();
                     root.querySelector( '[data-topproducts-title]' ).textContent = L.topProducts + ' — ' + metricLabelFull();
@@ -4351,19 +4453,44 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     renderPaymentMix( lastFiltered );
                     renderBreakdown( lastFiltered );
                     renderDetail( lastFiltered );
+                    renderBizResults( lastFiltered );
                 }
 
                 root.querySelector( '[data-f-search]' ).addEventListener( 'input', recompute );
                 root.querySelectorAll( '[data-f-dim], [data-f-date]' ).forEach( function ( el ) { el.addEventListener( 'change', function () {
                     if ( el.hasAttribute( 'data-f-dim' ) ) { setQuickActive( false ); }
                     if ( ( el.getAttribute( 'data-f-date' ) || '' ).indexOf( 'created_' ) === 0 ) {
-                        root.querySelectorAll( '[data-preset]' ).forEach( function ( b ) { b.classList.remove( 'is-active' ); } );
+                        clearPresetActive();
                     }
                     recompute();
                 } ); } );
                 root.querySelector( '[data-groupby]' ).addEventListener( 'change', function () { renderBreakdown( lastFiltered ); } );
-                root.querySelectorAll( '[data-metric]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { metric = btn.getAttribute( 'data-metric' ); root.querySelectorAll( '[data-metric]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } ); recompute(); } ); } );
-                root.querySelectorAll( '[data-preset]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { root.querySelectorAll( '[data-preset]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } ); var days = +btn.getAttribute( 'data-preset' ); var from = root.querySelector( '[data-f-date="created_from"]' ), to = root.querySelector( '[data-f-date="created_to"]' ); if ( ! days ) { from.value = ''; to.value = ''; } else { var d = new Date(); var f2 = new Date(); f2.setDate( d.getDate() - days ); from.value = f2.toISOString().slice( 0, 10 ); to.value = ''; } recompute(); } ); } );
+                root.querySelectorAll( '[data-metric]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { metric = btn.getAttribute( 'data-metric' ); root.querySelectorAll( '[data-metric]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } ); root.classList.toggle( 'is-bizmetric', metric === 'bizresults' ); recompute(); } ); } );
+                // Date-range presets. Day presets (7d/30d) and month presets
+                // (3m/6m) share one highlight group; "All" (data-preset="0")
+                // clears the range to show the whole retained window.
+                function clearPresetActive() {
+                    root.querySelectorAll( '[data-preset], [data-preset-months]' ).forEach( function ( b ) { b.classList.remove( 'is-active' ); } );
+                }
+                function setCreatedFrom( date ) {
+                    var from = root.querySelector( '[data-f-date="created_from"]' ), to = root.querySelector( '[data-f-date="created_to"]' );
+                    from.value = date || ''; to.value = '';
+                }
+                function daysAgo( days ) { var d = new Date(); d.setDate( d.getDate() - days ); return d.toISOString().slice( 0, 10 ); }
+                function monthsAgo( months ) { var d = new Date(); d.setMonth( d.getMonth() - months ); return d.toISOString().slice( 0, 10 ); }
+                // Apply the default view: the last N months by creation date, with
+                // the matching month chip highlighted. N comes from the server
+                // (L.defaultViewMonths); 0 means "no default filter" (show all).
+                function applyDefaultView() {
+                    clearPresetActive();
+                    var m = ( L.defaultViewMonths && L.defaultViewMonths > 0 ) ? L.defaultViewMonths : 0;
+                    if ( ! m ) { setCreatedFrom( '' ); return; }
+                    setCreatedFrom( monthsAgo( m ) );
+                    var chip = root.querySelector( '[data-preset-months="' + m + '"]' );
+                    if ( chip ) { chip.classList.add( 'is-active' ); }
+                }
+                root.querySelectorAll( '[data-preset]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { clearPresetActive(); btn.classList.add( 'is-active' ); var days = +btn.getAttribute( 'data-preset' ); setCreatedFrom( days ? daysAgo( days ) : '' ); recompute(); } ); } );
+                root.querySelectorAll( '[data-preset-months]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { clearPresetActive(); btn.classList.add( 'is-active' ); setCreatedFrom( monthsAgo( +btn.getAttribute( 'data-preset-months' ) ) ); recompute(); } ); } );
                 var quickBtn = root.querySelector( '[data-quick]' );
                 if ( quickBtn ) { quickBtn.addEventListener( 'click', toggleQuick ); }
                 root.querySelector( '[data-reset]' ).addEventListener( 'click', function () {
@@ -4373,7 +4500,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     root.querySelectorAll( '[data-f-dim]' ).forEach( function ( el ) { el.value = ''; } );
                     root.querySelectorAll( '[data-f-date]' ).forEach( function ( el ) { el.value = ''; } );
                     root.querySelector( '[data-f-search]' ).value = '';
-                    root.querySelectorAll( '[data-preset]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b.getAttribute( 'data-preset' ) === '0' ); } );
+                    applyDefaultView();
                     recompute();
                 } );
                 root.querySelector( '[data-export]' ).addEventListener( 'click', function () {
@@ -4385,28 +4512,28 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var a = document.createElement( 'a' ); a.href = URL.createObjectURL( blob ); a.download = 'bokun-analytics.csv'; document.body.appendChild( a ); a.click(); document.body.removeChild( a );
                 } );
 
-                // Business Results toggle: swap the analytics view for the
-                // embedded business panel (and hide the booking-only sidebar +
-                // metric buttons, which don't apply to the overhead P&L). The
-                // business panel inits lazily the first time it is shown.
+                // Full overhead P&L drill-down: the "View full overhead P&L →"
+                // button in the Business Results metric view swaps in the detailed
+                // (unfiltered, business-wide) P&L panel; the Back button returns.
+                // The business panel inits lazily the first time it is shown.
                 ( function () {
-                    var bizToggle = root.querySelector( '[data-biz-toggle]' );
                     var bizView = root.querySelector( '[data-biz-view]' );
                     var anaView = root.querySelector( '[data-analytics-view]' );
-                    if ( ! bizToggle || ! bizView || ! anaView ) { return; }
-                    bizToggle.addEventListener( 'click', function () {
-                        var showBiz = bizView.hidden;
-                        bizView.hidden = ! showBiz;
-                        anaView.hidden = showBiz;
-                        root.classList.toggle( 'is-biz', showBiz );
-                        bizToggle.classList.toggle( 'is-active', showBiz );
-                        bizToggle.setAttribute( 'aria-pressed', showBiz ? 'true' : 'false' );
-                        bizToggle.textContent = showBiz ? ( L.backToAna || '← Back to analytics' ) : ( L.bizResults || 'Business Results' );
-                        if ( showBiz ) { var br = bizView.querySelector( '.bokun-bizdash' ); if ( br && br.bokunBusinessInit ) { br.bokunBusinessInit(); } }
+                    if ( ! bizView || ! anaView ) { return; }
+                    function showBiz( show ) {
+                        bizView.hidden = ! show;
+                        anaView.hidden = show;
+                        root.classList.toggle( 'is-biz', show );
+                        if ( show ) { var br = bizView.querySelector( '.bokun-bizdash' ); if ( br && br.bokunBusinessInit ) { br.bokunBusinessInit(); } }
+                    }
+                    root.addEventListener( 'click', function ( e ) {
+                        if ( ! e.target || ! e.target.closest ) { return; }
+                        if ( e.target.closest( '[data-open-biz]' ) ) { showBiz( true ); }
+                        else if ( e.target.closest( '[data-back-biz]' ) ) { showBiz( false ); }
                     } );
                 } )();
 
-                function init() { if ( started ) { return; } started = true; recompute(); }
+                function init() { if ( started ) { return; } started = true; applyDefaultView(); recompute(); }
                 root.closest( '[data-bokun-tabs]' ) && ( root.closest( '[data-bokun-tabs]' ).bokunAnalyticsInit = init );
                 var panel = root.closest( '[data-tab-panel]' );
                 if ( ! panel || ! panel.hidden ) { init(); }

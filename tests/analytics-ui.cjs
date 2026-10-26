@@ -17,10 +17,10 @@ const rows = [
     {...base, confirmation_code: 'TEST-7', product_title: '<Tour "D">', channel_title: 'Direct',
         created_datetime: '2026-09-01 12:00:00', travel_datetime: '2026-09-15 12:00:00'},
 ];
-function setup(data = rows) {
+function setup(data = rows, extra = {}) {
     const rendered = spawnSync(process.env.BOKUN_TEST_PHP || 'php',
         [...JSON.parse(process.env.BOKUN_TEST_PHP_ARGS || '[]'), path.join(__dirname, 'analytics-fixture.php')],
-        {input: JSON.stringify({rows: data}), encoding: 'utf8'});
+        {input: JSON.stringify({rows: data, ...extra}), encoding: 'utf8'});
     assert.equal(rendered.status, 0, rendered.error?.message || rendered.stderr || rendered.stdout);
     const dom = new JSDOM(rendered.stdout, {runScripts: 'outside-only', url: 'https://analytics.example.test'});
     const {window} = dom;
@@ -184,6 +184,40 @@ check('quick filter without matching channel does not drop the constraint', () =
     empty.q('[data-reset]').click();
     assert.equal(empty.records().length, 1);
     empty.dom.window.close();
+});
+check('default view shows the last N months by creation date and All expands it', () => {
+    const recent = {...base, confirmation_code: 'RECENT', created_datetime: '2026-10-01 12:00:00'};
+    const old = {...base, confirmation_code: 'OLD', created_datetime: '2026-05-01 12:00:00'};
+    const d = setup([recent, old], {default_view_months: 3});
+    // On load the default view is the last 3 months (vs 2026-10-25), so the
+    // ~5-month-old booking is excluded and the 3m chip is highlighted.
+    assert.deepEqual(d.records(), ['RECENT']);
+    assert.equal(d.q('[data-preset-months="3"]').classList.contains('is-active'), true);
+    // "All" widens to the full retained window and brings the older row back.
+    d.q('[data-preset="0"]').click();
+    assert.deepEqual([...d.records()].sort(), ['OLD', 'RECENT']);
+    assert.equal(d.q('[data-preset-months="3"]').classList.contains('is-active'), false);
+    // Reset returns to the default 3-month view.
+    d.q('[data-reset]').click();
+    assert.deepEqual(d.records(), ['RECENT']);
+    d.dom.window.close();
+});
+check('Business Results metric shows a margin breakdown that follows the filters', () => {
+    reset();
+    q('[data-metric="bizresults"]').click();
+    const rootEl = ui.dom.window.document.querySelector('.bokun-andash');
+    assert.equal(rootEl.classList.contains('is-bizmetric'), true);
+    const bookingsValue = () => {
+        const tile = [...q('[data-bizresults]').querySelectorAll('.bokun-andash__kpi')]
+            .find(k => /bookings/i.test(k.querySelector('.bokun-andash__kpi-label').textContent));
+        return tile.querySelector('.bokun-andash__kpi-value').textContent;
+    };
+    assert.match(q('[data-bizresults]').textContent, /net revenue is calculated/i);
+    assert.equal(bookingsValue(), '7');
+    item('channel_title', 'Viator.com').click();
+    assert.equal(bookingsValue(), '3');
+    q('[data-metric="netrev"]').click();
+    assert.equal(rootEl.classList.contains('is-bizmetric'), false);
 });
 ui.dom.window.close();
 console.log(`${checks} Analytics interaction checks passed.`);

@@ -43,14 +43,33 @@ function bokun_analytics_get_table_name() {
 }
 
 /**
- * Number of trailing months of bookings (by creation date) to retain.
+ * Number of trailing months of bookings (by creation date) to retain in the
+ * source table (and therefore make available in the dashboard). The dashboard
+ * defaults to a shorter view window (bokun_analytics_get_default_view_months())
+ * but the data behind it is kept for this many months so the range can be
+ * expanded.
  *
  * @return int
  */
 function bokun_analytics_get_window_months() {
-    $months = (int) apply_filters( 'bokun_analytics_window_months', 3 );
+    $months = (int) apply_filters( 'bokun_analytics_window_months', 12 );
 
-    return $months > 0 ? $months : 3;
+    return $months > 0 ? $months : 12;
+}
+
+/**
+ * Number of trailing months the dashboard shows by default. Must not exceed the
+ * retention window; data for the full window remains available by widening the
+ * date range.
+ *
+ * @return int
+ */
+function bokun_analytics_get_default_view_months() {
+    $months = (int) apply_filters( 'bokun_analytics_default_view_months', 3 );
+    $months = $months > 0 ? $months : 3;
+    $window = bokun_analytics_get_window_months();
+
+    return $months > $window ? $window : $months;
 }
 
 /**
