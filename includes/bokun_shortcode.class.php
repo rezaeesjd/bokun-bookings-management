@@ -4605,13 +4605,18 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 root.querySelectorAll( '[data-preset-basis]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () {
                     var nb = btn.getAttribute( 'data-preset-basis' );
                     if ( nb === presetBasis ) { return; }
+                    // Move the whole window to the new basis: carry BOTH bounds
+                    // (a bounded range keeps its upper bound; an upper-bound-only
+                    // range stays upper-bound-only) and clear the old basis.
                     var oldFrom = root.querySelector( '[data-f-date="' + presetBasis + '_from"]' ), oldTo = root.querySelector( '[data-f-date="' + presetBasis + '_to"]' );
-                    var carried = oldFrom ? oldFrom.value : '';
+                    var carriedFrom = oldFrom ? oldFrom.value : '', carriedTo = oldTo ? oldTo.value : '';
                     if ( oldFrom ) { oldFrom.value = ''; }
                     if ( oldTo ) { oldTo.value = ''; }
                     presetBasis = nb;
                     root.querySelectorAll( '[data-preset-basis]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } );
-                    setPresetFrom( carried );
+                    var newFrom = root.querySelector( '[data-f-date="' + presetBasis + '_from"]' ), newTo = root.querySelector( '[data-f-date="' + presetBasis + '_to"]' );
+                    if ( newFrom ) { newFrom.value = carriedFrom || ''; }
+                    if ( newTo ) { newTo.value = carriedTo || ''; }
                     recompute();
                 } ); } );
                 var quickBtn = root.querySelector( '[data-quick]' );

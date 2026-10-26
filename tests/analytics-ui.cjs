@@ -329,6 +329,24 @@ check('period presets can filter by travel date, not just created date', () => {
     assert.deepEqual(d.records(), ['TRV-IN']);
     d.dom.window.close();
 });
+check('switching range basis carries both date bounds, not just the start', () => {
+    const d = setup([
+        {...base, confirmation_code: 'SEP', created_datetime: '2026-09-10 12:00:00'},
+        {...base, confirmation_code: 'OCT', created_datetime: '2026-10-10 12:00:00'},
+    ]);
+    // A bounded Created window of September only.
+    d.set('[data-f-date="created_from"]', '2026-09-01');
+    d.set('[data-f-date="created_to"]', '2026-09-30');
+    // Switch to Travel basis: both travel dates are in November, so a window
+    // that correctly carried Sep 1–30 keeps zero travel rows — but the key
+    // regression check is that the upper bound transferred (not open-ended).
+    d.q('[data-preset-basis="travel"]').click();
+    assert.equal(d.q('[data-f-date="travel_from"]').value, '2026-09-01');
+    assert.equal(d.q('[data-f-date="travel_to"]').value, '2026-09-30');
+    assert.equal(d.q('[data-f-date="created_from"]').value, '');
+    assert.equal(d.q('[data-f-date="created_to"]').value, '');
+    d.dom.window.close();
+});
 check('search spans all data, ignoring the active date window', () => {
     const d = setup([
         {...base, confirmation_code: 'RECENT', created_datetime: '2026-10-01 12:00:00'},
