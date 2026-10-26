@@ -30,6 +30,8 @@ function bokun_partners_products_get_map() { return $GLOBALS['fixture']['partner
 // every row; a test can pass default_view_months to exercise the default view.
 function bokun_analytics_get_default_view_months() { return (int) ($GLOBALS['fixture']['default_view_months'] ?? 0); }
 function bokun_analytics_get_window_months() { return (int) ($GLOBALS['fixture']['window_months'] ?? 12); }
+function bokun_business_monthly_overhead() { return (float) ($GLOBALS['fixture']['monthly_overhead'] ?? 0); }
+function bokun_business_reporting_currency() { return 'EUR'; }
 function _prime_post_caches($ids, $term_meta = true, $meta = true) {}
 if (!defined('ARRAY_A')) { define('ARRAY_A', 'ARRAY_A'); }
 // Minimal $wpdb double. Counts queries so a test can assert the records

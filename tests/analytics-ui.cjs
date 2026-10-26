@@ -262,6 +262,29 @@ check('Business Results average margin is per selected-currency booking, not all
     assert.match(bizTileVal(d.q('[data-bizresults]'), 'Avg net margin / booking'), /60/);
     d.dom.window.close();
 });
+check('Business Results subtracts business-wide overhead and shows the monthly run-rate', () => {
+    const mk = (code, month) => ({created_datetime: '2026-' + month + '-01 12:00:00', product_title: 'Tour', channel_title: 'Direct',
+        pb_status: 'CONFIRMED', result: 'full', currency: 'EUR', adult_participants: 2, partner_page_id: '10', price_amount: 100, confirmation_code: code});
+    // Two matched EUR bookings (margin 60 each = 120) across two distinct
+    // creation months, with 100/month business-wide overhead.
+    const d = setup([mk('SEP', '09'), mk('OCT', '10')], {
+        monthly_overhead: 100,
+        partners: {'10': {net_price: 20, title: 'Tour', commission: 0, departure_city: '', partner_page_id: '10'}}
+    });
+    d.q('[data-metric="bizresults"]').click();
+    const panel = d.q('[data-bizresults]');
+    // Net margin 120; period overhead = 100 x 2 months = 200; op profit = -80.
+    assert.match(bizTileVal(panel, 'Net margin'), /120/);
+    assert.match(bizTileVal(panel, 'Operating profit'), /-?80/);
+    // Monthly run-rate: 2 months, avg margin 60, overhead 100, profit -40.
+    assert.match(bizTileVal(panel, 'Months covered'), /2/);
+    assert.match(bizTileVal(panel, 'Avg monthly margin'), /60/);
+    assert.match(bizTileVal(panel, 'Monthly overhead'), /100/);
+    assert.match(bizTileVal(panel, 'Monthly operating profit'), /-?40/);
+    // The overhead waterfall rows reconcile margin -> operating profit.
+    assert.match(panel.textContent, /Operating profit/);
+    d.dom.window.close();
+});
 check('record links enrichment uses one bulk meta query, not per-row lookups', () => {
     const mk = (id, code) => ({post_id: id, confirmation_code: code, external_booking_reference: 'EXT' + id,
         created_datetime: '2026-10-01 12:00:00', travel_datetime: '2026-11-01 12:00:00', product_title: 'Tour',
