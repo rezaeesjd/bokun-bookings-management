@@ -4382,19 +4382,29 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 function renderBizResults( data ) {
                     var wrap = root.querySelector( '[data-bizresults]' );
                     if ( ! wrap ) { return; }
-                    var cur = netRevCur;
-                    var total = data.length, matched = 0, gross = 0, partnerCost = 0, netMargin = 0, netAny = false, unmatchedGross = 0;
+                    // Net revenue is reported in one currency. Prefer the
+                    // net-revenue currency; when the filtered set has no computable
+                    // net revenue (e.g. only uncatalogued bookings) fall back to the
+                    // set's primary currency so unmatched gross is still shown.
+                    var cur = netRevCur || primaryCurrency( data ).cur;
+                    var total = data.length, matched = 0, gross = 0, partnerCost = 0, netMargin = 0, marginCount = 0, netAny = false, unmatchedGross = 0;
                     data.forEach( function ( r ) {
                         var isMatched = ( r.net_price !== null && r.net_price !== undefined );
                         if ( isMatched ) { matched++; }
                         if ( esc( r.currency ) !== cur ) { return; }
-                        if ( isMatched ) {
-                            gross += ( r._grossEarned || 0 );
-                            if ( r._net_cost !== null && r._net_cost !== undefined ) { partnerCost += r._net_cost; }
-                            if ( r._net_revenue !== null && r._net_revenue !== undefined ) { netMargin += r._net_revenue; netAny = true; }
-                        } else {
-                            unmatchedGross += ( r._grossEarned || 0 );
-                        }
+                        if ( ! isMatched ) { unmatchedGross += ( r._grossEarned || 0 ); return; }
+                        // The waterfall must reconcile (gross − cost = margin), so
+                        // gross, partner cost and margin are summed over the SAME
+                        // rows — those with a computable net revenue. A catalog-
+                        // matched booking whose gross can't be parsed has a null
+                        // net revenue and is left out of all three (and the average
+                        // denominator) rather than adding a cost with no margin.
+                        if ( r._net_revenue === null || r._net_revenue === undefined ) { return; }
+                        gross += ( r._grossEarned || 0 );
+                        partnerCost += ( r._net_cost || 0 );
+                        netMargin += r._net_revenue;
+                        marginCount++;
+                        netAny = true;
                     } );
                     var coverage = total ? Math.round( ( matched / total ) * 100 ) : 0;
                     var curSfx = cur ? ' ' + cur : '';
@@ -4410,10 +4420,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                         { label: L.bookings, value: fmtInt( total ) },
                         { label: L.bizMatched, value: fmtInt( matched ) },
                         { label: L.bizCoverage, value: coverage + '%' },
-                        { label: L.bizGrossEarned, value: ( netAny || gross ) ? money( gross ) : '—' },
-                        { label: L.bizPartnerCost, value: money( partnerCost ) },
+                        { label: L.bizGrossEarned, value: netAny ? money( gross ) : '—' },
+                        { label: L.bizPartnerCost, value: netAny ? money( partnerCost ) : '—' },
                         { label: L.bizNetMargin, value: netAny ? money( netMargin ) : '—' },
-                        { label: L.bizAvgMargin, value: matched ? money( netMargin / matched ) : '—' }
+                        { label: L.bizAvgMargin, value: marginCount ? money( netMargin / marginCount ) : '—' }
                     ];
                     var tilesHtml = '<div class="bokun-andash__kpis">' + tiles.map( function ( t ) {
                         return '<div class="bokun-andash__kpi"><div class="bokun-andash__kpi-label">' + escHtml( t.label ) + '</div><div class="bokun-andash__kpi-value">' + escHtml( t.value ) + '</div></div>';

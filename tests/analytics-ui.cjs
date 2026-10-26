@@ -219,5 +219,48 @@ check('Business Results metric shows a margin breakdown that follows the filters
     q('[data-metric="netrev"]').click();
     assert.equal(rootEl.classList.contains('is-bizmetric'), false);
 });
+const bizTileVal = (panel, label) => {
+    const t = [...panel.querySelectorAll('.bokun-andash__kpi')]
+        .find(k => k.querySelector('.bokun-andash__kpi-label').textContent === label);
+    return t && t.querySelector('.bokun-andash__kpi-value').textContent;
+};
+check('Business Results reconciles gross − cost = margin and keeps unmatched gross visible', () => {
+    const mk = (code, over) => ({created_datetime: '2026-10-01 12:00:00', travel_datetime: '2026-11-01 12:00:00',
+        product_title: 'Tour', channel_title: 'Direct', pb_status: 'CONFIRMED', result: 'full', currency: 'EUR',
+        payment_method: 'Card', adult_participants: 2, confirmation_code: code, ...over});
+    const d = setup([
+        mk('MATCHED', {partner_page_id: '10', price_amount: 100}),  // gross 100, cost 40 -> margin 60
+        mk('NOGROSS', {partner_page_id: '10', price_amount: null}), // matched but unparseable gross -> excluded
+        mk('UNCAT', {price_amount: 70})                             // not in catalog -> unmatched gross
+    ], {partners: {'10': {net_price: 20, title: 'Tour', commission: 0, departure_city: '', partner_page_id: '10'}}});
+    d.q('[data-metric="bizresults"]').click();
+    const panel = d.q('[data-bizresults]');
+    // The waterfall sums over the computable-margin row only, so it reconciles.
+    assert.match(bizTileVal(panel, 'Gross earned'), /100/);
+    assert.match(bizTileVal(panel, 'Partner cost'), /40/);
+    assert.match(bizTileVal(panel, 'Net margin'), /60/);
+    assert.match(bizTileVal(panel, 'Avg net margin / booking'), /60/);
+    // Uncatalogued gross is surfaced rather than silently dropped.
+    assert.match(panel.textContent, /70[\s\S]*not in the partners catalog/);
+    d.dom.window.close();
+});
+check('Business Results shows unmatched gross even when nothing has net revenue', () => {
+    const d = setup([{created_datetime: '2026-10-01 12:00:00', product_title: 'X', channel_title: 'Direct',
+        pb_status: 'CONFIRMED', result: 'full', currency: 'EUR', adult_participants: 2, price_amount: 100, confirmation_code: 'U1'}]);
+    d.q('[data-metric="bizresults"]').click();
+    assert.match(d.q('[data-bizresults]').textContent, /100[\s\S]*not in the partners catalog/);
+    d.dom.window.close();
+});
+check('Business Results average margin is per selected-currency booking, not all currencies', () => {
+    const mk = (code, cur) => ({created_datetime: '2026-10-01 12:00:00', product_title: 'Tour', channel_title: 'Direct',
+        pb_status: 'CONFIRMED', result: 'full', currency: cur, adult_participants: 2, partner_page_id: '10', price_amount: 100, confirmation_code: code});
+    const d = setup([mk('EUR1', 'EUR'), mk('USD1', 'USD')],
+        {partners: {'10': {net_price: 20, title: 'Tour', commission: 0, departure_city: '', partner_page_id: '10'}}});
+    d.q('[data-metric="bizresults"]').click();
+    // Each booking earns margin 60 in its own currency; the average is 60 (one
+    // booking in the selected currency), not 30 (60 split across both matches).
+    assert.match(bizTileVal(d.q('[data-bizresults]'), 'Avg net margin / booking'), /60/);
+    d.dom.window.close();
+});
 ui.dom.window.close();
 console.log(`${checks} Analytics interaction checks passed.`);
