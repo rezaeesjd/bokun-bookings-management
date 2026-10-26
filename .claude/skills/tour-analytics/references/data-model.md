@@ -29,6 +29,7 @@ meta ("N/A" and "" treated as null).
 | `payment_method` | `booking_status` taxonomy: Amex / PayPal / Other (`amex`,`paypal`,`other-payment`) |
 | `product_title` | `_product_title` / `productBookings_0_product_title` |
 | `product_option` | `productBookings_0_fields_rateTitle` / `productBookings_0_rateTitle` |
+| `customer_name` | lead traveller name = `_first_name` + `_last_name` (the booking's main contact; shown as "Tour leader" on the records table). "N/A"/empty parts drop out |
 | `travel_datetime` | raw `_original_start_datetime` → GMT (fallback `post_date_gmt`) |
 | `created_datetime` | raw `_original_creation_date` / `creationDate` → GMT (fallback `bookingcreationdate`) |
 | `adult_participants` / `child_participants` / `infant_participants` | parsed from `pricecategory1..5` meta by title keyword (adult/senior, child/youth/kid, infant/baby) |
