@@ -30,5 +30,19 @@ function bokun_partners_products_get_map() { return $GLOBALS['fixture']['partner
 // every row; a test can pass default_view_months to exercise the default view.
 function bokun_analytics_get_default_view_months() { return (int) ($GLOBALS['fixture']['default_view_months'] ?? 0); }
 function bokun_analytics_get_window_months() { return (int) ($GLOBALS['fixture']['window_months'] ?? 12); }
+function _prime_post_caches($ids, $term_meta = true, $meta = true) {}
+if (!defined('ARRAY_A')) { define('ARRAY_A', 'ARRAY_A'); }
+// Minimal $wpdb double. Counts queries so a test can assert the records
+// enrichment uses one bulk meta query, never a per-row lookup (the per-row
+// path loaded every booking's meta and blanked the dashboard on large imports).
+class Bokun_Test_WPDB {
+    public $postmeta = 'wp_postmeta';
+    public $query_count = 0;
+    public $meta = array();
+    public function get_results($sql, $output = null) { $this->query_count++; return $this->meta; }
+}
+$GLOBALS['wpdb'] = new Bokun_Test_WPDB();
+$GLOBALS['wpdb']->meta = isset($GLOBALS['fixture']['wpdb_meta']) ? $GLOBALS['fixture']['wpdb_meta'] : array();
 require dirname(__DIR__) . '/includes/bokun_shortcode.class.php';
 echo $GLOBALS['bokun_shortcode']->render_analytics_panel();
+echo "\n<!--wpdb-queries:" . (int) $GLOBALS['wpdb']->query_count . "-->";
