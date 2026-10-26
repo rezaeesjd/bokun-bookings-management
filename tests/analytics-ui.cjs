@@ -36,7 +36,7 @@ function setup(data = rows, extra = {}) {
     const set = (sel, value, event = 'change') => { q(sel).value = value; q(sel).dispatchEvent(new window.Event(event, {bubbles: true})); };
     const drill = (container, key, value) => [...q(container).querySelectorAll('[data-filter-dim]')]
         .find(el => el.dataset.filterDim === key && el.dataset.filterValue === value);
-    return {dom, q, item, count, records, set, drill};
+    return {dom, q, item, count, records, set, drill, raw: rendered.stdout};
 }
 let checks = 0;
 function check(label, test) { test(); checks++; console.log('PASS ' + label); }
@@ -260,6 +260,25 @@ check('Business Results average margin is per selected-currency booking, not all
     // Each booking earns margin 60 in its own currency; the average is 60 (one
     // booking in the selected currency), not 30 (60 split across both matches).
     assert.match(bizTileVal(d.q('[data-bizresults]'), 'Avg net margin / booking'), /60/);
+    d.dom.window.close();
+});
+check('record links enrichment uses one bulk meta query, not per-row lookups', () => {
+    const mk = (id, code) => ({post_id: id, confirmation_code: code, external_booking_reference: 'EXT' + id,
+        created_datetime: '2026-10-01 12:00:00', travel_datetime: '2026-11-01 12:00:00', product_title: 'Tour',
+        channel_title: 'Direct', pb_status: 'CONFIRMED', result: 'full', currency: 'EUR', adult_participants: 2, price_amount: 100});
+    const data = Array.from({length: 6}, (_, i) => mk(100 + i, 'B' + i));
+    const d = setup(data, {wpdb_meta: [
+        {post_id: 100, meta_key: 'productBookings_0_parentBookingId', meta_value: 'PB100'},
+        {post_id: 101, meta_key: '_user_channel_refunded', meta_value: '1'}
+    ]});
+    // One query for the whole set — never one per booking. This is the guard for
+    // the large-import regression that exhausted memory and blanked the page.
+    assert.match(d.raw, /<!--wpdb-queries:1-->/);
+    const linksCell = [...d.q('[data-detail] tbody').querySelectorAll('tr')]
+        .map(r => r.querySelector('.bokun-andash__links')).find(Boolean);
+    assert.ok(/Viator/.test(linksCell.textContent));
+    assert.ok(/WP/.test(linksCell.textContent));
+    assert.ok(/Booking/.test(linksCell.textContent));
     d.dom.window.close();
 });
 ui.dom.window.close();

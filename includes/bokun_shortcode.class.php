@@ -3249,16 +3249,45 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
             // Enrich each record with the operational links shown in the Records
             // table (single-booking page, WP edit screen, Viator conversation,
             // Bokun sale) and the channel-refund marker state for the inline
-            // Refunded toggle. Derived here from the post the row already
-            // references rather than stored as source columns. Post caches are
-            // primed once so get_permalink()/get_post_meta() stay warm.
+            // Refunded toggle. Derived from the post each row references.
+            //
+            // Scale-safe: prime only the lightweight post OBJECTS (for permalinks
+            // and edit links) and read the two meta keys we need in ONE bulk query.
+            // We deliberately do NOT prime the full post-meta cache or call
+            // get_post_meta() per row — booking posts carry dozens of meta each, so
+            // over a full 12-month window that would load the entire postmeta table
+            // into memory and blank the dashboard with a fatal. One query for two
+            // keys stays flat regardless of how many bookings were imported.
             if ( ! empty( $rows ) ) {
+                global $wpdb;
                 $row_ids = array();
                 foreach ( $rows as $r ) {
                     if ( ! empty( $r['post_id'] ) ) { $row_ids[] = (int) $r['post_id']; }
                 }
-                if ( $row_ids && function_exists( '_prime_post_caches' ) ) {
-                    _prime_post_caches( $row_ids, false, true );
+                $parent_by_id   = array();
+                $refunded_by_id = array();
+                if ( $row_ids ) {
+                    if ( function_exists( '_prime_post_caches' ) ) {
+                        // Post objects only: no term-meta, no post-meta cache.
+                        _prime_post_caches( $row_ids, false, false );
+                    }
+                    if ( isset( $wpdb ) && is_object( $wpdb ) ) {
+                        $ids_in    = implode( ',', array_map( 'intval', array_unique( $row_ids ) ) );
+                        $meta_rows = $wpdb->get_results(
+                            "SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta}
+                             WHERE post_id IN ($ids_in)
+                             AND meta_key IN ('productBookings_0_parentBookingId','_user_channel_refunded')",
+                            ARRAY_A
+                        );
+                        foreach ( (array) $meta_rows as $mr ) {
+                            $mpid = (int) $mr['post_id'];
+                            if ( 'productBookings_0_parentBookingId' === $mr['meta_key'] ) {
+                                $parent_by_id[ $mpid ] = (string) $mr['meta_value'];
+                            } elseif ( '_user_channel_refunded' === $mr['meta_key'] ) {
+                                $refunded_by_id[ $mpid ] = $mr['meta_value'];
+                            }
+                        }
+                    }
                 }
                 foreach ( $rows as $i => $r ) {
                     $pid = isset( $r['post_id'] ) ? (int) $r['post_id'] : 0;
@@ -3268,12 +3297,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     $rows[ $i ]['viator_url'] = ( '' !== $ext )
                         ? 'https://supplier.viator.com/messaging/conversation/booking/' . rawurlencode( $ext )
                         : '';
-                    $parent = $pid ? get_post_meta( $pid, 'productBookings_0_parentBookingId', true ) : '';
-                    $parent = is_scalar( $parent ) ? (string) $parent : '';
+                    $parent = isset( $parent_by_id[ $pid ] ) ? $parent_by_id[ $pid ] : '';
                     $rows[ $i ]['bokun_url'] = ( '' !== $parent )
                         ? 'https://florenceadventuressrl.bokun.io/sales/' . rawurlencode( $parent )
                         : '';
-                    $rows[ $i ]['channel_refunded'] = ( $pid && get_post_meta( $pid, '_user_channel_refunded', true ) ) ? 1 : 0;
+                    $rows[ $i ]['channel_refunded'] = ( ! empty( $refunded_by_id[ $pid ] ) ) ? 1 : 0;
                 }
             }
 
