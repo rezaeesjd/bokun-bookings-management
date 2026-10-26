@@ -3391,6 +3391,10 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 /* translators: 1: monthly overhead, 2: number of months in the filtered period. */
                 'bizPeriodOhNote' => __( 'Period overhead = %1$s × %2$s months (business-wide, not filtered).', 'BOKUN_txt_domain' ),
                 'links'        => __( 'Links', 'BOKUN_txt_domain' ),
+                'tourLeader'   => __( 'Tour leader', 'BOKUN_txt_domain' ),
+                'presetBasisCreated' => __( 'Created', 'BOKUN_txt_domain' ),
+                'presetBasisTravel'  => __( 'Travel', 'BOKUN_txt_domain' ),
+                'searchAllDates'     => __( '· search spans all dates', 'BOKUN_txt_domain' ),
                 'markRefund'   => __( 'Mark refunded', 'BOKUN_txt_domain' ),
                 'unmarkRefund' => __( 'Un-mark', 'BOKUN_txt_domain' ),
                 'savingRefund' => __( 'Saving…', 'BOKUN_txt_domain' ),
@@ -3431,6 +3435,11 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                             <p class="bokun-andash__insight-sub"><?php esc_html_e( 'Counts reflect all other filters. Select multiple items to include any of them.', 'BOKUN_txt_domain' ); ?></p>
                             <div class="bokun-andash__side-row bokun-andash__quick">
                                 <button type="button" class="bokun-andash__quickbtn" data-quick="viator-confirmed-resulted" aria-pressed="false" title="<?php esc_attr_e( 'Toggle: confirmed Viator.com bookings that already have a result selected', 'BOKUN_txt_domain' ); ?>"><?php esc_html_e( 'Viator · Confirmed · with result', 'BOKUN_txt_domain' ); ?></button>
+                            </div>
+                            <div class="bokun-andash__side-row bokun-andash__basis" role="group" aria-label="<?php esc_attr_e( 'Apply date range to', 'BOKUN_txt_domain' ); ?>">
+                                <span class="bokun-andash__basis-label"><?php esc_html_e( 'Range by', 'BOKUN_txt_domain' ); ?></span>
+                                <button type="button" class="bokun-andash__chip is-active" data-preset-basis="created"><?php esc_html_e( 'Created', 'BOKUN_txt_domain' ); ?></button>
+                                <button type="button" class="bokun-andash__chip" data-preset-basis="travel"><?php esc_html_e( 'Travel', 'BOKUN_txt_domain' ); ?></button>
                             </div>
                             <div class="bokun-andash__side-row bokun-andash__presets" role="group" aria-label="<?php esc_attr_e( 'Date range', 'BOKUN_txt_domain' ); ?>">
                                 <button type="button" class="bokun-andash__chip" data-preset="7"><?php esc_html_e( '7d', 'BOKUN_txt_domain' ); ?></button>
@@ -3576,6 +3585,8 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 .bokun-andash__side-row { margin-bottom:12px; }
                 .bokun-andash__search { width:100%; }
                 .bokun-andash__presets { display:flex; gap:4px; }
+                .bokun-andash__basis { display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
+                .bokun-andash__basis-label { font-size:12px; color:var(--an-ink-2); margin-right:2px; }
                 .bokun-andash__chip, .bokun-andash__seg { appearance:none; background:transparent; border:1px solid var(--an-line); border-radius:999px; padding:6px 12px; font-size:13px; font-weight:600; color:var(--an-ink-2); cursor:pointer; }
                 .bokun-andash__chip.is-active, .bokun-andash__seg.is-active { background:var(--an-blue); color:#fff; border-color:var(--an-blue); }
                 .bokun-andash__quickbtn { width:100%; appearance:none; text-align:left; background:var(--an-blue-soft); border:1px solid var(--an-blue); border-radius:6px; padding:7px 10px; font-size:13px; font-weight:600; color:var(--an-blue); cursor:pointer; }
@@ -3957,12 +3968,20 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
                 function matches( r, f, exceptKey ) {
                     for ( var key in f.dims ) { if ( key !== exceptKey && f.dims[ key ].indexOf( esc( r[ key ] ) ) === -1 ) { return false; } }
-                    var cd = dayStr( r.created_datetime ), td = dayStr( r.travel_datetime );
-                    if ( f.dates.created_from && ( ! cd || cd < f.dates.created_from ) ) { return false; }
-                    if ( f.dates.created_to && ( ! cd || cd > f.dates.created_to ) ) { return false; }
-                    if ( f.dates.travel_from && ( ! td || td < f.dates.travel_from ) ) { return false; }
-                    if ( f.dates.travel_to && ( ! td || td > f.dates.travel_to ) ) { return false; }
-                    if ( f.search ) { var hay = ''; for ( var k in r ) { if ( k.charAt( 0 ) !== '_' ) { hay += ' ' + esc( r[ k ] ).toLowerCase(); } } if ( hay.indexOf( f.search ) === -1 ) { return false; } }
+                    // A search spans ALL retained data: when a query is present the
+                    // date window is bypassed so a booking outside the active period
+                    // (e.g. the default last-3-months view) is still found. Facet
+                    // selections still apply alongside the search.
+                    if ( ! f.search ) {
+                        var cd = dayStr( r.created_datetime ), td = dayStr( r.travel_datetime );
+                        if ( f.dates.created_from && ( ! cd || cd < f.dates.created_from ) ) { return false; }
+                        if ( f.dates.created_to && ( ! cd || cd > f.dates.created_to ) ) { return false; }
+                        if ( f.dates.travel_from && ( ! td || td < f.dates.travel_from ) ) { return false; }
+                        if ( f.dates.travel_to && ( ! td || td > f.dates.travel_to ) ) { return false; }
+                    } else {
+                        var hay = ''; for ( var k in r ) { if ( k.charAt( 0 ) !== '_' ) { hay += ' ' + esc( r[ k ] ).toLowerCase(); } }
+                        if ( hay.indexOf( f.search ) === -1 ) { return false; }
+                    }
                     return true;
                 }
 
@@ -4190,6 +4209,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 var DETAIL_COLS = [
                     [ 'created_datetime', 'Created' ], [ 'travel_datetime', 'Travel' ], [ 'confirmation_code', 'Confirmation' ],
                     [ 'external_booking_reference', 'Ext. ref' ],
+                    [ 'customer_name', L.tourLeader || 'Tour leader' ],
                     [ 'product_title', 'Product' ], [ 'departure_city', 'City' ], [ 'partner_page_id', 'Partner' ],
                     [ '__parts', 'Pax' ], [ 'price_amount', 'Gross' ], [ 'net_price', 'Net price' ], [ '__net_revenue', 'Net revenue' ],
                     [ 'currency', 'Cur' ], [ 'result', 'Result' ], [ 'payment_method', 'Payment' ], [ 'channel_title', 'Channel' ], [ 'pb_status', 'Status' ],
@@ -4519,7 +4539,7 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     var f = currentFilters();
                     lastFiltered = ROWS.filter( function ( r ) { return matches( r, f ); } );
                     updateFilterCounts( f );
-                    root.querySelector( '[data-filter-summary]' ).textContent = L.bookings + ': ' + fmtInt( lastFiltered.length ) + ' / ' + fmtInt( ROWS.length );
+                    root.querySelector( '[data-filter-summary]' ).textContent = L.bookings + ': ' + fmtInt( lastFiltered.length ) + ' / ' + fmtInt( ROWS.length ) + ( f.search ? ' ' + L.searchAllDates : '' );
                     var pc = primaryCurrency( lastFiltered ); revCur = pc.cur; revMulti = pc.multi;
                     var npc = primaryCurrency( lastFiltered.filter( function ( r ) { return r._net_revenue !== null; } ) ); netRevCur = npc.cur; netRevMulti = npc.multi;
                     renderMetricTitles();
@@ -4538,7 +4558,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 root.querySelector( '[data-f-search]' ).addEventListener( 'input', recompute );
                 root.querySelectorAll( '[data-f-dim], [data-f-date]' ).forEach( function ( el ) { el.addEventListener( 'change', function () {
                     if ( el.hasAttribute( 'data-f-dim' ) ) { setQuickActive( false ); }
-                    if ( ( el.getAttribute( 'data-f-date' ) || '' ).indexOf( 'created_' ) === 0 ) {
+                    // A manual edit of any date input overrides a preset chip, so
+                    // drop the preset highlight (presets may target either basis).
+                    if ( el.hasAttribute( 'data-f-date' ) ) {
                         clearPresetActive();
                     }
                     recompute();
@@ -4551,10 +4573,16 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 function clearPresetActive() {
                     root.querySelectorAll( '[data-preset], [data-preset-months]' ).forEach( function ( b ) { b.classList.remove( 'is-active' ); } );
                 }
-                function setCreatedFrom( date ) {
-                    var from = root.querySelector( '[data-f-date="created_from"]' ), to = root.querySelector( '[data-f-date="created_to"]' );
-                    from.value = date || ''; to.value = '';
+                // Which date the presets (7d/30d/3m/6m) and the default view apply
+                // to: created date or travel date. Toggled by the "Range by" control.
+                var presetBasis = 'created';
+                function setPresetFrom( date ) {
+                    var from = root.querySelector( '[data-f-date="' + presetBasis + '_from"]' ), to = root.querySelector( '[data-f-date="' + presetBasis + '_to"]' );
+                    if ( from ) { from.value = date || ''; }
+                    if ( to ) { to.value = ''; }
                 }
+                // Back-compat alias used by the default-view + preset handlers.
+                function setCreatedFrom( date ) { setPresetFrom( date ); }
                 function daysAgo( days ) { var d = new Date(); d.setDate( d.getDate() - days ); return d.toISOString().slice( 0, 10 ); }
                 function monthsAgo( months ) { var d = new Date(); d.setMonth( d.getMonth() - months ); return d.toISOString().slice( 0, 10 ); }
                 // Apply the default view: the last N months by creation date, with
@@ -4570,6 +4598,27 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                 }
                 root.querySelectorAll( '[data-preset]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { clearPresetActive(); btn.classList.add( 'is-active' ); var days = +btn.getAttribute( 'data-preset' ); setCreatedFrom( days ? daysAgo( days ) : '' ); recompute(); } ); } );
                 root.querySelectorAll( '[data-preset-months]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () { clearPresetActive(); btn.classList.add( 'is-active' ); setCreatedFrom( monthsAgo( +btn.getAttribute( 'data-preset-months' ) ) ); recompute(); } ); } );
+                // "Range by" toggle: switch whether presets/default-view apply to
+                // the created or the travel date. Carry the active basis's current
+                // "from" value over to the new basis and clear the old one, so the
+                // same window simply moves to the chosen date.
+                root.querySelectorAll( '[data-preset-basis]' ).forEach( function ( btn ) { btn.addEventListener( 'click', function () {
+                    var nb = btn.getAttribute( 'data-preset-basis' );
+                    if ( nb === presetBasis ) { return; }
+                    // Move the whole window to the new basis: carry BOTH bounds
+                    // (a bounded range keeps its upper bound; an upper-bound-only
+                    // range stays upper-bound-only) and clear the old basis.
+                    var oldFrom = root.querySelector( '[data-f-date="' + presetBasis + '_from"]' ), oldTo = root.querySelector( '[data-f-date="' + presetBasis + '_to"]' );
+                    var carriedFrom = oldFrom ? oldFrom.value : '', carriedTo = oldTo ? oldTo.value : '';
+                    if ( oldFrom ) { oldFrom.value = ''; }
+                    if ( oldTo ) { oldTo.value = ''; }
+                    presetBasis = nb;
+                    root.querySelectorAll( '[data-preset-basis]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b === btn ); } );
+                    var newFrom = root.querySelector( '[data-f-date="' + presetBasis + '_from"]' ), newTo = root.querySelector( '[data-f-date="' + presetBasis + '_to"]' );
+                    if ( newFrom ) { newFrom.value = carriedFrom || ''; }
+                    if ( newTo ) { newTo.value = carriedTo || ''; }
+                    recompute();
+                } ); } );
                 var quickBtn = root.querySelector( '[data-quick]' );
                 if ( quickBtn ) { quickBtn.addEventListener( 'click', toggleQuick ); }
                 root.querySelector( '[data-reset]' ).addEventListener( 'click', function () {
@@ -4579,6 +4628,9 @@ if( !class_exists ( 'BOKUN_Shortcode' ) ) {
                     root.querySelectorAll( '[data-f-dim]' ).forEach( function ( el ) { el.value = ''; } );
                     root.querySelectorAll( '[data-f-date]' ).forEach( function ( el ) { el.value = ''; } );
                     root.querySelector( '[data-f-search]' ).value = '';
+                    // Reset the preset basis back to created date.
+                    presetBasis = 'created';
+                    root.querySelectorAll( '[data-preset-basis]' ).forEach( function ( b ) { b.classList.toggle( 'is-active', b.getAttribute( 'data-preset-basis' ) === 'created' ); } );
                     applyDefaultView();
                     recompute();
                 } );

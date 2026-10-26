@@ -304,5 +304,61 @@ check('record links enrichment uses one bulk meta query, not per-row lookups', (
     assert.ok(/Booking/.test(linksCell.textContent));
     d.dom.window.close();
 });
+check('records table shows the tour leader (lead traveller) name', () => {
+    const d = setup([{...base, confirmation_code: 'LEAD-1', customer_name: 'Mario Rossi'}]);
+    const headers = [...d.dom.window.document.querySelectorAll('[data-detail] thead th')].map(th => th.textContent);
+    assert.ok(headers.includes('Tour leader'), 'Tour leader column header present');
+    const idx = headers.indexOf('Tour leader');
+    const cells = d.q('[data-detail] tbody tr').cells;
+    assert.equal(cells[idx].textContent, 'Mario Rossi');
+    d.dom.window.close();
+});
+check('period presets can filter by travel date, not just created date', () => {
+    // now is stubbed to 2026-10-25; the 30d preset window starts 2026-09-25.
+    const d = setup([
+        {...base, confirmation_code: 'TRV-IN', created_datetime: '2026-10-01 12:00:00', travel_datetime: '2026-10-20 09:00:00'},
+        {...base, confirmation_code: 'TRV-OUT', created_datetime: '2026-10-01 12:00:00', travel_datetime: '2026-08-01 09:00:00'},
+    ]);
+    // No default window in the fixture, so both are visible to start.
+    assert.deepEqual(d.records().sort(), ['TRV-IN', 'TRV-OUT']);
+    // Switch the preset basis to Travel, then apply the 30d preset: only the
+    // booking whose TRAVEL date is within 30 days survives (both were created
+    // on the same recent day, so a created-date window would keep both).
+    d.q('[data-preset-basis="travel"]').click();
+    d.q('[data-preset="30"]').click();
+    assert.deepEqual(d.records(), ['TRV-IN']);
+    d.dom.window.close();
+});
+check('switching range basis carries both date bounds, not just the start', () => {
+    const d = setup([
+        {...base, confirmation_code: 'SEP', created_datetime: '2026-09-10 12:00:00'},
+        {...base, confirmation_code: 'OCT', created_datetime: '2026-10-10 12:00:00'},
+    ]);
+    // A bounded Created window of September only.
+    d.set('[data-f-date="created_from"]', '2026-09-01');
+    d.set('[data-f-date="created_to"]', '2026-09-30');
+    // Switch to Travel basis: both travel dates are in November, so a window
+    // that correctly carried Sep 1–30 keeps zero travel rows — but the key
+    // regression check is that the upper bound transferred (not open-ended).
+    d.q('[data-preset-basis="travel"]').click();
+    assert.equal(d.q('[data-f-date="travel_from"]').value, '2026-09-01');
+    assert.equal(d.q('[data-f-date="travel_to"]').value, '2026-09-30');
+    assert.equal(d.q('[data-f-date="created_from"]').value, '');
+    assert.equal(d.q('[data-f-date="created_to"]').value, '');
+    d.dom.window.close();
+});
+check('search spans all data, ignoring the active date window', () => {
+    const d = setup([
+        {...base, confirmation_code: 'RECENT', created_datetime: '2026-10-01 12:00:00'},
+        {...base, confirmation_code: 'ANCIENT', product_title: 'Zzz Special', created_datetime: '2026-01-05 12:00:00', travel_datetime: '2026-01-10 12:00:00'},
+    ], {default_view_months: 3});
+    // Default view = last 3 months by created date (from ~2026-07-25), so the
+    // January booking is hidden until searched for.
+    assert.deepEqual(d.records(), ['RECENT']);
+    d.set('[data-f-search]', 'zzz special', 'input');
+    assert.ok(d.records().includes('ANCIENT'), 'search finds a booking outside the date window');
+    assert.match(d.q('[data-filter-summary]').textContent, /search spans all dates/);
+    d.dom.window.close();
+});
 ui.dom.window.close();
 console.log(`${checks} Analytics interaction checks passed.`);

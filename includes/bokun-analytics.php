@@ -23,7 +23,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Schema version for the analytics source table. Bump when columns change so
  * installed sites re-run dbDelta on the next admin request.
  */
-define( 'BOKUN_ANALYTICS_DB_VERSION', '1.5.0' );
+define( 'BOKUN_ANALYTICS_DB_VERSION', '1.6.0' );
 
 /** Option key tracking the installed analytics schema version. */
 define( 'BOKUN_ANALYTICS_DB_VERSION_OPTION', 'bokun_analytics_db_version' );
@@ -133,6 +133,7 @@ function bokun_analytics_install_table() {
         payment_method VARCHAR(100) NULL,
         product_title VARCHAR(255) NULL,
         product_option VARCHAR(255) NULL,
+        customer_name VARCHAR(191) NULL,
         travel_datetime DATETIME NULL,
         created_datetime DATETIME NULL,
         adult_participants INT NOT NULL DEFAULT 0,
@@ -659,6 +660,14 @@ function bokun_analytics_build_row( $post_id ) {
     $travel_raw      = bokun_analytics_meta( $post_id, array( '_original_start_datetime', '_original_start_date' ) );
     $travel_datetime = bokun_analytics_raw_to_gmt( $travel_raw );
 
+    // Lead traveller / tour-leader name: the booking's main contact. The
+    // payload carries no separate guide/resource, so the lead passenger is the
+    // "tour leader" name shown on the records table. "N/A"/"" are treated as
+    // null by bokun_analytics_meta(), so an empty part drops out cleanly.
+    $first_name    = bokun_analytics_meta( $post_id, array( '_first_name', 'customer_firstName' ) );
+    $last_name     = bokun_analytics_meta( $post_id, array( '_last_name', 'customer_lastName' ) );
+    $customer_name = trim( (string) $first_name . ' ' . (string) $last_name );
+
     if ( null === $travel_datetime ) {
         $travel_gmt      = get_post_time( 'Y-m-d H:i:s', true, $post_id );
         $travel_datetime = $travel_gmt ? $travel_gmt : null;
@@ -686,6 +695,7 @@ function bokun_analytics_build_row( $post_id ) {
         'payment_method'            => bokun_analytics_get_payment_method( $post_id ),
         'product_title'             => bokun_analytics_meta( $post_id, array( '_product_title', 'productBookings_0_product_title' ) ),
         'product_option'            => bokun_analytics_meta( $post_id, array( 'productBookings_0_fields_rateTitle', 'productBookings_0_rateTitle' ) ),
+        'customer_name'             => ( '' !== $customer_name ) ? $customer_name : null,
         'travel_datetime'           => $travel_datetime,
         'created_datetime'          => bokun_analytics_get_created_datetime( $post_id ),
         'adult_participants'        => $participants['adult'],
