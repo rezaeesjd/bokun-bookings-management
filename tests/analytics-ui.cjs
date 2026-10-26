@@ -17,10 +17,10 @@ const rows = [
     {...base, confirmation_code: 'TEST-7', product_title: '<Tour "D">', channel_title: 'Direct',
         created_datetime: '2026-09-01 12:00:00', travel_datetime: '2026-09-15 12:00:00'},
 ];
-function setup(data = rows) {
+function setup(data = rows, extra = {}) {
     const rendered = spawnSync(process.env.BOKUN_TEST_PHP || 'php',
         [...JSON.parse(process.env.BOKUN_TEST_PHP_ARGS || '[]'), path.join(__dirname, 'analytics-fixture.php')],
-        {input: JSON.stringify({rows: data}), encoding: 'utf8'});
+        {input: JSON.stringify({rows: data, ...extra}), encoding: 'utf8'});
     assert.equal(rendered.status, 0, rendered.error?.message || rendered.stderr || rendered.stdout);
     const dom = new JSDOM(rendered.stdout, {runScripts: 'outside-only', url: 'https://analytics.example.test'});
     const {window} = dom;
@@ -184,6 +184,83 @@ check('quick filter without matching channel does not drop the constraint', () =
     empty.q('[data-reset]').click();
     assert.equal(empty.records().length, 1);
     empty.dom.window.close();
+});
+check('default view shows the last N months by creation date and All expands it', () => {
+    const recent = {...base, confirmation_code: 'RECENT', created_datetime: '2026-10-01 12:00:00'};
+    const old = {...base, confirmation_code: 'OLD', created_datetime: '2026-05-01 12:00:00'};
+    const d = setup([recent, old], {default_view_months: 3});
+    // On load the default view is the last 3 months (vs 2026-10-25), so the
+    // ~5-month-old booking is excluded and the 3m chip is highlighted.
+    assert.deepEqual(d.records(), ['RECENT']);
+    assert.equal(d.q('[data-preset-months="3"]').classList.contains('is-active'), true);
+    // "All" widens to the full retained window and brings the older row back.
+    d.q('[data-preset="0"]').click();
+    assert.deepEqual([...d.records()].sort(), ['OLD', 'RECENT']);
+    assert.equal(d.q('[data-preset-months="3"]').classList.contains('is-active'), false);
+    // Reset returns to the default 3-month view.
+    d.q('[data-reset]').click();
+    assert.deepEqual(d.records(), ['RECENT']);
+    d.dom.window.close();
+});
+check('Business Results metric shows a margin breakdown that follows the filters', () => {
+    reset();
+    q('[data-metric="bizresults"]').click();
+    const rootEl = ui.dom.window.document.querySelector('.bokun-andash');
+    assert.equal(rootEl.classList.contains('is-bizmetric'), true);
+    const bookingsValue = () => {
+        const tile = [...q('[data-bizresults]').querySelectorAll('.bokun-andash__kpi')]
+            .find(k => /bookings/i.test(k.querySelector('.bokun-andash__kpi-label').textContent));
+        return tile.querySelector('.bokun-andash__kpi-value').textContent;
+    };
+    assert.match(q('[data-bizresults]').textContent, /net revenue is calculated/i);
+    assert.equal(bookingsValue(), '7');
+    item('channel_title', 'Viator.com').click();
+    assert.equal(bookingsValue(), '3');
+    q('[data-metric="netrev"]').click();
+    assert.equal(rootEl.classList.contains('is-bizmetric'), false);
+});
+const bizTileVal = (panel, label) => {
+    const t = [...panel.querySelectorAll('.bokun-andash__kpi')]
+        .find(k => k.querySelector('.bokun-andash__kpi-label').textContent === label);
+    return t && t.querySelector('.bokun-andash__kpi-value').textContent;
+};
+check('Business Results reconciles gross − cost = margin and keeps unmatched gross visible', () => {
+    const mk = (code, over) => ({created_datetime: '2026-10-01 12:00:00', travel_datetime: '2026-11-01 12:00:00',
+        product_title: 'Tour', channel_title: 'Direct', pb_status: 'CONFIRMED', result: 'full', currency: 'EUR',
+        payment_method: 'Card', adult_participants: 2, confirmation_code: code, ...over});
+    const d = setup([
+        mk('MATCHED', {partner_page_id: '10', price_amount: 100}),  // gross 100, cost 40 -> margin 60
+        mk('NOGROSS', {partner_page_id: '10', price_amount: null}), // matched but unparseable gross -> excluded
+        mk('UNCAT', {price_amount: 70})                             // not in catalog -> unmatched gross
+    ], {partners: {'10': {net_price: 20, title: 'Tour', commission: 0, departure_city: '', partner_page_id: '10'}}});
+    d.q('[data-metric="bizresults"]').click();
+    const panel = d.q('[data-bizresults]');
+    // The waterfall sums over the computable-margin row only, so it reconciles.
+    assert.match(bizTileVal(panel, 'Gross earned'), /100/);
+    assert.match(bizTileVal(panel, 'Partner cost'), /40/);
+    assert.match(bizTileVal(panel, 'Net margin'), /60/);
+    assert.match(bizTileVal(panel, 'Avg net margin / booking'), /60/);
+    // Uncatalogued gross is surfaced rather than silently dropped.
+    assert.match(panel.textContent, /70[\s\S]*not in the partners catalog/);
+    d.dom.window.close();
+});
+check('Business Results shows unmatched gross even when nothing has net revenue', () => {
+    const d = setup([{created_datetime: '2026-10-01 12:00:00', product_title: 'X', channel_title: 'Direct',
+        pb_status: 'CONFIRMED', result: 'full', currency: 'EUR', adult_participants: 2, price_amount: 100, confirmation_code: 'U1'}]);
+    d.q('[data-metric="bizresults"]').click();
+    assert.match(d.q('[data-bizresults]').textContent, /100[\s\S]*not in the partners catalog/);
+    d.dom.window.close();
+});
+check('Business Results average margin is per selected-currency booking, not all currencies', () => {
+    const mk = (code, cur) => ({created_datetime: '2026-10-01 12:00:00', product_title: 'Tour', channel_title: 'Direct',
+        pb_status: 'CONFIRMED', result: 'full', currency: cur, adult_participants: 2, partner_page_id: '10', price_amount: 100, confirmation_code: code});
+    const d = setup([mk('EUR1', 'EUR'), mk('USD1', 'USD')],
+        {partners: {'10': {net_price: 20, title: 'Tour', commission: 0, departure_city: '', partner_page_id: '10'}}});
+    d.q('[data-metric="bizresults"]').click();
+    // Each booking earns margin 60 in its own currency; the average is 60 (one
+    // booking in the selected currency), not 30 (60 split across both matches).
+    assert.match(bizTileVal(d.q('[data-bizresults]'), 'Avg net margin / booking'), /60/);
+    d.dom.window.close();
 });
 ui.dom.window.close();
 console.log(`${checks} Analytics interaction checks passed.`);

@@ -26,5 +26,9 @@ function get_edit_post_link($id, $context = 'display') { return 'https://analyti
 function get_post_meta($id, $key = '', $single = false) { return ''; }
 function bokun_analytics_get_rows() { return $GLOBALS['fixture']['rows']; }
 function bokun_partners_products_get_map() { return $GLOBALS['fixture']['partners'] ?? array(); }
+// 0 (the default) means "no default date filter", so interaction checks see
+// every row; a test can pass default_view_months to exercise the default view.
+function bokun_analytics_get_default_view_months() { return (int) ($GLOBALS['fixture']['default_view_months'] ?? 0); }
+function bokun_analytics_get_window_months() { return (int) ($GLOBALS['fixture']['window_months'] ?? 12); }
 require dirname(__DIR__) . '/includes/bokun_shortcode.class.php';
 echo $GLOBALS['bokun_shortcode']->render_analytics_panel();
