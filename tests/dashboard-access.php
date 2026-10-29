@@ -8,6 +8,7 @@ if ('cli' !== PHP_SAPI) {
 // unchanged de-index / no-cache privacy behavior.
 define('BOKUN_ACCESS_TEST', true);
 define('HOUR_IN_SECONDS', 3600);
+define('DAY_IN_SECONDS', 86400);
 define('MINUTE_IN_SECONDS', 60);
 define('BOKUN_CSS_URL', '');
 define('BOKUN_IMAGES_URL', '');
@@ -29,6 +30,7 @@ function verify_dashboard_case($condition, $label) {
 function add_shortcode($name, $callback) {}
 function add_filter($name, $callback) { $GLOBALS['hooks'][$name] = $callback; }
 function add_action($name, $callback = null, $priority = 10, $args = 1) { $GLOBALS['hooks'][$name] = $callback; }
+function apply_filters($name, $value) { return $value; }
 function is_user_logged_in() { return $GLOBALS['access']['logged_in']; }
 function current_user_can($capability) { return in_array($capability, $GLOBALS['access']['capabilities'], true); }
 function nocache_headers() { $GLOBALS['access']['cache_headers']++; }

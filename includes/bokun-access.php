@@ -38,7 +38,21 @@ if (!defined('BOKUN_ACCESS_COOKIE')) {
 }
 /** Session lifetime in seconds (12 hours). */
 if (!defined('BOKUN_ACCESS_LIFETIME')) {
-    define('BOKUN_ACCESS_LIFETIME', 12 * HOUR_IN_SECONDS);
+    // How long a "keep me signed in" device stays authenticated. The cookie is
+    // re-issued on activity (see bokun_access_maybe_refresh_cookie), so an
+    // actively used device never expires; an idle one drops after this window.
+    define('BOKUN_ACCESS_LIFETIME', 30 * DAY_IN_SECONDS);
+}
+
+/**
+ * The session lifetime in seconds for a remembered device. Filterable so a site
+ * can shorten or lengthen it without editing the constant.
+ *
+ * @return int
+ */
+function bokun_access_lifetime() {
+    $life = (int) apply_filters('bokun_access_lifetime', BOKUN_ACCESS_LIFETIME);
+    return $life > 0 ? $life : BOKUN_ACCESS_LIFETIME;
 }
 
 /**
@@ -122,8 +136,15 @@ function bokun_access_users() {
  * Sign a session for a user. The key's hash is folded into the signature so
  * rotating a key invalidates every existing session for that user.
  */
-function bokun_access_sign($id, $expires, $key) {
-    return hash_hmac('sha256', $id . '|' . $expires . '|' . hash('sha256', $key), wp_salt('auth'));
+function bokun_access_sign($id, $expires, $key, $remember = null) {
+    // $remember === null signs the legacy 3-segment payload so cookies issued
+    // before the "remember me" flag still verify; a 0/1 value signs the newer
+    // 4-segment token that carries the persistence flag.
+    $payload = $id . '|' . $expires . '|' . hash('sha256', $key);
+    if (null !== $remember) {
+        $payload .= '|r' . ((int) $remember ? 1 : 0);
+    }
+    return hash_hmac('sha256', $payload, wp_salt('auth'));
 }
 
 /**
@@ -168,10 +189,18 @@ function bokun_access_actor_from_cookie() {
     }
     $raw = (string) wp_unslash($_COOKIE[BOKUN_ACCESS_COOKIE]);
     $parts = explode('.', $raw);
-    if (count($parts) !== 3) {
+    // 4 segments: id.expires.remember.sig (current). 3 segments: id.expires.sig
+    // (legacy, issued before the remember flag) — still accepted, treated as a
+    // remembered device.
+    if (count($parts) === 4) {
+        list($id, $expires, $remember, $sig) = $parts;
+        $remember = ((int) $remember) ? 1 : 0;
+    } elseif (count($parts) === 3) {
+        list($id, $expires, $sig) = $parts;
+        $remember = null;
+    } else {
         return null;
     }
-    list($id, $expires, $sig) = $parts;
     $id = sanitize_key($id);
     $expires = (int) $expires;
     if ('' === $id || $expires < time()) {
@@ -181,11 +210,19 @@ function bokun_access_actor_from_cookie() {
     if (!isset($users[$id]) || '' === $users[$id]['key']) {
         return null;
     }
-    $expected = bokun_access_sign($id, $expires, $users[$id]['key']);
+    $expected = bokun_access_sign($id, $expires, $users[$id]['key'], $remember);
     if (!hash_equals($expected, (string) $sig)) {
         return null;
     }
-    return array('id' => $id, 'name' => $users[$id]['name'], 'role' => $users[$id]['role'], 'via' => 'key');
+    return array(
+        'id'         => $id,
+        'name'       => $users[$id]['name'],
+        'role'       => $users[$id]['role'],
+        'via'        => 'key',
+        // Legacy (null) cookies are treated as remembered for refresh purposes.
+        'remember'   => (null === $remember) ? 1 : $remember,
+        'expires_at' => $expires,
+    );
 }
 
 /** The current actor's role, or '' for the public. */
@@ -234,19 +271,30 @@ function bokun_access_match_key($key) {
     return $match;
 }
 
-/** Set the signed session cookie for a user id. */
-function bokun_access_set_cookie($id) {
+/**
+ * Set the signed session cookie for a user id.
+ *
+ * @param string $id       Configured user id.
+ * @param bool   $remember When true (the default) the device is kept signed in
+ *                         for the full lifetime via a persistent cookie; when
+ *                         false a browser-session cookie is used so the sign-in
+ *                         ends when the browser closes (for shared computers).
+ */
+function bokun_access_set_cookie($id, $remember = true) {
     $users = bokun_access_users();
     if (!isset($users[$id])) {
         return;
     }
-    $expires = time() + BOKUN_ACCESS_LIFETIME;
-    $value = $id . '.' . $expires . '.' . bokun_access_sign($id, $expires, $users[$id]['key']);
+    $remember = $remember ? 1 : 0;
+    $expires  = time() + bokun_access_lifetime();
+    $value    = $id . '.' . $expires . '.' . $remember . '.' . bokun_access_sign($id, $expires, $users[$id]['key'], $remember);
     $path = defined('COOKIEPATH') && COOKIEPATH ? COOKIEPATH : '/';
     $domain = defined('COOKIE_DOMAIN') ? COOKIE_DOMAIN : '';
     if (!headers_sent()) {
         setcookie(BOKUN_ACCESS_COOKIE, $value, array(
-            'expires'  => $expires,
+            // A session cookie (expires 0) is dropped when the browser closes;
+            // the signed token still carries a hard expiry either way.
+            'expires'  => $remember ? $expires : 0,
             'path'     => $path,
             'domain'   => $domain,
             'secure'   => is_ssl(),
@@ -318,7 +366,11 @@ function bokun_access_handle_auth() {
         $id = bokun_access_match_key($key);
         if ('' !== $id) {
             delete_transient($throttle_key);
-            bokun_access_set_cookie($id);
+            // Remember the device when the box is ticked (default on), so a
+            // trusted computer stays signed in instead of re-prompting; an
+            // unticked box omits the field and gives a browser-session cookie.
+            $remember = isset($_POST['bokun_access_remember']) && '' !== (string) wp_unslash($_POST['bokun_access_remember']);
+            bokun_access_set_cookie($id, $remember);
             wp_safe_redirect($base);
             exit;
         }
@@ -328,6 +380,38 @@ function bokun_access_handle_auth() {
     }
 }
 add_action('init', 'bokun_access_handle_auth', 1);
+
+/**
+ * Keep an active, remembered device signed in by re-issuing its cookie once it
+ * is more than a day old. This slides the expiry forward on use, so a trusted
+ * computer never gets logged out while it keeps visiting; an idle device still
+ * expires after the full lifetime. Session cookies (remember off) and legacy-
+ * only sessions are left to expire on their own.
+ *
+ * @return void
+ */
+function bokun_access_maybe_refresh_cookie() {
+    if (headers_sent()) {
+        return;
+    }
+    $actor = bokun_access_actor_from_cookie();
+    if (!$actor || 'key' !== $actor['via'] || empty($actor['remember'])) {
+        return;
+    }
+    $lifetime  = bokun_access_lifetime();
+    $remaining = (int) $actor['expires_at'] - time();
+    // Re-issue once enough of the lifetime has elapsed, so we are not rewriting
+    // the cookie on every request but an active device never expires. The
+    // interval is a day for the default 30-day lifetime, but scales down to
+    // half the lifetime for short configured lifetimes (a day or less) so the
+    // slide stays reachable there too.
+    $refresh_after = (int) min(DAY_IN_SECONDS, intdiv($lifetime, 2));
+    $elapsed = $lifetime - $remaining;
+    if ($remaining > 0 && $elapsed >= $refresh_after) {
+        bokun_access_set_cookie($actor['id'], true);
+    }
+}
+add_action('init', 'bokun_access_maybe_refresh_cookie', 2);
 
 /**
  * The login screen shown in place of the dashboard for the public.
@@ -363,6 +447,10 @@ function bokun_access_login_form() {
             <input type="hidden" name="bokun_access_action" value="login">
             <label class="bokun-access-login__label" for="bokun-access-key"><?php esc_html_e('Access key', 'BOKUN_txt_domain'); ?></label>
             <input class="bokun-access-login__input" type="password" id="bokun-access-key" name="bokun_access_key" required autofocus spellcheck="false" autocomplete="off">
+            <label class="bokun-access-login__remember" for="bokun-access-remember">
+                <input type="checkbox" id="bokun-access-remember" name="bokun_access_remember" value="1" checked>
+                <span><?php esc_html_e('Keep me signed in on this device', 'BOKUN_txt_domain'); ?></span>
+            </label>
             <button class="bokun-access-login__submit" type="submit"><?php esc_html_e('Sign in', 'BOKUN_txt_domain'); ?></button>
         </form>
     </div>
@@ -374,6 +462,8 @@ function bokun_access_login_form() {
         .bokun-access-login__error{margin:0 0 16px;padding:10px 12px;border-radius:var(--bk-radius-sm,.375rem);background:var(--bk-danger-bg,#fee2e2);color:var(--bk-danger,#b91c1c);font-size:.875rem;}
         .bokun-access-login__label{display:block;margin:0 0 6px;font-size:.8125rem;font-weight:600;color:var(--bk-text-muted,#64748b);}
         .bokun-access-login__input{width:100%;box-sizing:border-box;padding:11px 13px;font-size:1rem;border:1px solid var(--bk-border-strong,#cbd5e1);border-radius:var(--bk-radius-md,.625rem);background:#fff;color:inherit;margin-bottom:18px;}
+        .bokun-access-login__remember{display:flex;align-items:center;gap:8px;margin:0 0 18px;font-size:.875rem;color:var(--bk-text-muted,#64748b);cursor:pointer;}
+        .bokun-access-login__remember input{width:16px;height:16px;margin:0;accent-color:var(--bk-brand-600,#7b1e3a);cursor:pointer;}
         .bokun-access-login__input:focus{outline:none;border-color:var(--bk-brand-500,#9a2947);box-shadow:var(--bk-focus-ring,0 0 0 3px #ecc9d2);}
         .bokun-access-login__submit{width:100%;padding:11px 16px;font-size:1rem;font-weight:600;color:var(--bk-text-on-brand,#fff);background:var(--bk-brand-600,#7b1e3a);border:1px solid var(--bk-brand-600,#7b1e3a);border-radius:var(--bk-radius-pill,999px);cursor:pointer;transition:background .18s ease;}
         .bokun-access-login__submit:hover{background:var(--bk-brand-700,#5f152c);}

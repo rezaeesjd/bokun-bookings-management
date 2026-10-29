@@ -14,6 +14,7 @@ if ('cli' !== PHP_SAPI) {
 
 define('BOKUN_ACCESS_TEST', true);
 define('HOUR_IN_SECONDS', 3600);
+define('DAY_IN_SECONDS', 86400);
 define('MINUTE_IN_SECONDS', 60);
 
 $checks = array();
@@ -30,6 +31,12 @@ function verify_access_case($condition, $label) {
 $GLOBALS['wp'] = array('logged_in' => false, 'caps' => array(), 'options' => array());
 
 function add_action($hook, $cb, $priority = 10, $args = 1) {}
+function apply_filters($hook, $value) {
+    if ('bokun_access_lifetime' === $hook && isset($GLOBALS['test_lifetime_override'])) {
+        return $GLOBALS['test_lifetime_override'];
+    }
+    return $value;
+}
 function is_user_logged_in() { return $GLOBALS['wp']['logged_in']; }
 function current_user_can($cap) { return in_array($cap, $GLOBALS['wp']['caps'], true); }
 function get_current_user_id() { return $GLOBALS['wp']['logged_in'] ? 1 : 0; }
@@ -106,14 +113,15 @@ bokun_access_set_cookie('sjd');
 $raw = $_COOKIE[BOKUN_ACCESS_COOKIE];
 $parts = explode('.', $raw);
 // Promote generic -> admin id while keeping the generic signature: must fail.
-$_COOKIE[BOKUN_ACCESS_COOKIE] = 'bardi.' . $parts[1] . '.' . $parts[2];
+// Token format is id.expires.remember.sig.
+$_COOKIE[BOKUN_ACCESS_COOKIE] = 'bardi.' . $parts[1] . '.' . $parts[2] . '.' . $parts[3];
 bokun_access_flush();
 verify_access_case(bokun_access_actor_from_cookie() === null, 'swapping the user id invalidates the signature');
 
 reset_actor();
 bokun_access_set_cookie('johnna');
 $parts = explode('.', $_COOKIE[BOKUN_ACCESS_COOKIE]);
-$_COOKIE[BOKUN_ACCESS_COOKIE] = $parts[0] . '.' . $parts[1] . '.' . substr($parts[2], 0, -1) . 'x';
+$_COOKIE[BOKUN_ACCESS_COOKIE] = $parts[0] . '.' . $parts[1] . '.' . $parts[2] . '.' . substr($parts[3], 0, -1) . 'x';
 bokun_access_flush();
 verify_access_case(bokun_access_actor_from_cookie() === null, 'tampering the signature is rejected');
 
@@ -170,6 +178,68 @@ reset_actor();
 verify_access_case(bokun_access_match_key('johnna-bk-8b1d6395') === 'johnna', 'a correct key matches its user');
 verify_access_case(bokun_access_match_key('totally-wrong') === '', 'an unknown key matches no user');
 verify_access_case(bokun_access_match_key('') === '', 'an empty key matches no user');
+
+// --- Remember-this-device session lifetime --------------------------------
+reset_actor();
+$users = bokun_access_users();
+// Remembered device (default): 4-segment token, remember flag 1, long lifetime.
+bokun_access_set_cookie('johnna', true);
+$parts = explode('.', $_COOKIE[BOKUN_ACCESS_COOKIE]);
+verify_access_case(count($parts) === 4 && $parts[2] === '1', 'a remembered device issues a remember=1 token');
+$life = (int) $parts[1] - time();
+verify_access_case($life > (29 * DAY_IN_SECONDS) && $life <= (30 * DAY_IN_SECONDS) + 5, 'a remembered device uses the ~30-day lifetime');
+verify_access_case(bokun_access_actor_from_cookie()['role'] === 'booking', 'a remembered cookie still resolves its actor');
+
+// Session cookie (remember off): remember flag 0, still valid for this session.
+reset_actor();
+bokun_access_set_cookie('johnna', false);
+$parts = explode('.', $_COOKIE[BOKUN_ACCESS_COOKIE]);
+verify_access_case($parts[2] === '0', 'an unticked "remember me" issues a remember=0 token');
+verify_access_case(bokun_access_actor_from_cookie()['role'] === 'booking', 'a session cookie still resolves its actor');
+
+// Legacy 3-segment cookie (issued before the remember flag) still validates.
+reset_actor();
+$legacy_exp = time() + 3600;
+$legacy_sig = bokun_access_sign('johnna', $legacy_exp, $users['johnna']['key']); // remember=null
+$_COOKIE[BOKUN_ACCESS_COOKIE] = 'johnna.' . $legacy_exp . '.' . $legacy_sig;
+bokun_access_flush();
+$legacy_actor = bokun_access_actor_from_cookie();
+verify_access_case($legacy_actor && $legacy_actor['role'] === 'booking' && $legacy_actor['remember'] === 1, 'a legacy 3-segment cookie still validates and is treated as remembered');
+
+// --- Sliding refresh keeps an active device signed in ---------------------
+if (!headers_sent()) {
+    // A remembered cookie more than a day into its life is re-issued with a
+    // fresh (later) expiry when the refresh hook runs.
+    reset_actor();
+    $soon = time() + (5 * DAY_IN_SECONDS); // 25 days elapsed of a 30-day life
+    $_COOKIE[BOKUN_ACCESS_COOKIE] = 'johnna.' . $soon . '.1.' . bokun_access_sign('johnna', $soon, $users['johnna']['key'], 1);
+    bokun_access_flush();
+    bokun_access_maybe_refresh_cookie();
+    $after = (int) explode('.', $_COOKIE[BOKUN_ACCESS_COOKIE])[1];
+    verify_access_case($after > $soon + DAY_IN_SECONDS, 'an active remembered device slides its expiry forward');
+
+    // A session cookie (remember 0) is NOT slid forward.
+    reset_actor();
+    $sess_exp = time() + (5 * DAY_IN_SECONDS);
+    $sess_cookie = 'johnna.' . $sess_exp . '.0.' . bokun_access_sign('johnna', $sess_exp, $users['johnna']['key'], 0);
+    $_COOKIE[BOKUN_ACCESS_COOKIE] = $sess_cookie;
+    bokun_access_flush();
+    bokun_access_maybe_refresh_cookie();
+    verify_access_case($_COOKIE[BOKUN_ACCESS_COOKIE] === $sess_cookie, 'a session cookie is not slid forward');
+
+    // Short configured lifetimes (<= 1 day) still slide: the refresh interval
+    // scales to half the lifetime instead of a fixed day, so an active device
+    // on a 12-hour lifetime past the halfway mark is re-issued.
+    reset_actor();
+    $GLOBALS['test_lifetime_override'] = 12 * HOUR_IN_SECONDS;
+    $short_exp = time() + 60; // 60s left of a 12h life => well past halfway
+    $_COOKIE[BOKUN_ACCESS_COOKIE] = 'johnna.' . $short_exp . '.1.' . bokun_access_sign('johnna', $short_exp, $users['johnna']['key'], 1);
+    bokun_access_flush();
+    bokun_access_maybe_refresh_cookie();
+    $short_after = (int) explode('.', $_COOKIE[BOKUN_ACCESS_COOKIE])[1];
+    verify_access_case($short_after > $short_exp + HOUR_IN_SECONDS, 'a short configured lifetime still slides forward');
+    unset($GLOBALS['test_lifetime_override']);
+}
 
 // --- Done ------------------------------------------------------------------
 foreach ($checks as $label) {
