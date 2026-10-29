@@ -400,9 +400,14 @@ function bokun_access_maybe_refresh_cookie() {
     }
     $lifetime  = bokun_access_lifetime();
     $remaining = (int) $actor['expires_at'] - time();
-    // Re-issue only after at least a day has elapsed since the cookie was set,
-    // so we are not rewriting the cookie on every single request.
-    if ($remaining > 0 && $remaining < ($lifetime - DAY_IN_SECONDS)) {
+    // Re-issue once enough of the lifetime has elapsed, so we are not rewriting
+    // the cookie on every request but an active device never expires. The
+    // interval is a day for the default 30-day lifetime, but scales down to
+    // half the lifetime for short configured lifetimes (a day or less) so the
+    // slide stays reachable there too.
+    $refresh_after = (int) min(DAY_IN_SECONDS, intdiv($lifetime, 2));
+    $elapsed = $lifetime - $remaining;
+    if ($remaining > 0 && $elapsed >= $refresh_after) {
         bokun_access_set_cookie($actor['id'], true);
     }
 }

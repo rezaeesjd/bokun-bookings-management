@@ -31,7 +31,12 @@ function verify_access_case($condition, $label) {
 $GLOBALS['wp'] = array('logged_in' => false, 'caps' => array(), 'options' => array());
 
 function add_action($hook, $cb, $priority = 10, $args = 1) {}
-function apply_filters($hook, $value) { return $value; }
+function apply_filters($hook, $value) {
+    if ('bokun_access_lifetime' === $hook && isset($GLOBALS['test_lifetime_override'])) {
+        return $GLOBALS['test_lifetime_override'];
+    }
+    return $value;
+}
 function is_user_logged_in() { return $GLOBALS['wp']['logged_in']; }
 function current_user_can($cap) { return in_array($cap, $GLOBALS['wp']['caps'], true); }
 function get_current_user_id() { return $GLOBALS['wp']['logged_in'] ? 1 : 0; }
@@ -221,6 +226,19 @@ if (!headers_sent()) {
     bokun_access_flush();
     bokun_access_maybe_refresh_cookie();
     verify_access_case($_COOKIE[BOKUN_ACCESS_COOKIE] === $sess_cookie, 'a session cookie is not slid forward');
+
+    // Short configured lifetimes (<= 1 day) still slide: the refresh interval
+    // scales to half the lifetime instead of a fixed day, so an active device
+    // on a 12-hour lifetime past the halfway mark is re-issued.
+    reset_actor();
+    $GLOBALS['test_lifetime_override'] = 12 * HOUR_IN_SECONDS;
+    $short_exp = time() + 60; // 60s left of a 12h life => well past halfway
+    $_COOKIE[BOKUN_ACCESS_COOKIE] = 'johnna.' . $short_exp . '.1.' . bokun_access_sign('johnna', $short_exp, $users['johnna']['key'], 1);
+    bokun_access_flush();
+    bokun_access_maybe_refresh_cookie();
+    $short_after = (int) explode('.', $_COOKIE[BOKUN_ACCESS_COOKIE])[1];
+    verify_access_case($short_after > $short_exp + HOUR_IN_SECONDS, 'a short configured lifetime still slides forward');
+    unset($GLOBALS['test_lifetime_override']);
 }
 
 // --- Done ------------------------------------------------------------------
