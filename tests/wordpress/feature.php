@@ -81,6 +81,18 @@ $conversation = BOKUN_Messages::conversation($id);
 verify_case(count(BOKUN_Messages::messages($id)) === 1, 'deduplication preserves one history entry');
 verify_case(1 === BOKUN_Messages::ingest('via-florence', $parsed), 'same reference in another business remains separate');
 verify_case((int) $wpdb->get_var($wpdb->prepare('SELECT COUNT(*) FROM ' . BOKUN_Messages::table('conversations') . ' WHERE reference=%s', $reference)) === 2, 'mailbox isolation uses business plus reference');
+// Booking-page gate: now governed by the key-based access system, not the
+// retired "enter your name" overlay.
+wp_set_current_user(0);
+verify_case(!bokun_team_member_is_authorized(), 'booking-page gate denies an anonymous visitor');
+wp_set_current_user($subscriber);
+verify_case(!bokun_team_member_is_authorized(), 'booking-page gate denies a non-staff WordPress login');
+wp_set_current_user($admin->ID);
+verify_case(bokun_team_member_is_authorized(), 'booking-page gate admits a WordPress admin via the access system');
+$gate_login = bokun_access_login_form();
+verify_case(strpos($gate_login, 'bokun-access-login') !== false, 'the booking-page gate uses the key sign-in form');
+verify_case(strpos($gate_login, 'Team Member Verification') === false, 'the retired name overlay is gone from the sign-in form');
+wp_set_current_user($admin->ID);
 update_option('bokun_api_credentials', array(array('api_key' => 'test-florence', 'secret_key' => 'synthetic'), array('api_key' => 'test-via', 'secret_key' => 'synthetic')));
 update_option('bokun_messages_settings', array('florence-adventures_context' => 'api_1', 'via-florence_context' => 'api_2', 'model' => 'gpt-4.1-mini', 'auto_draft' => 0));
 $post_id = wp_insert_post(array('post_type' => 'bokun_booking', 'post_status' => 'draft', 'post_title' => 'Synthetic past booking'));
