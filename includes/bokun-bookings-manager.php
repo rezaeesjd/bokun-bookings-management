@@ -4429,49 +4429,28 @@ function bokun_team_member_get_legacy_storage_key($page_identifier = null) {
  * @return bool
  */
 function bokun_team_member_is_authorized($page_identifier = null) {
-    if (is_user_logged_in() && current_user_can('manage_options')) {
-        return true;
+    // Access to booking pages is now governed by the key-based access system
+    // (includes/bokun-access.php): any signed-in role (generic / booking /
+    // admin) or a logged-in WordPress admin that holds the view_bookings
+    // capability may view them. The old "enter your name" cookie grant is
+    // retired — merely typing a name no longer authorizes anyone.
+    if (function_exists('bokun_access_can')) {
+        $authorized = bokun_access_can('view_bookings');
+    } else {
+        // Fallback only if the access module failed to load: admins only.
+        $authorized = is_user_logged_in() && current_user_can('manage_options');
     }
-
-    $storage_key = bokun_team_member_get_storage_key($page_identifier);
-    $cookie_value = '';
-
-    if (isset($_COOKIE[$storage_key])) {
-        $cookie_value = sanitize_text_field(wp_unslash($_COOKIE[$storage_key]));
-    } elseif (null !== $page_identifier) {
-        $legacy_key = bokun_team_member_get_legacy_storage_key($page_identifier);
-
-        if ($legacy_key && isset($_COOKIE[$legacy_key])) {
-            $cookie_value = sanitize_text_field(wp_unslash($_COOKIE[$legacy_key]));
-
-            if ($cookie_value) {
-                $expiration = time() + (defined('YEAR_IN_SECONDS') ? YEAR_IN_SECONDS : 31536000);
-
-                if (!headers_sent()) {
-                    setcookie($storage_key, $cookie_value, $expiration, '/');
-                }
-
-                $_COOKIE[$storage_key] = $cookie_value;
-            }
-        }
-    }
-
-    $authorized = !empty($cookie_value);
 
     /**
      * Filter whether the visitor is authorized to view the gated content.
      *
-     * @param bool   $authorized   Current authorization determination.
-     * @param string $page_identifier Identifier used for the gate.
-     * @param string $storage_key  Cookie/local storage key inspected.
-     * @param string $cookie_value Raw cookie value.
+     * @param bool        $authorized      Current authorization determination.
+     * @param string|null $page_identifier Identifier used for the gate.
      */
     return (bool) apply_filters(
         'bokun_team_member_is_authorized',
         $authorized,
-        $page_identifier,
-        $storage_key,
-        $cookie_value
+        $page_identifier
     );
 }
 
@@ -4506,6 +4485,7 @@ function bokun_team_member_render_gate_page() {
     <head>
         <meta charset="<?php bloginfo('charset'); ?>">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="robots" content="noindex,nofollow">
         <?php wp_head(); ?>
         <style>
             body.bokun-team-member-gate {
@@ -4516,11 +4496,6 @@ function bokun_team_member_render_gate_page() {
                 justify-content: center;
                 background: #0f172a;
             }
-
-            body.bokun-team-member-gate .bokun-team-member-overlay {
-                position: static;
-                inset: auto;
-            }
         </style>
     </head>
     <body <?php body_class('bokun-team-member-gate'); ?>>
@@ -4528,7 +4503,11 @@ function bokun_team_member_render_gate_page() {
         if (function_exists('wp_body_open')) {
             wp_body_open();
         }
-        echo do_shortcode('[team_member_field]');
+        // The booking-page gate now shows the key-based dashboard sign-in form
+        // (includes/bokun-access.php) rather than the retired name overlay.
+        if (function_exists('bokun_access_login_form')) {
+            echo bokun_access_login_form();
+        }
         ?>
         <?php wp_footer(); ?>
     </body>
